@@ -192,8 +192,8 @@ export function parseViewer(stdout: string): RepoPr[] {
 
 /**
  * The list as kept on disk, with when it was read (epoch ms) and, per session, the repos its panes'
- * folders named then (lower-cased `owner/name`), which mark PRs in use until a folder is read again.
- * A list saved before there was such a record has none, and marks every PR in use meanwhile.
+ * folders named then (lower-cased `owner/name`), which mark PRs in use until a folder answers again.
+ * A session the record does not name marks every PR in use meanwhile, never none.
  */
 interface SavedList { at: number; prs: RepoPr[]; inUse?: Readonly<Record<string, readonly string[]>> }
 
@@ -296,9 +296,10 @@ export class PullRequestRegistry {
   /** When the saved list was last written, and what it held. */
   private savedAt = 0;
   private savedJson = "";
-  /** Each session's repos in use as the saved list kept them, read until a pane's folder resolves; none kept marks every PR in use. */
-  private savedInUse: Readonly<Record<string, readonly string[]>> | undefined;
-  private resolved = false;
+  /** Each session's repos in use as last known, kept on disk; read for a session until one of its folders answers. */
+  private savedInUse: Readonly<Record<string, readonly string[]>> = {};
+  /** Folders git answered for: in a repo, or in none. A git that failed or timed out says neither. */
+  private readonly answered = new Set<string>();
   /** The last good read, newest first. */
   private prs: RepoPr[] = [];
   /** The failure last logged, so a repeating one is logged once. */
@@ -325,7 +326,7 @@ export class PullRequestRegistry {
       const kept = this.saved.current();
       if (this.now() - kept.at < SAVED_MAX_AGE_MS) {
         this.prs = kept.prs;
-        this.savedInUse = kept.inUse ?? undefined;
+        this.savedInUse = kept.inUse ?? {};
       }
       this.savedAt = kept.at;
       this.savedJson = JSON.stringify([kept.prs, kept.inUse]);
@@ -359,10 +360,19 @@ export class PullRequestRegistry {
         onBranch.set(key, [...(onBranch.get(key) ?? []), pane.paneId]);
       }
     }
-    const inUse = this.resolved ? new Set(this.inUse(panes)) : this.savedInUse && new Set(this.savedInUse[session]);
+    const known = this.settled(panes) ? this.inUse(panes) : this.savedInUse[session];
+    const inUse = known && new Set(known);
     return this.prs.map((pr) => ({
       ...pr, paneIds: onBranch.get(`${pr.repo.toLowerCase()}\0${pr.branch}`) ?? [], inUse: inUse?.has(pr.repo.toLowerCase()) ?? true,
     }));
+  }
+
+  /**
+   * Whether git has answered for a folder of `panes`, so their repos in use are read, not recalled. No
+   * folder at all says nothing either: a herd not read yet looks the same as an empty one.
+   */
+  private settled(panes: readonly AgentView[]): boolean {
+    return panes.some((pane) => pane.cwd && this.answered.has(pane.cwd));
   }
 
   /** The repos (lower-cased `owner/name`) the folders of `panes` name through their remotes. */
@@ -424,6 +434,7 @@ export class PullRequestRegistry {
   private async resolveFolders(): Promise<void> {
     const folders = [...new Set([...this.panes.values()].flatMap((panes) => panes.map((pane) => pane.cwd)).filter(Boolean))].slice(0, MAX_CWDS);
     const cwds = new Map<string, CwdInfo | null>();
+    const answered: string[] = [];
     await pool(folders, CONCURRENCY, async (cwd) => {
       // A folder stays in its repo; only its branch moves, so a folder read before costs one git call.
       const known = this.cwds.get(cwd);
@@ -436,7 +447,10 @@ export class PullRequestRegistry {
         return;
       }
       // A folder outside any repo is remembered as such, so it does not ask for a refresh again.
-      cwds.set(cwd, repo?.ok ? parseRepo(repo.stdout, branch?.ok ? branch.stdout : "") ?? null : null);
+      const info = repo?.ok ? parseRepo(repo.stdout, branch?.ok ? branch.stdout : "") ?? null : null;
+      cwds.set(cwd, info);
+      // 128 is git's own "not a git repository"; anything else is a git that could not say.
+      if (info || (repo && !repo.ok && repo.code === 128)) answered.push(cwd);
     });
 
     // A repo's remotes are read from the first worktree seen, again only when its config file changes.
@@ -454,8 +468,8 @@ export class PullRequestRegistry {
     });
     this.cwds = cwds;
     this.names = names;
-    // A git that failed or timed out on every folder says nothing about the repos in use.
-    if ([...cwds.values()].some(Boolean)) this.resolved = true;
+    // Only now: a read while this ran must not take a folder as answered before its repos are in.
+    for (const cwd of answered) this.answered.add(cwd);
   }
 
   /** What each session's page would read, to tell whether a refresh changed it. */
@@ -474,13 +488,15 @@ export class PullRequestRegistry {
     } else {
       this.failure = "";
       this.prs = mine;
-      // What the folders said, else what was kept: a failed read of them never overwrites the record.
-      const inUse = this.resolved ? Object.fromEntries([...this.panes].map(([session, panes]) => [session, this.inUse(panes)])) : this.savedInUse;
+      // What each session's folders said, else what was kept for it: a failed read never overwrites it.
+      const inUse = { ...this.savedInUse };
+      for (const [session, panes] of this.panes) if (this.settled(panes)) inUse[session] = this.inUse(panes);
+      this.savedInUse = inUse;
       const json = JSON.stringify([mine, inUse]);
       if (this.saved && (json !== this.savedJson || this.now() - this.savedAt >= RESAVE_MS)) {
         const at = this.now();
         // A write that fails is tried again on the next refresh.
-        await this.saved.set({ at, prs: mine, ...(inUse ? { inUse } : {}) }).then(() => {
+        await this.saved.set({ at, prs: mine, inUse }).then(() => {
           this.savedJson = json;
           this.savedAt = at;
         }, () => {});

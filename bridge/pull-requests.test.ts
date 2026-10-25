@@ -434,6 +434,47 @@ describe("registry", () => {
     expect(older.prs.list("main", [pane("p1", "/r/shop")]).map((pr) => pr.inUse)).toEqual([true, false]);
   });
 
+  test("panes in no repo mark nothing in use once git says so, and each session keeps its own record until its folders answer", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nenu-prs-"));
+    dirs.push(dir);
+    const file = join(dir, "pull-requests.json");
+    const clock = { t: 1_000_000 };
+    const rows = [inRepo("acme/shop", 1, "x"), inRepo("acme/api", 2, "y")];
+    writeFileSync(file, JSON.stringify({ at: clock.t, prs: parseViewer(JSON.stringify(viewerAnswer(rows))), inUse: { main: ["acme/shop"], other: ["acme/api"] } }));
+    // Before the herd is read a session has no pane, which says nothing: its record stands.
+    expect(registry(fakeRun({ folders, viewer: "hang" }).run, clock, { gh: 50, git: 20 }, file).prs.list("main", []).map((pr) => pr.inUse)).toEqual([true, false]);
+    const { prs } = registry(fakeRun({ folders, viewer: rows, hang: new Set(["/r/api rev-parse"]) }).run, clock, { gh: 50, git: 20 }, file);
+    const inUse = (session: string, cwd: string) => prs.list(session, [pane("p1", cwd)]).map((pr) => pr.inUse);
+    inUse("main", "/tmp");
+    inUse("other", "/r/api");
+    await prs.refresh();
+    // git said /tmp is in no repo: main has nothing in use. Other's git hung: its record stands.
+    expect(inUse("main", "/tmp")).toEqual([false, false]);
+    expect(inUse("other", "/r/api")).toEqual([false, true]);
+    expect(JSON.parse(readFileSync(file, "utf8")).inUse).toEqual({ main: [], other: ["acme/api"] });
+    // A first start, with no saved list: panes in no repo mark nothing in use once git says so.
+    const fresh = registry(fakeRun({ folders, viewer: rows }).run, clock);
+    fresh.prs.list("main", [pane("p1", "/tmp")]);
+    await fresh.prs.refresh();
+    expect(fresh.prs.list("main", [pane("p1", "/tmp")]).map((pr) => pr.inUse)).toEqual([false, false]);
+  });
+
+  test("a read while the folders resolve keeps the saved record until their repos are in", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nenu-prs-"));
+    dirs.push(dir);
+    const file = join(dir, "pull-requests.json");
+    const clock = { t: 1_000_000 };
+    const rows = [inRepo("acme/shop", 1, "x"), inRepo("acme/api", 2, "y")];
+    writeFileSync(file, JSON.stringify({ at: clock.t, prs: parseViewer(JSON.stringify(viewerAnswer(rows))), inUse: { main: ["acme/shop"] } }));
+    // The remotes read hangs, so the refresh is still running after its folders answered.
+    const { prs } = registry(fakeRun({ folders, viewer: rows, hang: new Set(["/r/shop config"]) }).run, clock, { gh: 50, git: 200 }, file);
+    const inUse = () => prs.list("main", [pane("p1", "/r/shop")]).map((pr) => pr.inUse);
+    expect(inUse()).toEqual([true, false]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(inUse()).toEqual([true, false]);
+    await prs.refresh();
+  });
+
   test("finds a PR by number in the repo a folder sits in, with the branch that folder is on", async () => {
     const { run, calls } = fakeRun({ folders, viewer: [inRepo("acme/shop", 1, "feat/a"), inRepo("acme/shop", 2, "feat/z"), inRepo("acme/api", 1, "fix/api")] });
     const { prs } = registry(run);

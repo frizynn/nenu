@@ -169,4 +169,18 @@ test("a repo ticked under All is kept while In use leaves it out, and every repo
   await user.keyboard("{Escape}");
   // What All would add counts only what the filter lets through: one draft, and notes is still ticked.
   expect(screen.getByText("1 more in repos no pane is in")).toBeInTheDocument();
+  // Every repo in use ticked narrows nothing, yet Clear filters still clears the ticks.
+  await user.click(screen.getByRole("button", { name: "Filter: In use, 1 more filter" }));
+  await user.click(screen.getByRole("menuitemcheckbox", { name: /^Draft/ }));
+  expect(screen.getByRole("button", { name: "Filter: In use" })).toBeInTheDocument();
+  await user.click(screen.getByRole("menuitem", { name: "Clear filters" }));
+  expect(localStorage.getItem("nenu:pr-filter:v1")).toBeNull();
+});
+
+test("what All would add counts the PRs of repos not in use, whichever repos are ticked", () => {
+  const pr = (repo: string, number: number, inUse: boolean): ReviewEntry => (
+    { key: `a/${repo}#${number}`, title: `${repo} ${number}`, repo, owner: "a", number, draft: false, inUse, updatedAt: number, url: `https://github.com/a/${repo}/pull/${number}` });
+  localStorage.setItem("nenu:pr-filter:v1", JSON.stringify({ scope: "inUse", repos: ["a/notes"], states: [] }));
+  render(<MemoryRouter><PullRequestList entries={[pr("shop", 1, true), pr("shop", 2, true), pr("shop", 3, true), pr("notes", 4, false)]} opening={null} /></MemoryRouter>);
+  expect(screen.getByText("1 more in repos no pane is in")).toBeInTheDocument();
 });

@@ -229,7 +229,8 @@ function PrFilterMenu({ entries, filter, set, home }: {
             ))}
           </div>
         </>}
-        {filters > 0 && <>
+        {/* Also while every repo is ticked: those ticks narrow nothing now, and would once another repo comes. */}
+        {(filter.repos.length > 0 || filter.states.length > 0) && <>
           <div role="separator" className="-mx-1 my-1 h-px bg-border" />
           <button type="button" role="menuitem" onClick={() => { set({ ...filter, repos: [], states: [] }); close(); }} className={quietMenuItem}>
             <X aria-hidden className="size-4 shrink-0 text-muted-foreground" />
@@ -254,7 +255,8 @@ export function PullRequestList({ entries, session, opening }: { entries: readon
   const home = homeOwner(reviewsByRepo(entries));
   const repos = reviewsByRepo(shown);
   const narrowed = narrowing.length > 0 || filter.states.length > 0 || query.trim() !== "";
-  const elsewhere = filter.scope === "inUse" ? filterReviews(entries, { ...filter, scope: "all" }, query).shown.length - shown.length : 0;
+  // What All would add: the rows it would show that are not in use.
+  const elsewhere = filter.scope === "inUse" ? filterReviews(entries, { ...filter, scope: "all" }, query).shown.filter((entry) => !entry.inUse).length : 0;
   const clear = () => { setQuery(""); set({ ...filter, repos: [], states: [] }); };
   const showAll = () => set({ ...filter, scope: "all" });
   return (

@@ -32,12 +32,13 @@ search per folder, capped at twelve folders, so clones crowded repos out.
 1. **The bridge marks each PR `inUse`** when its repo is one the remotes of a pane's folder name
    (any remote, so a fork's upstream counts), within the same session. It still reads the list once,
    from `viewer.pullRequests`; in use is a filter over that read, never a narrower read. Each
-   session's repos in use are kept with the saved list, so a restart marks PRs as before until a
-   folder resolves; a git that fails on every folder neither changes nor overwrites that record. A
-   list saved before this record existed marks every PR in use meanwhile, never none.
+   session's repos in use are kept with the saved list, so a restart marks PRs as before until git
+   answers for one of that session's folders (in a repo, or in none); a git that fails or times out
+   neither changes nor overwrites that session's record. A session the record does not name, as in a
+   list saved by 2.5.0, marks every PR in use meanwhile, never none.
 2. **Home lists the PRs in use by default**, and says how many more sit in repos no pane is in, one
    tap from all of them. With none in use it says so and offers all.
-3. **The filter lives on the device**: In use or All, any of four states (the runs a repo already
+3. **The filter lives on the device**: In use or All repos, any of four states (the runs a repo already
    lists them in: ready to merge, needs attention, in review, draft) and any of the repos in the
    scope, kept in localStorage like the workspace order. A search over title and number narrows too
    and is not kept. One menu holds the choices, built on the same quiet menu as the workspace order.
