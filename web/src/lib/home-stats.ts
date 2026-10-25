@@ -117,16 +117,18 @@ export function readyToMerge(entry: ReviewEntry): boolean {
   return !entry.draft && entry.review === "approved" && !entry.checks?.failed && !entry.checks?.pending;
 }
 
-/** Where a pull request stands, in the order a repo lists them: one merge away, then blocked (a check failing or changes asked for), then in review, drafts last. */
+/** Where a pull request can stand, in the order a repo lists them. */
 export const PR_STATES = ["ready", "attention", "review", "draft"] as const;
 export type PrState = typeof PR_STATES[number];
 
+/** Where a pull request stands: one merge away, else a draft, else blocked (a check failing or changes asked for), else in review. */
 export function prState(entry: ReviewEntry): PrState {
   if (readyToMerge(entry)) return "ready";
   if (entry.draft) return "draft";
   return entry.checks?.failed || entry.review === "changes_requested" ? "attention" : "review";
 }
 
+/** The run a pull request sits in, ready to merge first and drafts last. */
 const standing = (entry: ReviewEntry) => PR_STATES.indexOf(prState(entry));
 
 /** Home's review list: the person's open pull requests from GitHub, by where each stands, then newest first. */

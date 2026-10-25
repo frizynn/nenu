@@ -191,18 +191,22 @@ export function parseViewer(stdout: string): RepoPr[] {
 }
 
 /**
- * The list as kept on disk, with when it was read (epoch ms) and the repos the panes' folders named
- * then (lower-cased `owner/name`), which mark PRs in use until the folders are read again.
+ * The list as kept on disk, with when it was read (epoch ms) and, per session, the repos its panes'
+ * folders named then (lower-cased `owner/name`), which mark PRs in use until a folder is read again.
+ * A list saved before there was such a record has none, and marks every PR in use meanwhile.
  */
-interface SavedList { at: number; prs: RepoPr[]; inUse: string[] }
+interface SavedList { at: number; prs: RepoPr[]; inUse?: Readonly<Record<string, readonly string[]>> }
 
 /** A saved list back from disk: the rows the last refresh kept, any other shape read as none. */
 function savedList(raw: unknown): SavedList {
   const { at, prs, inUse } = record(raw);
-  if (typeof at !== "number" || !Array.isArray(prs)) return { at: 0, prs: [], inUse: [] };
+  if (typeof at !== "number" || !Array.isArray(prs)) return { at: 0, prs: [] };
   return {
     at,
-    inUse: Array.isArray(inUse) ? inUse.filter((repo): repo is string => typeof repo === "string") : [],
+    ...(inUse && typeof inUse === "object" && !Array.isArray(inUse) ? {
+      inUse: Object.fromEntries(Object.entries(inUse).map(([session, repos]) =>
+        [session, Array.isArray(repos) ? repos.filter((repo): repo is string => typeof repo === "string") : []])),
+    } : {}),
     prs: prs.filter((row): row is RepoPr => {
       const pr = record(row);
       return typeof pr.repo === "string" && typeof pr.number === "number" && typeof pr.title === "string"
@@ -291,9 +295,9 @@ export class PullRequestRegistry {
   private readonly mtime: (path: string) => number | undefined;
   /** When the saved list was last written, and what it held. */
   private savedAt = 0;
-  private savedPrs = "";
-  /** The repos in use as the saved list kept them; read until the panes' folders are resolved once. */
-  private savedInUse: readonly string[] = [];
+  private savedJson = "";
+  /** Each session's repos in use as the saved list kept them, read until a pane's folder resolves; none kept marks every PR in use. */
+  private savedInUse: Readonly<Record<string, readonly string[]>> | undefined;
   private resolved = false;
   /** The last good read, newest first. */
   private prs: RepoPr[] = [];
@@ -321,10 +325,10 @@ export class PullRequestRegistry {
       const kept = this.saved.current();
       if (this.now() - kept.at < SAVED_MAX_AGE_MS) {
         this.prs = kept.prs;
-        this.savedInUse = kept.inUse;
+        this.savedInUse = kept.inUse ?? undefined;
       }
       this.savedAt = kept.at;
-      this.savedPrs = JSON.stringify([kept.prs, kept.inUse]);
+      this.savedJson = JSON.stringify([kept.prs, kept.inUse]);
     }
   }
 
@@ -338,14 +342,14 @@ export class PullRequestRegistry {
     const unseen = panes.some((pane) => pane.cwd && !this.cwds.has(pane.cwd));
     if (age >= PR_TTL_MS || (unseen && age >= NEW_CWD_MIN_MS)) void this.refresh();
 
-    return this.rows(panes);
+    return this.rows(session, panes);
   }
 
   /**
    * Every PR the last refresh read, each with those of `panes` that sit on its branch, and whether its
    * repo is one their folders name, on any branch.
    */
-  private rows(panes: readonly AgentView[]): PullRequestView[] {
+  private rows(session: string, panes: readonly AgentView[]): PullRequestView[] {
     const onBranch = new Map<string, string[]>();
     for (const pane of panes) {
       const info = this.cwds.get(pane.cwd);
@@ -355,8 +359,10 @@ export class PullRequestRegistry {
         onBranch.set(key, [...(onBranch.get(key) ?? []), pane.paneId]);
       }
     }
-    const inUse = this.resolved ? new Set(this.inUse(panes)) : new Set(this.savedInUse);
-    return this.prs.map((pr) => ({ ...pr, paneIds: onBranch.get(`${pr.repo.toLowerCase()}\0${pr.branch}`) ?? [], inUse: inUse.has(pr.repo.toLowerCase()) }));
+    const inUse = this.resolved ? new Set(this.inUse(panes)) : this.savedInUse && new Set(this.savedInUse[session]);
+    return this.prs.map((pr) => ({
+      ...pr, paneIds: onBranch.get(`${pr.repo.toLowerCase()}\0${pr.branch}`) ?? [], inUse: inUse?.has(pr.repo.toLowerCase()) ?? true,
+    }));
   }
 
   /** The repos (lower-cased `owner/name`) the folders of `panes` name through their remotes. */
@@ -448,12 +454,13 @@ export class PullRequestRegistry {
     });
     this.cwds = cwds;
     this.names = names;
-    this.resolved = true;
+    // A git that failed or timed out on every folder says nothing about the repos in use.
+    if ([...cwds.values()].some(Boolean)) this.resolved = true;
   }
 
   /** What each session's page would read, to tell whether a refresh changed it. */
   private shown(): string {
-    return JSON.stringify([...this.panes].map(([session, panes]) => [session, this.rows(panes)]));
+    return JSON.stringify([...this.panes].map(([session, panes]) => [session, this.rows(session, panes)]));
   }
 
   private async read(): Promise<void> {
@@ -467,13 +474,14 @@ export class PullRequestRegistry {
     } else {
       this.failure = "";
       this.prs = mine;
-      const inUse = this.inUse([...this.panes.values()].flat());
+      // What the folders said, else what was kept: a failed read of them never overwrites the record.
+      const inUse = this.resolved ? Object.fromEntries([...this.panes].map(([session, panes]) => [session, this.inUse(panes)])) : this.savedInUse;
       const json = JSON.stringify([mine, inUse]);
-      if (this.saved && (json !== this.savedPrs || this.now() - this.savedAt >= RESAVE_MS)) {
+      if (this.saved && (json !== this.savedJson || this.now() - this.savedAt >= RESAVE_MS)) {
         const at = this.now();
         // A write that fails is tried again on the next refresh.
-        await this.saved.set({ at, prs: mine, inUse }).then(() => {
-          this.savedPrs = json;
+        await this.saved.set({ at, prs: mine, ...(inUse ? { inUse } : {}) }).then(() => {
+          this.savedJson = json;
           this.savedAt = at;
         }, () => {});
       }

@@ -12,7 +12,7 @@ import { PR_STATES, prState, readyToMerge, reviewsByRepo, type RepoReviews, type
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { panePath } from "@/lib/nav";
-import { filterReviews, SCOPE_LABEL, STATE_LABEL, usePrFilter, type PrFilter, type PrScope } from "@/lib/pr-filter";
+import { filterReviews, SCOPE_LABEL, STATE_LABEL, usePrFilter, type PrFilter } from "@/lib/pr-filter";
 import { cn, keepUnchanged } from "@/lib/utils";
 import type { AgentView } from "@/lib/types";
 
@@ -173,7 +173,8 @@ const textAction = "-mx-2 inline-flex min-h-9 items-center px-2 font-medium text
 
 /**
  * What the PRs tab lists, in one menu: the repos in use or all of them, then which states and which
- * repos, each with how many it holds. Several can be ticked, so a row keeps the menu open.
+ * repos, each with how many it holds. Several can be ticked, so a row keeps the menu open; Clear
+ * filters closes it, as the row it is on goes away.
  */
 function PrFilterMenu({ entries, filter, set, home }: {
   entries: readonly ReviewEntry[];
@@ -181,10 +182,9 @@ function PrFilterMenu({ entries, filter, set, home }: {
   set: (next: PrFilter) => void;
   home?: string;
 }) {
-  const { scoped, repos: chosen } = filterReviews(entries, filter);
-  const narrowing = chosen.length + filter.states.length;
+  const { scoped, repos: narrowing } = filterReviews(entries, filter);
+  const filters = narrowing.length + filter.states.length;
   const inScope = reviewsByRepo(scoped);
-  const scopeCount = (scope: PrScope) => scope === "all" ? entries.length : entries.filter((entry) => entry.inUse).length;
   const toggle = <T,>(list: readonly T[], item: T) => list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
   const label = SCOPE_LABEL[filter.scope];
   const row = (checked: boolean, words: ReactNode, count: number) => <>
@@ -194,16 +194,16 @@ function PrFilterMenu({ entries, filter, set, home }: {
   </>;
   return (
     <QuietMenu icon={ListFilter} align="end" menuLabel="Filter pull requests" className="-mr-1 ml-auto sm:-mr-2"
-      label={<>{label}{narrowing > 0 && <span className="tabular-nums"> · {narrowing}</span>}</>}
-      ariaLabel={`Filter: ${label}${narrowing ? `, ${plural(narrowing, "more filter")}` : ""}`}
+      label={<>{label}{filters > 0 && <span className="tabular-nums"> · {filters}</span>}</>}
+      ariaLabel={`Filter: ${label}${filters ? `, ${plural(filters, "more filter")}` : ""}`}
       menuClassName="w-64 max-h-[min(30rem,calc(100dvh-12rem))] overflow-y-auto overscroll-contain">
-      {() => <>
+      {(close) => <>
         <div role="group" aria-label="Show">
           <p aria-hidden className={menuGroupLabel}>Show</p>
           {(["inUse", "all"] as const).map((scope) => (
             <button key={scope} type="button" role="menuitemradio" aria-checked={filter.scope === scope}
               onClick={() => set({ ...filter, scope })} className={quietMenuItem}>
-              {row(filter.scope === scope, scope === "inUse" ? "In use" : "All repos", scopeCount(scope))}
+              {row(filter.scope === scope, SCOPE_LABEL[scope], filterReviews(entries, { ...filter, scope }).scoped.length)}
             </button>
           ))}
         </div>
@@ -222,16 +222,16 @@ function PrFilterMenu({ entries, filter, set, home }: {
           <div role="group" aria-label="Repos">
             <p aria-hidden className={menuGroupLabel}>Repos</p>
             {inScope.map((repo) => (
-              <button key={repo.key} type="button" role="menuitemcheckbox" aria-checked={chosen.includes(repo.key)}
-                onClick={() => set({ ...filter, repos: toggle(chosen, repo.key) })} className={quietMenuItem}>
-                {row(chosen.includes(repo.key), <>{repo.owner && repo.owner !== home && <span className="text-muted-foreground">{repo.owner}/</span>}{repo.name}</>, repo.entries.length)}
+              <button key={repo.key} type="button" role="menuitemcheckbox" aria-checked={filter.repos.includes(repo.key)}
+                onClick={() => set({ ...filter, repos: toggle(filter.repos, repo.key) })} className={quietMenuItem}>
+                {row(filter.repos.includes(repo.key), <>{repo.owner && repo.owner !== home && <span className="text-muted-foreground">{repo.owner}/</span>}{repo.name}</>, repo.entries.length)}
               </button>
             ))}
           </div>
         </>}
-        {narrowing > 0 && <>
+        {filters > 0 && <>
           <div role="separator" className="-mx-1 my-1 h-px bg-border" />
-          <button type="button" role="menuitem" onClick={() => set({ ...filter, repos: [], states: [] })} className={quietMenuItem}>
+          <button type="button" role="menuitem" onClick={() => { set({ ...filter, repos: [], states: [] }); close(); }} className={quietMenuItem}>
             <X aria-hidden className="size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate">Clear filters</span>
           </button>
@@ -245,32 +245,34 @@ function PrFilterMenu({ entries, filter, set, home }: {
  * Home's PRs tab: the open pull requests of the repos the herd is using, or all of them, under their
  * repo, narrowed on this device by state, repo or a search (ADR 0128). The owner of most of the repos
  * is the person's own account, so only the others name theirs. What the filter holds back is said: how
- * many of how many it shows, and how many more sit in repos no pane is in, one tap from all of them.
+ * many of how many it shows, and how many more All would add from repos no pane is in.
  */
 export function PullRequestList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
   const { filter, set } = usePrFilter();
   const [query, setQuery] = useState("");
-  const { scoped, shown, repos: chosen } = filterReviews(entries, filter, query);
+  const { scoped, shown, repos: narrowing } = filterReviews(entries, filter, query);
   const home = homeOwner(reviewsByRepo(entries));
   const repos = reviewsByRepo(shown);
-  const narrowed = chosen.length > 0 || filter.states.length > 0 || query.trim() !== "";
-  const elsewhere = filter.scope === "inUse" ? entries.length - scoped.length : 0;
+  const narrowed = narrowing.length > 0 || filter.states.length > 0 || query.trim() !== "";
+  const elsewhere = filter.scope === "inUse" ? filterReviews(entries, { ...filter, scope: "all" }, query).shown.length - shown.length : 0;
   const clear = () => { setQuery(""); set({ ...filter, repos: [], states: [] }); };
   const showAll = () => set({ ...filter, scope: "all" });
   return (
     <div className="flex flex-col">
       <div className="flex min-h-11 items-center gap-2 px-1 pb-2 sm:min-h-9 sm:px-2.5">
-        <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg bg-muted pl-2.5 text-muted-foreground focus-within:ring-2 focus-within:ring-ring coarse:h-11 sm:max-w-72">
-          <Search aria-hidden className="size-4 shrink-0" />
-          <input type="text" role="searchbox" enterKeyHint="search" autoComplete="off" spellCheck={false} value={query} placeholder="Search PRs" aria-label="Search pull requests by title or number"
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); setQuery(""); } }}
-            className="h-full min-w-0 flex-1 bg-transparent text-body text-foreground outline-none placeholder:text-muted-foreground" />
+        <div className="flex h-9 min-w-0 flex-1 items-center rounded-lg bg-muted text-muted-foreground focus-within:ring-2 focus-within:ring-ring coarse:h-11 sm:max-w-72">
+          <label className="flex h-full min-w-0 flex-1 items-center gap-2 pl-2.5">
+            <Search aria-hidden className="size-4 shrink-0" />
+            <input type="text" role="searchbox" enterKeyHint="search" autoComplete="off" spellCheck={false} value={query} placeholder="Search PRs" aria-label="Search pull requests by title or number"
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); setQuery(""); } }}
+              className="h-full min-w-0 flex-1 bg-transparent text-body text-foreground outline-none placeholder:text-muted-foreground" />
+          </label>
           {query && <button type="button" aria-label="Clear search" onClick={() => setQuery("")}
             className="flex size-9 shrink-0 items-center justify-center rounded-lg hover:text-foreground coarse:size-11">
             <X aria-hidden className="size-3.5" />
           </button>}
-        </label>
+        </div>
         <PrFilterMenu entries={entries} filter={filter} set={set} home={home} />
       </div>
       <p role="status" className={cn("flex min-h-9 items-center gap-1.5 px-1 text-footnote tabular-nums text-muted-foreground sm:px-2.5", !narrowed && "sr-only")}>

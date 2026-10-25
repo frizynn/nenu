@@ -30,6 +30,11 @@ describe("pull request filter", () => {
     expect(numbers(filterReviews(entries, filter({ scope: "all", repos: ["acme/api"] })).shown)).toEqual([3, 4]);
   });
 
+  it("narrows nothing when every repo in the scope is chosen", () => {
+    expect(filterReviews(entries, filter({ repos: ["acme/shop"] })).repos).toEqual([]);
+    expect(filterReviews(entries, filter({ scope: "all", repos: ["acme/shop"] })).repos).toEqual(["acme/shop"]);
+  });
+
   it("leaves out a chosen repo with no PR in the scope, rather than emptying the list", () => {
     const narrowed = filterReviews(entries, filter({ repos: ["acme/api"] }));
     expect(narrowed.repos).toEqual([]);
@@ -44,7 +49,9 @@ describe("pull request filter", () => {
   it("finds a PR by every word of its title, accents and case aside, or by its number", () => {
     const pr = entry(2319, { title: "fix(facturas): no facturar de nuevo una venta" });
     expect(["FACTUR venta", "factúrar", "#2319", "231", " "].map((query) => matchesQuery(pr, query))).toEqual([true, true, true, true, true]);
-    expect(["facturas compra", "#2320"].map((query) => matchesQuery(pr, query))).toEqual([false, false]);
+    expect(["facturas compra", "#2320", "23 19"].map((query) => matchesQuery(pr, query))).toEqual([false, false, false]);
+    // The first key of "#2319" narrows nothing yet.
+    expect(matchesQuery(pr, "#")).toBe(true);
   });
 
   it("keeps the choice on this device, and forgets what it cannot read", () => {

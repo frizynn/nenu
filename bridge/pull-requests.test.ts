@@ -388,7 +388,7 @@ describe("registry", () => {
     first.prs.list("main", [pane("p1", "/r/shop")]);
     await first.prs.refresh();
     expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ at: 1_000_000, prs: [{ number: 1 }] });
-    expect(JSON.parse(readFileSync(file, "utf8")).inUse).toEqual(["acme/shop"]);
+    expect(JSON.parse(readFileSync(file, "utf8")).inUse).toEqual({ main: ["acme/shop"] });
     const restarted = registry(fakeRun({ folders, viewer: "hang" }).run, clock, { gh: 50, git: 50 }, file);
     // In use as the saved list says, before any folder is read again.
     expect(restarted.prs.list("main", [pane("p2", "/h/worktrees/shop/a")]).map((pr) => [pr.number, pr.paneIds, pr.inUse])).toEqual([[1, [], true]]);
@@ -408,6 +408,30 @@ describe("registry", () => {
     expect(registry(fakeRun({ folders, viewer: [] }).run, { t: writes() + 24 * 60 * 60_000 }, undefined, file).prs.list("main", [])).toEqual([]);
     writeFileSync(file, JSON.stringify({ at: 1_000_000, prs: [{ number: 2 }] }));
     expect(registry(fakeRun({ folders, viewer: [] }).run, clock, undefined, file).prs.list("main", [])).toEqual([]);
+  });
+
+  test("marks PRs in use as the saved list kept them, per session, until a folder is read; a git that fails changes nothing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nenu-prs-"));
+    dirs.push(dir);
+    const file = join(dir, "pull-requests.json");
+    const clock = { t: 1_000_000 };
+    const rows = [inRepo("acme/shop", 1, "x"), inRepo("acme/api", 2, "y")];
+    writeFileSync(file, JSON.stringify({ at: clock.t, prs: parseViewer(JSON.stringify(viewerAnswer(rows))), inUse: { main: ["acme/shop"], other: ["acme/api"] } }));
+    // Every git call hangs: the folders say nothing, so the saved record stands, and is saved again as it was.
+    const hung = new Set(["/r/shop rev-parse", "/r/api rev-parse"]);
+    const { prs } = registry(fakeRun({ folders, viewer: rows, hang: hung }).run, clock, { gh: 50, git: 20 }, file);
+    const inUse = (session: string, cwd: string) => prs.list(session, [pane("p1", cwd)]).map((pr) => [pr.number, pr.inUse]);
+    expect(inUse("main", "/r/shop")).toEqual([[1, true], [2, false]]);
+    expect(inUse("other", "/r/api")).toEqual([[1, false], [2, true]]);
+    await prs.refresh();
+    expect(inUse("main", "/r/shop")).toEqual([[1, true], [2, false]]);
+    expect(JSON.parse(readFileSync(file, "utf8")).inUse).toEqual({ main: ["acme/shop"], other: ["acme/api"] });
+    // A list saved by a bridge that kept no such record marks every PR in use until a folder is read.
+    writeFileSync(file, JSON.stringify({ at: clock.t, prs: parseViewer(JSON.stringify(viewerAnswer(rows))) }));
+    const older = registry(fakeRun({ folders, viewer: rows }).run, clock, undefined, file);
+    expect(older.prs.list("main", [pane("p1", "/r/shop")]).map((pr) => pr.inUse)).toEqual([true, true]);
+    await older.prs.refresh();
+    expect(older.prs.list("main", [pane("p1", "/r/shop")]).map((pr) => pr.inUse)).toEqual([true, false]);
   });
 
   test("finds a PR by number in the repo a folder sits in, with the branch that folder is on", async () => {

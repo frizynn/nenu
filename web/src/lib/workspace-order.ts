@@ -2,7 +2,7 @@
 // name, or an order of their own set by dragging (ADR 0124). Kept in localStorage like the rest of a
 // device's view; a store that throws (private mode, a full quota) keeps it for the page's life. Home's
 // Workspaces and the drawer's tree read the same store, so both follow a change.
-import { useSyncExternalStore } from "react";
+import { deviceStore } from "./device-store";
 
 export type WorkspaceOrderMode = "herdr" | "name" | "custom";
 
@@ -16,11 +16,7 @@ export const HERDR_ORDER: WorkspaceOrder = { mode: "herdr", custom: [] };
 
 export const ORDER_LABEL: Record<WorkspaceOrderMode, string> = { herdr: "Herdr order", name: "Name", custom: "Custom" };
 
-const KEY = "nenu:workspace-order:v1";
 const MODES = Object.keys(ORDER_LABEL) as WorkspaceOrderMode[];
-let parsed: { raw: string | null; order: WorkspaceOrder } | null = null;
-let memory: WorkspaceOrder | null = null;
-const listeners = new Set<() => void>();
 
 function parse(raw: string | null): WorkspaceOrder {
   try {
@@ -33,37 +29,12 @@ function parse(raw: string | null): WorkspaceOrder {
   }
 }
 
-function read(): WorkspaceOrder {
-  if (memory) return memory;
-  let raw: string | null;
-  try {
-    raw = localStorage.getItem(KEY);
-  } catch {
-    return HERDR_ORDER;
-  }
-  if (parsed?.raw !== raw) parsed = { raw, order: parse(raw) };
-  return parsed.order;
-}
-
-function write(order: WorkspaceOrder): void {
-  try {
-    if (order.mode === "herdr" && order.custom.length === 0) localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, JSON.stringify(order));
-    memory = null;
-  } catch {
-    memory = order;
-  }
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+const useStoredOrder = deviceStore("nenu:workspace-order:v1", parse, (order) => order.mode === "herdr" && order.custom.length === 0, HERDR_ORDER);
 
 /** The order chosen on this device, and how to change it; every list of workspaces follows. */
 export function useWorkspaceOrder(): { order: WorkspaceOrder; set: (next: WorkspaceOrder) => void } {
-  return { order: useSyncExternalStore(subscribe, read), set: write };
+  const [order, set] = useStoredOrder();
+  return { order, set };
 }
 
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });

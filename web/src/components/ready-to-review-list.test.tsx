@@ -110,7 +110,9 @@ test("lists the PRs of the repos in use, says how many more there are, and filte
   expect(screen.getByRole("status")).toHaveTextContent("2 of 3 PRs·Clear");
   expect(JSON.parse(localStorage.getItem("nenu:pr-filter:v1")!)).toEqual({ scope: "inUse", repos: [], states: ["attention", "draft"] });
   await user.click(screen.getByRole("menuitem", { name: "Clear filters" }));
-  await user.click(screen.getByRole("menuitemcheckbox", { name: /^acme\/api|^api/ }));
+  expect(screen.queryByRole("menu")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Filter: In use" }));
+  await user.click(screen.getByRole("menuitemcheckbox", { name: /^api/ }));
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("menu")).toBeNull();
   expect(headings()).toEqual(["api, 1 open"]);
@@ -126,7 +128,7 @@ test("lists the PRs of the repos in use, says how many more there are, and filte
   await user.click(screen.getByRole("button", { name: "Show all" }));
   expect(headings()).toEqual(["notes, 1 open", "api, 1 open", "shop, 2 open"]);
   expect(screen.queryByText(/more in repos no pane is in/)).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Filter: All" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Filter: All repos" })).toBeInTheDocument();
 });
 
 test("with no PR in the repos in use, says so and offers all of them", async () => {
@@ -135,4 +137,36 @@ test("with no PR in the repos in use, says so and offers all of them", async () 
   expect(screen.getByText("No open PRs in the repos your panes are in.")).toBeInTheDocument();
   await userEvent.setup().click(screen.getByRole("button", { name: "Show all 1" }));
   expect(screen.getByRole("link", { name: "Elsewhere, #1" })).toBeInTheDocument();
+});
+
+test("by keyboard, Clear filters closes the menu and hands the focus back to its button", async () => {
+  const entries: ReviewEntry[] = [1, 2].map((number) => ({ key: `a/b#${number}`, title: `PR ${number}`, repo: "b", owner: "a", number, draft: number === 2, inUse: true, updatedAt: number, url: `https://github.com/a/b/pull/${number}` }));
+  render(<MemoryRouter><PullRequestList entries={entries} opening={null} /></MemoryRouter>);
+  const user = userEvent.setup();
+  screen.getByRole("button", { name: "Filter: In use" }).focus();
+  await user.keyboard("{ArrowDown}");
+  expect(screen.getByRole("menuitemradio", { name: /^In use/ })).toHaveFocus();
+  await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
+  expect(screen.getByRole("menuitemcheckbox", { name: /^Draft/ })).toHaveAttribute("aria-checked", "true");
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(screen.getByRole("button", { name: "Filter: In use" })).toHaveFocus();
+});
+
+test("a repo ticked under All is kept while In use leaves it out, and every repo ticked narrows nothing", async () => {
+  const pr = (repo: string, number: number, inUse: boolean, extra: Partial<ReviewEntry> = {}): ReviewEntry => (
+    { key: `a/${repo}#${number}`, title: `${repo} ${number}`, repo, owner: "a", number, draft: false, inUse, updatedAt: number, url: `https://github.com/a/${repo}/pull/${number}`, ...extra });
+  localStorage.setItem("nenu:pr-filter:v1", JSON.stringify({ scope: "inUse", repos: ["a/notes"], states: [] }));
+  render(<MemoryRouter><PullRequestList entries={[pr("shop", 1, true), pr("api", 2, true), pr("notes", 3, false), pr("notes", 4, false, { draft: true })]} opening={null} /></MemoryRouter>);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Filter: In use" }));
+  await user.click(screen.getByRole("menuitemcheckbox", { name: /^shop/ }));
+  expect(JSON.parse(localStorage.getItem("nenu:pr-filter:v1")!).repos).toEqual(["a/notes", "a/shop"]);
+  await user.click(screen.getByRole("menuitemcheckbox", { name: /^api/ }));
+  // Both repos in use ticked: nothing is held back, and the button counts no filter.
+  expect(screen.getByRole("button", { name: "Filter: In use" })).toBeInTheDocument();
+  await user.click(screen.getByRole("menuitemcheckbox", { name: /^Draft/ }));
+  await user.keyboard("{Escape}");
+  // What All would add counts only what the filter lets through: one draft, and notes is still ticked.
+  expect(screen.getByText("1 more in repos no pane is in")).toBeInTheDocument();
 });

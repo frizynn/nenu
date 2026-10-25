@@ -76,7 +76,7 @@ export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "st
       <button ref={trigger} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-label={ariaLabel} onClick={() => (open ? close() : setOpen(true))}
         onKeyDown={(event) => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); setOpen(true); } }}
-        className="quiet-action coarse:min-h-11">
+        className="quiet-action">
         <Icon aria-hidden className="size-3.5 shrink-0" />
         <span className="whitespace-nowrap">{label}</span>
         <ChevronDown aria-hidden className="-ml-0.5 size-3 shrink-0" />

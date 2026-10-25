@@ -31,8 +31,10 @@ search per folder, capped at twelve folders, so clones crowded repos out.
 
 1. **The bridge marks each PR `inUse`** when its repo is one the remotes of a pane's folder name
    (any remote, so a fork's upstream counts), within the same session. It still reads the list once,
-   from `viewer.pullRequests`; in use is a filter over that read, never a narrower read. The repos in
-   use are kept with the saved list, so a restart marks PRs as before until the folders are read.
+   from `viewer.pullRequests`; in use is a filter over that read, never a narrower read. Each
+   session's repos in use are kept with the saved list, so a restart marks PRs as before until a
+   folder resolves; a git that fails on every folder neither changes nor overwrites that record. A
+   list saved before this record existed marks every PR in use meanwhile, never none.
 2. **Home lists the PRs in use by default**, and says how many more sit in repos no pane is in, one
    tap from all of them. With none in use it says so and offers all.
 3. **The filter lives on the device**: In use or All, any of four states (the runs a repo already
@@ -47,7 +49,7 @@ search per folder, capped at twelve folders, so clones crowded repos out.
   brings it back, and the choice stays on that device.
 - A pane opened in a new repo marks its PRs in use within the 5 s a new folder waits for a refresh.
 - A chosen repo with no PR in the scope narrows nothing until it has one again, so a stale choice
-  never leaves an empty list.
+  never leaves an empty list; every repo of the scope chosen narrows nothing either.
 - Herdr growing a workspace folder (or a project notion) would be a better source than pane
   folders: revisit then. Don't bring back per-repo GitHub searches to scope the list; they missed
   PRs and cost a request per repo.
