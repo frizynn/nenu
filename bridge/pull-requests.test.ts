@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { githubRepo, parsePullRequests, parseRepo, parseSearch, PR_TTL_MS, PullRequestRegistry, remoteRepo, searchArgv, summarizeChecks, type CommandRun } from "./pull-requests.ts";
+import { githubRepo, parsePullRequests, parseRepo, parseViewer, PR_TTL_MS, PullRequestRegistry, remoteRepo, summarizeChecks, viewerArgv, type CommandRun } from "./pull-requests.ts";
 import type { AgentView, LiveEvent } from "./types.ts";
 
 function pane(paneId: string, cwd: string): AgentView {
@@ -11,22 +14,26 @@ const ghRow = (number: number, branch: string, extra: Record<string, unknown> = 
   number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`, headRefName: branch, baseRefName: "main",
   isDraft: false, reviewDecision: "", statusCheckRollup: [], additions: 10, deletions: 2, updatedAt: "2026-10-10T10:00:00Z", ...extra,
 });
+const inRepo = (repo: string, number: number, branch: string) => ghRow(number, branch, { url: `https://github.com/${repo}/pull/${number}` });
 
-/** The PR rows GitHub's GraphQL search returns for `ghRow`s, with the checks under the last commit. */
-const searchNode = (row: ReturnType<typeof ghRow>) => {
+/** The PR rows GitHub's GraphQL answer holds for `ghRow`s, with the checks under the last commit. */
+const graphqlNode = (row: ReturnType<typeof ghRow>) => {
   const { statusCheckRollup, ...rest } = row;
   return { ...rest, commits: { nodes: [{ commit: { statusCheckRollup: (statusCheckRollup as unknown[]).length ? { contexts: { nodes: statusCheckRollup } } : null } }] } };
 };
+const viewerAnswer = (rows: ReturnType<typeof ghRow>[]) => ({ data: { viewer: { pullRequests: { nodes: rows.map(graphqlNode) } } } });
+
+const remote = (name: string) => `remote.origin.url https://github.com/${name}.git\n`;
 
 /**
  * A fake git + gh. Folders map to (common dir, toplevel, branch, and the remotes `git config` prints);
- * `gh pr list` answers from `prs` by toplevel, and the GraphQL search from `prs` by `owner/name` (a
- * "hang" there hangs the request), or with `graphql`. Every call is recorded.
+ * the GraphQL request answers `viewer` (rows, a raw answer, or a hang or a throw), and `gh pr list`
+ * answers from `prs` by folder. Every call is recorded.
  */
 function fakeRun(state: {
   folders: Record<string, [string, string, string, string?]>;
-  prs: Record<string, unknown[] | { code: number; stderr: string } | "hang" | "throw">;
-  graphql?: { code: number; stdout: string; stderr: string } | "hang" | "throw";
+  viewer: ReturnType<typeof ghRow>[] | { code: number; stdout: string; stderr: string } | "hang" | "throw";
+  prs?: Record<string, unknown[] | { code: number; stderr: string }>;
 }) {
   const calls: Array<{ argv: string[]; cwd: string }> = [];
   const run: CommandRun = async (argv, { cwd }) => {
@@ -38,22 +45,12 @@ function fakeRun(state: {
       return { code: 0, stdout: argv[1] === "branch" ? `${folder[2]}\n` : `${folder[0]}\n${folder[1]}\n`, stderr: "" };
     }
     if (argv[1] === "api") {
-      if (state.graphql === "hang") return new Promise(() => {});
-      if (state.graphql === "throw") throw new Error("spawn gh ENOENT");
-      if (state.graphql) return state.graphql;
-      const data: Record<string, unknown> = {};
-      if (argv.some((arg) => state.prs[/ repo:(\S+) /.exec(arg)?.[1] ?? ""] === "hang")) return new Promise(() => {});
-      for (const arg of argv) {
-        const query = /^q(\d+)=author:@me repo:(\S+) state:open type:pr$/.exec(arg);
-        const rows = query && state.prs[query[2]!];
-        // GitHub answers a repo it does not know with no rows, never an error.
-        if (query) data[`r${query[1]}`] = { nodes: Array.isArray(rows) ? rows.map((row) => searchNode(row as ReturnType<typeof ghRow>)) : [] };
-      }
-      return { code: 0, stdout: JSON.stringify({ data }), stderr: "" };
+      if (state.viewer === "hang") return new Promise(() => {});
+      if (state.viewer === "throw") throw new Error("spawn gh ENOENT");
+      if (!Array.isArray(state.viewer)) return state.viewer;
+      return { code: 0, stdout: JSON.stringify(viewerAnswer(state.viewer)), stderr: "" };
     }
-    const answer = state.prs[cwd];
-    if (answer === "hang") return new Promise(() => {});
-    if (answer === "throw") throw new Error("spawn gh ENOENT");
+    const answer = state.prs?.[cwd];
     if (!answer) return { code: 1, stdout: "", stderr: "no remote" };
     if (!Array.isArray(answer)) return { code: answer.code, stdout: "", stderr: answer.stderr };
     return { code: 0, stdout: JSON.stringify(answer), stderr: "" };
@@ -61,10 +58,10 @@ function fakeRun(state: {
   return { run, calls };
 }
 
-function registry(run: CommandRun, clock = { t: 1_000_000 }, timeouts = { gh: 15_000, git: 3_000 }) {
+function registry(run: CommandRun, clock = { t: 1_000_000 }, timeouts = { gh: 15_000, git: 3_000 }, file?: string) {
   const events: LiveEvent[] = [];
   const logs: string[] = [];
-  const prs = new PullRequestRegistry({ run, now: () => clock.t, live: { publish: (event) => events.push(event) }, log: (m) => logs.push(m), timeouts });
+  const prs = new PullRequestRegistry({ run, now: () => clock.t, live: { publish: (event) => events.push(event) }, log: (m) => logs.push(m), timeouts, file });
   return { prs, events, logs, clock };
 }
 
@@ -132,23 +129,19 @@ describe("parsing", () => {
     expect(remoteRepo("")).toBeUndefined();
   });
 
-  test("reads the search answer per repo, as gh pr list would have printed it", () => {
-    const argv = searchArgv(["acme/shop", "acme/api"]);
+  test("reads the viewer's open PRs, as gh pr list would have printed them", () => {
+    const argv = viewerArgv();
     expect(argv.slice(0, 6)).toEqual(["gh", "api", "--hostname", "github.com", "graphql", "-f"]);
-    expect(argv.slice(7)).toEqual(["-f", "q0=author:@me repo:acme/shop state:open type:pr", "-f", "q1=author:@me repo:acme/api state:open type:pr"]);
-    expect(argv[6]).toContain("r1:search(query:$q1,type:ISSUE_ADVANCED,first:50)");
+    expect(argv[6]).toContain("viewer{pullRequests(states:OPEN,first:100,orderBy:{field:UPDATED_AT,direction:DESC})");
     const row = ghRow(7, "feat/x", { reviewDecision: "APPROVED", statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS" }, { __typename: "StatusContext", state: "PENDING" }] });
-    const answers = parseSearch(JSON.stringify({
-      data: { r0: { nodes: [searchNode(row), {}] }, r1: null },
-      errors: [{ path: ["r1"], message: "The listed users and repositories cannot be searched" }],
-    }), 2);
-    expect(answers).toEqual([parsePullRequests(JSON.stringify([row])), "The listed users and repositories cannot be searched"]);
-    expect(answers[0]).toMatchObject([{ number: 7, review: "approved", checks: { passed: 1, failed: 0, pending: 1 } }]);
-    expect(parseSearch(JSON.stringify({ data: { r0: { nodes: [searchNode(ghRow(8, "b"))] } } }), 1)[0]).toMatchObject([{ number: 8 }]);
-    expect(parseSearch(JSON.stringify({ errors: [{ message: "Bad credentials" }] }), 2)).toEqual(["Bad credentials", "Bad credentials"]);
-    // A REST-style error body says nothing per repo; the caller keeps gh's own reason.
-    expect(parseSearch(JSON.stringify({ message: "Bad credentials" }), 1)).toEqual([undefined]);
-    expect(() => parseSearch("", 1)).toThrow();
+    const answer = viewerAnswer([row]);
+    (answer.data.viewer.pullRequests.nodes as unknown[]).push({});
+    const rows = parseViewer(JSON.stringify(answer));
+    expect(rows).toEqual(parsePullRequests(JSON.stringify([row])));
+    expect(rows).toMatchObject([{ number: 7, review: "approved", checks: { passed: 1, failed: 0, pending: 1 } }]);
+    expect(() => parseViewer(JSON.stringify({ errors: [{ message: "Bad credentials" }] }))).toThrow("Bad credentials");
+    expect(() => parseViewer(JSON.stringify({ message: "Bad credentials" }))).toThrow("GitHub gave no pull requests");
+    expect(() => parseViewer("")).toThrow();
   });
 
   test("maps a worktree to its main repo and a detached HEAD to no branch", () => {
@@ -159,206 +152,170 @@ describe("parsing", () => {
 });
 
 describe("registry", () => {
-  const folders: Record<string, [string, string, string]> = {
-    "/r/shop": ["/r/shop/.git", "/r/shop", "develop"],
-    "/r/shop/src": ["/r/shop/.git", "/r/shop", "develop"],
-    "/h/worktrees/shop/a": ["/r/shop/.git", "/h/worktrees/shop/a", "feat/a"],
-    "/h/worktrees/shop/b": ["/r/shop/.git", "/h/worktrees/shop/b", "feat/b"],
-    "/r/api": ["/r/api/.git", "/r/api", "main"],
+  const folders: Record<string, [string, string, string, string]> = {
+    "/r/shop": ["/r/shop/.git", "/r/shop", "develop", remote("acme/shop")],
+    "/r/shop/src": ["/r/shop/.git", "/r/shop", "develop", remote("acme/shop")],
+    "/h/worktrees/shop/a": ["/r/shop/.git", "/h/worktrees/shop/a", "feat/a", remote("acme/shop")],
+    "/h/worktrees/shop/b": ["/r/shop/.git", "/h/worktrees/shop/b", "feat/b", remote("acme/shop")],
+    "/r/shop-clone": ["/r/shop-clone/.git", "/r/shop-clone", "feat/a", remote("acme/shop")],
+    "/r/api": ["/r/api/.git", "/r/api", "main", remote("acme/api")],
   };
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
 
-  test("runs gh once per repo, worktrees included, and maps each PR to the panes on its branch", async () => {
-    const { run, calls } = fakeRun({ folders, prs: { "/r/shop": [ghRow(1, "feat/a"), ghRow(2, "feat/z")], "/r/api": [] } });
+  test("asks GitHub once for every open PR, repos with no pane included, and maps each to the panes on its branch", async () => {
+    const { run, calls } = fakeRun({ folders, viewer: [inRepo("acme/shop", 1, "feat/a"), inRepo("acme/elsewhere", 4, "feat/a"), inRepo("acme/shop", 2, "feat/z"), inRepo("acme/api", 3, "main")] });
     const { prs, events } = registry(run);
-    const panes = [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a"), pane("p3", "/h/worktrees/shop/b"), pane("p4", "/r/shop/src"), pane("p5", "/r/api"), pane("p6", "/tmp"), pane("p7", "/h/worktrees/shop/a")];
+    const panes = [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a"), pane("p3", "/h/worktrees/shop/b"), pane("p4", "/r/shop/src"), pane("p5", "/r/api"), pane("p6", "/tmp"), pane("p7", "/h/worktrees/shop/a"), pane("p8", "/r/shop-clone")];
     expect(prs.list("main", panes)).toEqual([]);
     await prs.refresh();
     const gh = calls.filter((call) => call.argv[0] === "gh");
-    expect(gh.map((call) => call.cwd).sort()).toEqual(["/r/api", "/r/shop"]);
-    expect(gh[0]!.argv.slice(0, 7)).toEqual(["gh", "pr", "list", "--state", "open", "--author", "@me"]);
-    const list = prs.list("main", panes);
-    expect(list.map((pr) => [pr.number, pr.paneIds])).toEqual([[1, ["p2", "p7"]], [2, []]]);
+    expect(gh.map((call) => call.argv[1])).toEqual(["api"]);
+    // GitHub's order, each PR once, however many clones of its repo the panes sit in.
+    expect(prs.list("main", panes).map((pr) => [pr.repo, pr.number, pr.paneIds])).toEqual([
+      ["acme/shop", 1, ["p2", "p7", "p8"]], ["acme/elsewhere", 4, []], ["acme/shop", 2, []], ["acme/api", 3, ["p5"]],
+    ]);
     expect(events).toEqual([{ session: "main", topic: "snapshot" }]);
   });
 
   test("caches for the TTL, then refreshes in the background on a read", async () => {
-    const { run, calls } = fakeRun({ folders, prs: { "/r/shop": [ghRow(1, "feat/a")] } });
+    const { run, calls } = fakeRun({ folders, viewer: [ghRow(1, "feat/a")] });
     const { prs, events, clock } = registry(run);
     const panes = [pane("p1", "/r/shop")];
     prs.list("main", panes);
     await prs.refresh();
-    const after = calls.length;
+    const gh = () => calls.filter((call) => call.argv[0] === "gh").length;
     clock.t += PR_TTL_MS - 1;
     prs.list("main", panes);
     await Bun.sleep(0);
-    expect(calls.length).toBe(after);
+    expect(gh()).toBe(1);
     clock.t += 1;
     prs.list("main", panes);
     // Joins the refresh the read started rather than starting another.
     await prs.refresh();
-    expect(calls.length).toBe(after * 2);
+    expect(gh()).toBe(2);
     // Nothing changed after the first read, so only one event.
     expect(events.length).toBe(1);
   });
 
-  test("a gh failure keeps the last good list and is logged once", async () => {
-    const state = { folders, prs: { "/r/shop": [ghRow(1, "feat/a")] } as Parameters<typeof fakeRun>[0]["prs"] };
+  test("a folder read before costs one git call a refresh: its branch", async () => {
+    const moving = structuredClone(folders);
+    const { run, calls } = fakeRun({ folders: moving, viewer: [] });
+    const { prs, clock } = registry(run);
+    const panes = [pane("p1", "/h/worktrees/shop/a"), pane("p2", "/tmp")];
+    prs.list("main", panes);
+    await prs.refresh();
+    const before = calls.length;
+    moving["/h/worktrees/shop/a"]![2] = "feat/a2";
+    clock.t += PR_TTL_MS;
+    await prs.refresh();
+    expect(calls.slice(before).filter((call) => call.cwd === "/h/worktrees/shop/a").map((call) => call.argv[1])).toEqual(["branch", "config"]);
+    expect(prs.onBranch("/h/worktrees/shop/a")).toBeUndefined();
+  });
+
+  test("a GitHub failure keeps the last good list and is logged once", async () => {
+    const state: Parameters<typeof fakeRun>[0] = { folders, viewer: [ghRow(1, "feat/a")] };
     const { run } = fakeRun(state);
     const { prs, logs, events } = registry(run);
     const panes = [pane("p1", "/r/shop")];
     prs.list("main", panes);
     await prs.refresh();
-    state.prs["/r/shop"] = { code: 4, stderr: "gh auth login required\nmore" };
+    state.viewer = { code: 4, stdout: "", stderr: "gh auth login required\nmore" };
     await prs.refresh();
     await prs.refresh();
     expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([1]);
-    expect(logs).toEqual(["shop: gh auth login required"]);
-    state.prs["/r/shop"] = "throw";
+    expect(logs).toEqual(["gh auth login required"]);
+    state.viewer = "throw";
     await prs.refresh();
-    expect(logs).toEqual(["shop: gh auth login required", "shop: spawn gh ENOENT"]);
+    // A 401 answers with a REST-style body: gh's stderr is the reason.
+    state.viewer = { code: 1, stdout: JSON.stringify({ message: "Bad credentials" }), stderr: "gh: Bad credentials (HTTP 401)" };
+    await prs.refresh();
+    expect(logs).toEqual(["gh auth login required", "spawn gh ENOENT", "gh: Bad credentials (HTTP 401)"]);
     expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([1]);
     expect(events.length).toBe(1);
+    // A partial answer: gh exits 1 and still prints what GitHub answered.
+    state.viewer = { code: 1, stdout: JSON.stringify(viewerAnswer([ghRow(5, "main")])), stderr: "gh: Something went wrong" };
+    await prs.refresh();
+    expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([5]);
   });
 
   test("a gh that never answers times out instead of hanging the refresh", async () => {
-    const { run } = fakeRun({ folders, prs: { "/r/shop": "hang", "/r/api": [ghRow(5, "main")] } });
+    const { run } = fakeRun({ folders, viewer: "hang" });
     const { prs, logs } = registry(run, undefined, { gh: 50, git: 50 });
-    prs.list("main", [pane("p1", "/r/shop"), pane("p2", "/r/api")]);
+    prs.list("main", [pane("p1", "/r/shop")]);
     const started = Date.now();
     await prs.refresh();
     // The fake ignores the runner's kill; the guard's own timer still ends the wait.
     expect(Date.now() - started).toBeLessThan(1_000);
-    expect(logs).toEqual(["shop: timed out"]);
-    expect(prs.list("main", [pane("p2", "/r/api")]).map((pr) => [pr.number, pr.paneIds])).toEqual([[5, ["p2"]]]);
+    expect(logs).toEqual(["timed out"]);
   });
 
   test("a pane in a new folder asks for a sooner refresh, but not on every read", async () => {
-    const { run, calls } = fakeRun({ folders, prs: { "/r/shop": [], "/r/api": [] } });
+    const { run, calls } = fakeRun({ folders, viewer: [inRepo("acme/api", 3, "main")] });
     const { prs, clock } = registry(run);
     prs.list("main", [pane("p1", "/r/shop")]);
     await prs.refresh();
     const after = calls.length;
     clock.t += 1_000;
-    prs.list("main", [pane("p1", "/r/shop"), pane("p2", "/r/api")]);
+    const panes = [pane("p1", "/r/shop"), pane("p2", "/r/api")];
+    expect(prs.list("main", panes).map((pr) => pr.paneIds)).toEqual([[]]);
     await Promise.resolve();
     expect(calls.length).toBe(after);
     clock.t += 5_000;
-    prs.list("main", [pane("p1", "/r/shop"), pane("p2", "/r/api")]);
+    prs.list("main", panes);
     await prs.refresh();
-    expect(calls.some((call) => call.argv[0] === "gh" && call.cwd === "/r/api")).toBe(true);
+    expect(prs.list("main", panes).map((pr) => pr.paneIds)).toEqual([["p2"]]);
   });
 
-  test("caps the repos it asks GitHub about", async () => {
+  test("names a repo only gh can name from the rows gh pr list reads there, and asks nobody about a local-only one", async () => {
+    const { run, calls } = fakeRun({
+      folders: {
+        "/r/alias": ["/r/alias/.git", "/r/alias", "feat/x", "remote.origin.url git@github-work:acme/alias.git\n"],
+        "/r/home": ["/r/home/.git", "/r/home", "main", "remote.origin.url /r/upstream-home\n"],
+      },
+      viewer: [inRepo("acme/alias", 9, "feat/x")],
+      prs: { "/r/alias": [inRepo("acme/alias", 9, "feat/x")] },
+    });
+    const { prs } = registry(run);
+    const panes = [pane("p1", "/r/alias"), pane("p2", "/r/home")];
+    prs.list("main", panes);
+    await prs.refresh();
+    expect(calls.filter((call) => call.argv[1] === "pr").map((call) => call.cwd)).toEqual(["/r/alias"]);
+    expect(prs.list("main", panes).map((pr) => [pr.number, pr.paneIds])).toEqual([[9, ["p1"]]]);
+  });
+
+  test("caps the repos it asks gh pr list about", async () => {
     const many: Record<string, [string, string, string]> = {};
     for (let i = 0; i < 20; i++) many[`/r/${i}`] = [`/r/${i}/.git`, `/r/${i}`, "main"];
-    const { run, calls } = fakeRun({ folders: many, prs: {} });
+    const { run, calls } = fakeRun({ folders: many, viewer: [] });
     const { prs } = registry(run, { t: 0 });
     prs.list("main", Object.keys(many).map((cwd, i) => pane(`p${i}`, cwd)));
     await prs.refresh();
-    expect(calls.filter((call) => call.argv[0] === "gh").length).toBe(12);
+    expect(calls.filter((call) => call.argv[1] === "pr").length).toBe(12);
   });
 
-  test("asks GitHub once for every repo a remote names, and runs gh pr list only where gh alone can name it", async () => {
-    const remote = (name: string) => `remote.origin.url https://github.com/${name}.git\n`;
-    const { run, calls } = fakeRun({
-      folders: {
-        "/r/shop": ["/r/shop/.git", "/r/shop", "develop", remote("acme/shop")],
-        "/h/worktrees/shop/a": ["/r/shop/.git", "/h/worktrees/shop/a", "feat/a", remote("acme/shop")],
-        "/r/shop-clone": ["/r/shop-clone/.git", "/r/shop-clone", "main", remote("acme/shop")],
-        "/r/api": ["/r/api/.git", "/r/api", "main", remote("acme/api")],
-        "/r/local": ["/r/local/.git", "/r/local", "main"],
-        "/r/home": ["/r/home/.git", "/r/home", "main", "remote.origin.url /r/upstream-home\n"],
-      },
-      prs: { "acme/shop": [ghRow(1, "feat/a"), ghRow(2, "feat/z")], "acme/api": [], "/r/local": [ghRow(3, "main", { url: "https://github.com/acme/local/pull/3" })] },
-    });
-    const { prs, events, logs } = registry(run);
-    const panes = [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a"), pane("p3", "/r/shop-clone"), pane("p4", "/r/api"), pane("p5", "/r/local"), pane("p6", "/r/home")];
-    prs.list("main", panes);
-    await prs.refresh();
-    const gh = calls.filter((call) => call.argv[0] === "gh");
-    expect(gh.map((call) => call.argv[1])).toEqual(["api", "pr"]);
-    // The two clones of acme/shop share one search.
-    expect(gh[0]!.argv.filter((arg) => /^q\d/.test(arg))).toEqual(["q0=author:@me repo:acme/shop state:open type:pr", "q1=author:@me repo:acme/api state:open type:pr"]);
-    expect(gh[1]!.cwd).toBe("/r/local");
-    expect(prs.list("main", panes).map((pr) => [pr.repo, pr.number, pr.paneIds])).toEqual([
-      ["acme/shop", 1, ["p2"]], ["acme/shop", 2, []], ["acme/shop", 1, []], ["acme/shop", 2, []], ["acme/local", 3, ["p5"]],
-    ]);
-    expect(events).toEqual([{ session: "main", topic: "snapshot" }]);
-    // A repo whose only remote is on this machine asks nobody: gh would fail there.
-    expect(logs).toEqual(["home: none of the git remotes point to GitHub"]);
-  });
-
-  test("asks GitHub four repos per request, so a slow repo fails only its own batch", async () => {
-    const folders: Record<string, [string, string, string, string]> = {};
-    for (let i = 0; i < 6; i++) folders[`/r/${i}`] = [`/r/${i}/.git`, `/r/${i}`, "main", `remote.origin.url https://github.com/acme/r${i}\n`];
-    const state: Parameters<typeof fakeRun>[0] = { folders, prs: { "acme/r0": [ghRow(1, "a")], "acme/r5": [ghRow(2, "b")] } };
-    const { run, calls } = fakeRun(state);
-    const { prs, logs } = registry(run, undefined, { gh: 50, git: 50 });
-    const panes = Object.keys(folders).map((cwd, i) => pane(`p${i}`, cwd));
-    prs.list("main", panes);
-    await prs.refresh();
-    const api = calls.filter((call) => call.argv[1] === "api");
-    expect(api.map((call) => call.argv.filter((arg) => /^q\d/.test(arg)).length)).toEqual([4, 2]);
-    expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([1, 2]);
-    // r4 hangs its batch: r5 beside it keeps its list, r0 in the other batch takes its new one.
-    state.prs = { "acme/r0": [ghRow(3, "c")], "acme/r4": "hang", "acme/r5": [] };
-    await prs.refresh();
-    expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([3, 2]);
-    expect(logs).toEqual(["4: timed out", "5: timed out"]);
-  });
-
-  test("a search that hangs or throws times out or fails like gh pr list did, keeping the last list", async () => {
-    const state: Parameters<typeof fakeRun>[0] = {
-      folders: { "/r/shop": ["/r/shop/.git", "/r/shop", "feat/a", "remote.origin.url https://github.com/acme/shop\n"] },
-      prs: { "acme/shop": [ghRow(1, "feat/a")] },
-    };
-    const { run } = fakeRun(state);
-    const { prs, logs } = registry(run, undefined, { gh: 50, git: 50 });
-    prs.list("main", [pane("p1", "/r/shop")]);
-    await prs.refresh();
-    state.graphql = "hang";
-    const started = Date.now();
-    await prs.refresh();
-    expect(Date.now() - started).toBeLessThan(1_000);
-    state.graphql = "throw";
-    await prs.refresh();
-    // A 401 answers with a REST-style body: gh's stderr is the reason.
-    state.graphql = { code: 1, stdout: JSON.stringify({ message: "Bad credentials" }), stderr: "gh: Bad credentials (HTTP 401)" };
-    await prs.refresh();
-    expect(logs).toEqual(["shop: timed out", "shop: spawn gh ENOENT", "shop: gh: Bad credentials (HTTP 401)"]);
-    expect(prs.list("main", [pane("p1", "/r/shop")]).map((pr) => pr.number)).toEqual([1]);
-  });
-
-  test("a repo GitHub could not answer keeps its last list, and the others take theirs", async () => {
-    const remote = (name: string) => `remote.origin.url https://github.com/${name}.git\n`;
-    const state: Parameters<typeof fakeRun>[0] = {
-      folders: { "/r/shop": ["/r/shop/.git", "/r/shop", "feat/a", remote("acme/shop")], "/r/api": ["/r/api/.git", "/r/api", "main", remote("acme/api")] },
-      prs: { "acme/shop": [ghRow(1, "feat/a")], "acme/api": [ghRow(5, "main")] },
-    };
-    const { run } = fakeRun(state);
-    const { prs, logs } = registry(run);
-    const panes = [pane("p1", "/r/shop"), pane("p2", "/r/api")];
-    prs.list("main", panes);
-    await prs.refresh();
-    // A partial answer: gh exits 1 and still prints what GitHub answered.
-    state.graphql = {
-      code: 1,
-      stdout: JSON.stringify({ data: { r0: null, r1: { nodes: [searchNode(ghRow(5, "main")), searchNode(ghRow(6, "fix"))] } }, errors: [{ path: ["r0"], message: "Something went wrong" }] }),
-      stderr: "gh: Something went wrong",
-    };
-    await prs.refresh();
-    expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([1, 5, 6]);
-    expect(logs).toEqual(["shop: Something went wrong"]);
-    // No answer at all: every repo keeps its list, each logged once.
-    state.graphql = { code: 4, stdout: "", stderr: "gh auth login required\nmore" };
-    await prs.refresh();
-    await prs.refresh();
-    expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([1, 5, 6]);
-    expect(logs).toEqual(["shop: Something went wrong", "shop: gh auth login required", "api: gh auth login required"]);
+  test("keeps the last list on disk, so a restart shows it before GitHub answers", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nenu-prs-"));
+    dirs.push(dir);
+    const file = join(dir, "pull-requests.json");
+    const first = registry(fakeRun({ folders, viewer: [ghRow(1, "feat/a")] }).run, undefined, undefined, file);
+    first.prs.list("main", [pane("p1", "/r/shop")]);
+    await first.prs.refresh();
+    await Bun.sleep(10);
+    expect(JSON.parse(readFileSync(file, "utf8")).prs).toMatchObject([{ number: 1 }]);
+    const restarted = registry(fakeRun({ folders, viewer: "hang" }).run, undefined, { gh: 50, git: 50 }, file);
+    expect(restarted.prs.list("main", [pane("p2", "/h/worktrees/shop/a")]).map((pr) => [pr.number, pr.paneIds])).toEqual([[1, []]]);
+    await restarted.prs.refresh();
+    // Matched to its pane once the folders are read, though GitHub never answered.
+    expect(restarted.prs.list("main", [pane("p2", "/h/worktrees/shop/a")]).map((pr) => [pr.number, pr.paneIds])).toEqual([[1, ["p2"]]]);
+    writeFileSync(file, JSON.stringify({ prs: [{ number: 2 }] }));
+    expect(registry(fakeRun({ folders, viewer: [] }).run, undefined, undefined, file).prs.list("main", [])).toEqual([]);
   });
 
   test("finds a PR by number in the repo a folder sits in, with the branch that folder is on", async () => {
-    const { run, calls } = fakeRun({ folders, prs: { "/r/shop": [ghRow(1, "feat/a"), ghRow(2, "feat/z")], "/r/api": [ghRow(1, "fix/api")] } });
+    const { run, calls } = fakeRun({ folders, viewer: [inRepo("acme/shop", 1, "feat/a"), inRepo("acme/shop", 2, "feat/z"), inRepo("acme/api", 1, "fix/api")] });
     const { prs } = registry(run);
     const panes = [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a"), pane("p5", "/r/api")];
     expect(prs.locate("/h/worktrees/shop/a", 1)).toBeUndefined();
@@ -376,14 +333,14 @@ describe("registry", () => {
   });
 
   test("finds the PR of the branch a folder has checked out, with no number to go on", async () => {
-    const { run, calls } = fakeRun({ folders, prs: { "/r/shop": [ghRow(1, "feat/a"), ghRow(2, "feat/z")] } });
+    const { run, calls } = fakeRun({ folders, viewer: [inRepo("acme/shop", 1, "feat/a"), inRepo("acme/shop", 2, "feat/z"), inRepo("acme/api", 3, "develop")] });
     const { prs } = registry(run);
     expect(prs.onBranch("/h/worktrees/shop/a")).toBeUndefined();
     prs.list("main", [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a")]);
     await prs.refresh();
     const before = calls.length;
     expect(prs.onBranch("/h/worktrees/shop/a")).toMatchObject({ number: 1, branch: "feat/a", base: "main" });
-    // On `develop`, which no PR is opened from.
+    // On `develop`, which no PR of this repo is opened from.
     expect(prs.onBranch("/r/shop")).toBeUndefined();
     expect(prs.onBranch("/tmp")).toBeUndefined();
     expect(calls.length).toBe(before);
