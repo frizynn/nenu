@@ -40,6 +40,9 @@ export function useDiffRead(key: string, active: boolean, load: (signal: AbortSi
   return read;
 }
 
+/** The `owner/name` a PR's GitHub URL names. */
+const PR_REPO_RE = /^https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/pull\/\d+$/;
+
 /**
  * A pull request's diff, read from a pane's folder when it opens: the files with their counts, each
  * folded until tapped. Lines are text nodes; nothing is highlighted, parsed or run.
@@ -52,7 +55,8 @@ export default function DiffViewer({ open, onClose, paneId, pr, session, url }: 
   session?: string;
   url?: string;
 }) {
-  const read = useDiffRead(`${paneId}\0${pr}\0${session ?? ""}`, open, (signal) => fetchPaneDiff(paneId, pr, session, signal));
+  const repo = url ? PR_REPO_RE.exec(url)?.[1] : undefined;
+  const read = useDiffRead(`${paneId}\0${repo ?? ""}\0${pr}\0${session ?? ""}`, open, (signal) => fetchPaneDiff(paneId, pr, repo, session, signal));
   const github = url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground lg:min-h-8">
     <ExternalLink aria-hidden className="size-3" />Open on GitHub
   </a>;

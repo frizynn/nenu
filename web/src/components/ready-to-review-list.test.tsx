@@ -60,7 +60,7 @@ test("eases in only the PRs Show N more adds", async () => {
   // And folds back from where it stands.
   await user.click(screen.getByRole("button", { name: "Show less of b" }));
   expect(screen.getAllByRole("listitem")).toHaveLength(3);
-  expect(screen.getByRole("button", { name: "Show 4 more in b" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Show 4 more in b" })).toHaveTextContent("Show 4 more");
 });
 
 // A repo is a heading over its own PRs; a fold that would hide one row shows it instead.
@@ -75,4 +75,15 @@ test("lists each repo under its name, count and, unless it is the owner of most,
   expect(runs.map((run) => run.querySelector("h3")?.textContent)).toEqual(["other/shop, 1 open", "shop, 4 open", "notes, 1 open"]);
   expect(runs.map((run) => [...run.querySelectorAll("li a")].map((link) => link.getAttribute("aria-label")))).toEqual([["shop 6, #6"], ["shop 1, #1", "shop 2, #2", "shop 3, #3", "shop 4, #4"], ["notes 5, #5"]]);
   expect(screen.queryByRole("button", { name: /^Show/ })).not.toBeInTheDocument();
+});
+
+// Two repos can share a name; the control names the one the heading names.
+test("names another owner's repo as owner/name on its fold", () => {
+  const entries: ReviewEntry[] = [
+    ...Array.from({ length: 2 }, (_, i): ReviewEntry => ({ key: `me/shop#${i}`, title: `Mine ${i}`, repo: "shop", owner: "me", number: i, draft: false, updatedAt: 0 })),
+    { key: "me/notes#9", title: "Notes", repo: "notes", owner: "me", number: 9, draft: false, updatedAt: 0 },
+    ...Array.from({ length: 5 }, (_, i): ReviewEntry => ({ key: `acme/shop#${i}`, title: `Theirs ${i}`, repo: "shop", owner: "acme", number: i, draft: false, updatedAt: 0 })),
+  ];
+  render(<MemoryRouter><PullRequestList entries={entries} opening={null} /></MemoryRouter>);
+  expect(screen.getByRole("button", { name: "Show 2 more in acme/shop" })).toBeInTheDocument();
 });

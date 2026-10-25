@@ -39,12 +39,13 @@ it("is plain text when there is no pane to read the diff from", () => {
 
 it("opens the pull request's files, reading the diff only when opened", async () => {
   const seen = serve(diff);
-  render(<DiffStat diff={{ additions: 212, deletions: 148 }} paneId="w1:p1" pr={1345} session="s" />);
+  render(<DiffStat diff={{ additions: 212, deletions: 148 }} paneId="w1:p1" pr={1345} session="s" url="https://github.com/a/b/pull/1345" />);
   expect(seen).toEqual([]);
   await userEvent.click(screen.getByRole("button", { name: "View changes: 212 added, 148 removed" }));
   const viewer = await screen.findByRole("dialog", { name: "PR #1345 changes" });
   await waitFor(() => expect(within(viewer).getByText("4 files")).toBeInTheDocument());
-  expect(seen).toEqual(["w1:p1?pr=1345&session=s"]);
+  // The repo goes along: a fork's folder can see the same number in two repos.
+  expect(seen).toEqual(["w1:p1?pr=1345&repo=a%2Fb&session=s"]);
   expect(within(viewer).getByText(/uncommitted edits included/)).toBeInTheDocument();
   expect(within(viewer).getByText(/over the size limit/)).toBeInTheDocument();
 

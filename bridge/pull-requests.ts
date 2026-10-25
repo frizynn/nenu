@@ -147,10 +147,10 @@ export function remoteName(url: string): string | undefined {
 }
 
 /**
- * Every repo a checkout's remotes name, from `git config --get-regexp ^remote\.`: each remote's fetch
- * and push URL, and the repo `gh repo set-default` marked. A PR opened against any of them is this
- * checkout's, so a fork's PRs to its upstream count as well as its own, and a remote on another host
- * matches nothing on GitHub's list.
+ * Every repo a checkout's remotes name, lower-cased as GitHub ignores case, from `git config
+ * --get-regexp ^remote\.`: each remote's fetch and push URL, and the repo `gh repo set-default` marked.
+ * A PR opened against any of them is this checkout's, so a fork's PRs to its upstream count as well as
+ * its own, and a remote on another host matches nothing on GitHub's list.
  */
 export function remoteRepos(config: string): string[] {
   const repos = new Set<string>();
@@ -158,7 +158,7 @@ export function remoteRepos(config: string): string[] {
     const match = /^remote\..+\.(url|pushurl|gh-resolved) (.*)$/.exec(line.trim());
     if (!match) continue;
     const repo = match[1] === "gh-resolved" ? match[2]! : remoteName(match[2]!);
-    if (repo && REPO_NAME_RE.test(repo)) repos.add(repo);
+    if (repo && REPO_NAME_RE.test(repo)) repos.add(repo.toLowerCase());
   }
   return [...repos];
 }
@@ -341,24 +341,26 @@ export class PullRequestRegistry {
         onBranch.set(key, [...(onBranch.get(key) ?? []), pane.paneId]);
       }
     }
-    return this.prs.map((pr) => ({ ...pr, paneIds: onBranch.get(`${pr.repo}\0${pr.branch}`) ?? [] }));
+    return this.prs.map((pr) => ({ ...pr, paneIds: onBranch.get(`${pr.repo.toLowerCase()}\0${pr.branch}`) ?? [] }));
   }
 
-  /** The open PRs of the GitHub repo `cwd` sits in, and that folder's place, as the last refresh read them. */
+  /** The open PRs of the GitHub repos `cwd`'s remotes name, and that folder's place, as the last refresh read them. */
   private inRepo(cwd: string): { info: CwdInfo; prs: RepoPr[] } | undefined {
     const info = this.cwds.get(cwd);
     const repos = info && this.names.get(info.repo)?.repos;
-    return info && repos ? { info, prs: this.prs.filter((pr) => repos.includes(pr.repo)) } : undefined;
+    return info && repos ? { info, prs: this.prs.filter((pr) => repos.includes(pr.repo.toLowerCase())) } : undefined;
   }
 
   /**
-   * Open PR `number` of the repo `cwd` sits in, and the branch `cwd` has checked out, as the last
-   * refresh read them. Runs nothing: a folder or PR not read yet is undefined.
+   * Open PR `number` of `repo` (`owner/name`, any case), one of the repos `cwd`'s remotes name, and the
+   * branch `cwd` has checked out, as the last refresh read them. Without `repo`, the newest PR of that
+   * number among them: a fork's checkout can see `me/shop#5` and `acme/shop#5`. Runs nothing: a folder
+   * or PR not read yet is undefined.
    */
-  locate(cwd: string, number: number): { pr: RepoPr; checkedOut: string } | undefined {
-    const repo = this.inRepo(cwd);
-    const pr = repo?.prs.find((candidate) => candidate.number === number);
-    return repo && pr ? { pr, checkedOut: repo.info.branch } : undefined;
+  locate(cwd: string, number: number, repo?: string): { pr: RepoPr; checkedOut: string } | undefined {
+    const place = this.inRepo(cwd);
+    const pr = place?.prs.find((candidate) => candidate.number === number && (!repo || candidate.repo.toLowerCase() === repo.toLowerCase()));
+    return place && pr ? { pr, checkedOut: place.info.branch } : undefined;
   }
 
   /** The open PR of the branch `cwd` has checked out, as the last refresh read it. Runs nothing. */
@@ -441,9 +443,12 @@ export class PullRequestRegistry {
       this.prs = mine;
       const json = JSON.stringify(mine);
       if (this.saved && (json !== this.savedPrs || this.now() - this.savedAt >= RESAVE_MS)) {
-        this.savedPrs = json;
-        this.savedAt = this.now();
-        await this.saved.set({ at: this.savedAt, prs: mine }).catch(() => {});
+        const at = this.now();
+        // A write that fails is tried again on the next refresh.
+        await this.saved.set({ at, prs: mine }).then(() => {
+          this.savedPrs = json;
+          this.savedAt = at;
+        }, () => {});
       }
     }
 

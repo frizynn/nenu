@@ -115,6 +115,8 @@ describe("parsing", () => {
     expect(remoteRepos("remote.upstream.url https://gitlab.com/acme/mirror\nremote.origin.url https://github.com/me/shop\n")).toEqual(["acme/mirror", "me/shop"]);
     expect(remoteRepos("remote.origin.url /home/me/shop\nremote.zz.url https://github.com/me/shop/tree\n")).toEqual([]);
     expect(remoteRepos("")).toEqual([]);
+    // GitHub ignores case; so does the match.
+    expect(remoteRepos("remote.origin.url git@github.com:AltanS/Collie.git\n")).toEqual(["altans/collie"]);
   });
 
   test("reads the viewer's open PRs, as gh pr list would have printed them", () => {
@@ -271,6 +273,15 @@ describe("registry", () => {
     expect(prs.list("main", panes).map((pr) => [pr.number, pr.paneIds])).toEqual([[9, ["p1"]]]);
   });
 
+  test("reads remotes every refresh when the config file's date cannot be read", async () => {
+    const { run, calls } = fakeRun({ folders, viewer: [] });
+    const prs = new PullRequestRegistry({ run, now: () => 0, log: () => {}, mtime: () => undefined });
+    prs.list("main", [pane("p1", "/r/shop")]);
+    await prs.refresh();
+    await prs.refresh();
+    expect(calls.filter((call) => call.argv[1] === "config").length).toBe(2);
+  });
+
   test("reads a repo's remotes again only when its config file changes", async () => {
     const local: Record<string, [string, string, string, string?]> = { "/r/new": ["/r/new/.git", "/r/new", "feat/x"] };
     const mtimes: Record<string, number> = { "/r/new/.git/config": 1 };
@@ -317,18 +328,21 @@ describe("registry", () => {
     expect(calls.slice(before).filter((call) => call.argv[0] === "git").map((call) => call.argv[1])).toEqual(["branch", "config"]);
   });
 
-  test("a fork's checkout finds its PR to the upstream repo, and its own", async () => {
+  test("a fork's checkout finds its PR to the upstream repo, and its own, whatever the case its remotes use", async () => {
     const { run } = fakeRun({
-      folders: { "/r/fork": ["/r/fork/.git", "/r/fork", "fix/y", "remote.origin.url https://github.com/me/shop\nremote.upstream.url https://github.com/acme/shop\n"] },
-      viewer: [inRepo("acme/shop", 8, "fix/y"), inRepo("me/shop", 2, "fix/y"), inRepo("acme/api", 3, "fix/y")],
+      folders: { "/r/fork": ["/r/fork/.git", "/r/fork", "fix/y", "remote.origin.url https://github.com/Me/Shop\nremote.upstream.url https://github.com/acme/shop\n"] },
+      viewer: [inRepo("acme/shop", 8, "fix/y"), inRepo("me/shop", 2, "fix/y"), inRepo("acme/api", 3, "fix/y"), inRepo("me/shop", 8, "other")],
     });
     const { prs } = registry(run);
     const panes = [pane("p1", "/r/fork")];
     prs.list("main", panes);
     await prs.refresh();
-    expect(prs.list("main", panes).map((pr) => [pr.repo, pr.paneIds])).toEqual([["acme/shop", ["p1"]], ["me/shop", ["p1"]], ["acme/api", []]]);
-    expect(prs.locate("/r/fork", 8)).toMatchObject({ pr: { repo: "acme/shop" } });
+    expect(prs.list("main", panes).map((pr) => [pr.repo, pr.number, pr.paneIds])).toEqual([["acme/shop", 8, ["p1"]], ["me/shop", 2, ["p1"]], ["acme/api", 3, []], ["me/shop", 8, []]]);
+    // Two repos, one number: the repo says which.
+    expect(prs.locate("/r/fork", 8, "Me/Shop")).toMatchObject({ pr: { repo: "me/shop", branch: "other" } });
+    expect(prs.locate("/r/fork", 8, "acme/shop")).toMatchObject({ pr: { repo: "acme/shop", branch: "fix/y" } });
     expect(prs.locate("/r/fork", 3)).toBeUndefined();
+    expect(prs.locate("/r/fork", 2, "acme/shop")).toBeUndefined();
   });
 
   test("tells the pages only when what they read changed", async () => {
@@ -365,8 +379,17 @@ describe("registry", () => {
     await restarted.prs.refresh();
     // Matched to its pane once the folders are read, though GitHub never answered.
     expect(restarted.prs.list("main", [pane("p2", "/h/worktrees/shop/a")]).map((pr) => [pr.number, pr.paneIds])).toEqual([[1, ["p2"]]]);
+    // An unchanged list is written again only once its date is an hour old.
+    const writes = () => JSON.parse(readFileSync(file, "utf8")).at as number;
+    clock.t += PR_TTL_MS;
+    await first.prs.refresh();
+    expect(writes()).toBe(1_000_000);
+    clock.t += 60 * 60_000;
+    await first.prs.refresh();
+    expect(writes()).toBe(clock.t);
+    clock.t = 1_000_000;
     // A day later those PRs may long be merged: a restart shows none until GitHub answers.
-    expect(registry(fakeRun({ folders, viewer: [] }).run, { t: 1_000_000 + 24 * 60 * 60_000 }, undefined, file).prs.list("main", [])).toEqual([]);
+    expect(registry(fakeRun({ folders, viewer: [] }).run, { t: writes() + 24 * 60 * 60_000 }, undefined, file).prs.list("main", [])).toEqual([]);
     writeFileSync(file, JSON.stringify({ at: 1_000_000, prs: [{ number: 2 }] }));
     expect(registry(fakeRun({ folders, viewer: [] }).run, clock, undefined, file).prs.list("main", [])).toEqual([]);
   });

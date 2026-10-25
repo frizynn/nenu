@@ -51,5 +51,7 @@ there, and it does not spend the search API's tighter rate limit. One request co
   limit was 50 per repo across 12 repos. Paging is the remedy if someone ever reaches it.
 - A PR from a fork clone whose only remote is the fork does not open in its pane. This was true
   before too: the PR belongs to the upstream repo, which no remote names.
+- A remote still on a repo's name from before a rename names a repo GitHub lists under its new name,
+  so its PRs do not open in its panes until the remote is updated. The case of a name never matters.
 - Going back to asking per repo would bring back the missing PRs. If the list grows too long, group
   or fold it on the web; don't narrow what the bridge reads.
