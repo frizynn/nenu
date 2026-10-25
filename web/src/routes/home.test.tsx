@@ -165,7 +165,7 @@ it("offers no starters once the herd has agents", async () => {
 
 it("says on a session's own row its pull request and size, instead of in a second list", async () => {
   const pullRequests: PullRequestView[] = [{ repo: "acme/app", number: 1342, title: "Mobile panel", url: "https://github.com/acme/app/pull/1342", branch: "mobile",
-    draft: false, review: "approved", diff: { additions: 212, deletions: 148 }, paneIds: ["w2:p2"] }];
+    draft: false, review: "approved", diff: { additions: 212, deletions: 148 }, paneIds: ["w2:p2"], inUse: true }];
   const { user, router, main } = await setup({ ...twoWorkspaces, pullRequests });
   expect(headline()).toBe("1 needs you");
   expect(subline()).toBe("1 open PR · 1 working");
@@ -597,7 +597,7 @@ it("marks a Needs you row as opening too", async () => {
 
 it("says in its headline that nothing needs you, never the pull requests, only while the herd is live", async () => {
   const quiet = { ...data, agents: data.agents.map((agent) => ({ ...agent, status: "idle" as const })),
-    pullRequests: [{ repo: "a/b", number: 7, title: "PR 7", url: "https://github.com/a/b/pull/7", branch: "x", draft: false, paneIds: [] }] };
+    pullRequests: [{ repo: "a/b", number: 7, title: "PR 7", url: "https://github.com/a/b/pull/7", branch: "x", draft: false, paneIds: [], inUse: true }] };
   const { main } = await setup(quiet);
   await waitFor(() => expect(headline()).toBe("Nothing needs you"));
   expect(subline()).toBe("1 open PR");
@@ -658,7 +658,7 @@ it("keeps workflows still running in the one column, each opening its chat", asy
 it("lists every pull request under the PRs tab by repo, ready to merge first, and opens each in its session or on GitHub", async () => {
   const pr = (number: number, extra: Partial<PullRequestView>): PullRequestView => ({
     repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`,
-    branch: `feat/${number}`, draft: false, updatedAt: number, paneIds: [], ...extra,
+    branch: `feat/${number}`, draft: false, updatedAt: number, paneIds: [], inUse: true, ...extra,
   });
   const { user, main } = await setup({ ...data, pullRequests: [
     pr(1700, { title: "Orders panel", review: "approved", checks: { passed: 2, failed: 0, pending: 0 } }),
@@ -691,9 +691,21 @@ it("lists every pull request under the PRs tab by repo, ready to merge first, an
   expect(prs.getByRole("link", { name: /^Abandoned carts,/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
 });
 
+// The headline counts what the PRs tab lists with the filter kept on this device.
+it("counts in the headline the PRs of the repos in use, and follows the filter chosen", async () => {
+  const pr = (number: number, inUse: boolean): PullRequestView => ({
+    repo: "a/b", number, title: `PR ${number}`, url: `https://github.com/a/b/pull/${number}`, branch: "x", draft: false, paneIds: [], inUse,
+  });
+  const { user, main } = await setup({ ...data, pullRequests: [pr(1, true), pr(2, false), pr(3, false)] });
+  expect(subline()).toBe("1 open PR");
+  await user.click(main.getByRole("tab", { name: "PRs" }));
+  await user.click(main.getByRole("button", { name: "Show all" }));
+  expect(subline()).toBe("3 open PRs");
+});
+
 it("shows the first pull requests and the rest on request, and remembers the tab", async () => {
   const pullRequests = Array.from({ length: 9 }, (_, i): PullRequestView => ({
-    repo: "a/b", number: i + 1, title: `PR ${i + 1}`, url: `https://github.com/a/b/pull/${i + 1}`, branch: "x", draft: false, paneIds: [],
+    repo: "a/b", number: i + 1, title: `PR ${i + 1}`, url: `https://github.com/a/b/pull/${i + 1}`, branch: "x", draft: false, paneIds: [], inUse: true,
   }));
   const { user, main } = await setup({ ...data, pullRequests });
   await user.click(main.getByRole("tab", { name: "PRs" }));

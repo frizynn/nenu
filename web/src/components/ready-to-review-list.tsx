@@ -1,16 +1,18 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { GitPullRequest } from "@/components/ui/icon";
+import { Check, GitPullRequest, ListFilter, Search, X } from "@/components/ui/icon";
 
 import { DiffStat } from "@/components/diff-stat";
 import { FoldedList, isOpening, OpeningSpinner } from "@/components/home-panels";
+import { QuietMenu, quietMenuItem } from "@/components/ui/quiet-menu";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
 import { useEnter } from "@/lib/enter";
-import { readyToMerge, reviewsByRepo, type RepoReviews, type ReviewEntry } from "@/lib/home-stats";
+import { PR_STATES, prState, readyToMerge, reviewsByRepo, type RepoReviews, type ReviewEntry } from "@/lib/home-stats";
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { panePath } from "@/lib/nav";
+import { filterReviews, SCOPE_LABEL, STATE_LABEL, usePrFilter, type PrFilter, type PrScope } from "@/lib/pr-filter";
 import { cn, keepUnchanged } from "@/lib/utils";
 import type { AgentView } from "@/lib/types";
 
@@ -157,18 +159,143 @@ function RepoRun({ repo, home, session, opening }: { repo: RepoReviews; home?: s
   );
 }
 
-/**
- * Home's PRs tab: every open pull request, under its repo. The owner of most of the repos is the
- * person's own account, so only the others name theirs.
- */
-export function PullRequestList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
-  const repos = reviewsByRepo(entries);
+/** The owner most repos belong to, the person's own account most of the time: the one a heading leaves out. */
+function homeOwner(repos: readonly RepoReviews[]): string | undefined {
   const owners = new Map<string, number>();
   for (const repo of repos) if (repo.owner) owners.set(repo.owner, (owners.get(repo.owner) ?? 0) + 1);
-  const home = [...owners].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return [...owners].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const menuGroupLabel = "px-2.5 pb-1 pt-2 text-caption font-medium text-muted-foreground";
+const menuCount = "shrink-0 text-footnote tabular-nums text-muted-foreground";
+const textAction = "-mx-2 inline-flex min-h-9 items-center px-2 font-medium text-muted-foreground hover:text-foreground coarse:min-h-11";
+
+/**
+ * What the PRs tab lists, in one menu: the repos in use or all of them, then which states and which
+ * repos, each with how many it holds. Several can be ticked, so a row keeps the menu open.
+ */
+function PrFilterMenu({ entries, filter, set, home }: {
+  entries: readonly ReviewEntry[];
+  filter: PrFilter;
+  set: (next: PrFilter) => void;
+  home?: string;
+}) {
+  const { scoped, repos: chosen } = filterReviews(entries, filter);
+  const narrowing = chosen.length + filter.states.length;
+  const inScope = reviewsByRepo(scoped);
+  const scopeCount = (scope: PrScope) => scope === "all" ? entries.length : entries.filter((entry) => entry.inUse).length;
+  const toggle = <T,>(list: readonly T[], item: T) => list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
+  const label = SCOPE_LABEL[filter.scope];
+  const row = (checked: boolean, words: ReactNode, count: number) => <>
+    <Check aria-hidden className={cn("size-4 shrink-0 text-foreground", !checked && "invisible")} />
+    <span className="min-w-0 flex-1 truncate">{words}</span>
+    <span className={menuCount}>{count}</span>
+  </>;
   return (
-    <div className="flex flex-col [&>section:first-child>h3]:pt-1">
-      {repos.map((repo) => <RepoRun key={repo.key} repo={repo} home={home} session={session} opening={opening} />)}
+    <QuietMenu icon={ListFilter} align="end" menuLabel="Filter pull requests" className="-mr-1 ml-auto sm:-mr-2"
+      label={<>{label}{narrowing > 0 && <span className="tabular-nums"> · {narrowing}</span>}</>}
+      ariaLabel={`Filter: ${label}${narrowing ? `, ${plural(narrowing, "more filter")}` : ""}`}
+      menuClassName="w-64 max-h-[min(30rem,calc(100dvh-12rem))] overflow-y-auto overscroll-contain">
+      {() => <>
+        <div role="group" aria-label="Show">
+          <p aria-hidden className={menuGroupLabel}>Show</p>
+          {(["inUse", "all"] as const).map((scope) => (
+            <button key={scope} type="button" role="menuitemradio" aria-checked={filter.scope === scope}
+              onClick={() => set({ ...filter, scope })} className={quietMenuItem}>
+              {row(filter.scope === scope, scope === "inUse" ? "In use" : "All repos", scopeCount(scope))}
+            </button>
+          ))}
+        </div>
+        <div role="separator" className="-mx-1 my-1 h-px bg-border" />
+        <div role="group" aria-label="State">
+          <p aria-hidden className={menuGroupLabel}>State</p>
+          {PR_STATES.map((state) => (
+            <button key={state} type="button" role="menuitemcheckbox" aria-checked={filter.states.includes(state)}
+              onClick={() => set({ ...filter, states: toggle(filter.states, state) })} className={quietMenuItem}>
+              {row(filter.states.includes(state), STATE_LABEL[state], scoped.filter((entry) => prState(entry) === state).length)}
+            </button>
+          ))}
+        </div>
+        {inScope.length > 1 && <>
+          <div role="separator" className="-mx-1 my-1 h-px bg-border" />
+          <div role="group" aria-label="Repos">
+            <p aria-hidden className={menuGroupLabel}>Repos</p>
+            {inScope.map((repo) => (
+              <button key={repo.key} type="button" role="menuitemcheckbox" aria-checked={chosen.includes(repo.key)}
+                onClick={() => set({ ...filter, repos: toggle(chosen, repo.key) })} className={quietMenuItem}>
+                {row(chosen.includes(repo.key), <>{repo.owner && repo.owner !== home && <span className="text-muted-foreground">{repo.owner}/</span>}{repo.name}</>, repo.entries.length)}
+              </button>
+            ))}
+          </div>
+        </>}
+        {narrowing > 0 && <>
+          <div role="separator" className="-mx-1 my-1 h-px bg-border" />
+          <button type="button" role="menuitem" onClick={() => set({ ...filter, repos: [], states: [] })} className={quietMenuItem}>
+            <X aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate">Clear filters</span>
+          </button>
+        </>}
+      </>}
+    </QuietMenu>
+  );
+}
+
+/**
+ * Home's PRs tab: the open pull requests of the repos the herd is using, or all of them, under their
+ * repo, narrowed on this device by state, repo or a search (ADR 0128). The owner of most of the repos
+ * is the person's own account, so only the others name theirs. What the filter holds back is said: how
+ * many of how many it shows, and how many more sit in repos no pane is in, one tap from all of them.
+ */
+export function PullRequestList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
+  const { filter, set } = usePrFilter();
+  const [query, setQuery] = useState("");
+  const { scoped, shown, repos: chosen } = filterReviews(entries, filter, query);
+  const home = homeOwner(reviewsByRepo(entries));
+  const repos = reviewsByRepo(shown);
+  const narrowed = chosen.length > 0 || filter.states.length > 0 || query.trim() !== "";
+  const elsewhere = filter.scope === "inUse" ? entries.length - scoped.length : 0;
+  const clear = () => { setQuery(""); set({ ...filter, repos: [], states: [] }); };
+  const showAll = () => set({ ...filter, scope: "all" });
+  return (
+    <div className="flex flex-col">
+      <div className="flex min-h-11 items-center gap-2 px-1 pb-2 sm:min-h-9 sm:px-2.5">
+        <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg bg-muted pl-2.5 text-muted-foreground focus-within:ring-2 focus-within:ring-ring coarse:h-11 sm:max-w-72">
+          <Search aria-hidden className="size-4 shrink-0" />
+          <input type="text" role="searchbox" enterKeyHint="search" autoComplete="off" spellCheck={false} value={query} placeholder="Search PRs" aria-label="Search pull requests by title or number"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); setQuery(""); } }}
+            className="h-full min-w-0 flex-1 bg-transparent text-body text-foreground outline-none placeholder:text-muted-foreground" />
+          {query && <button type="button" aria-label="Clear search" onClick={() => setQuery("")}
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg hover:text-foreground coarse:size-11">
+            <X aria-hidden className="size-3.5" />
+          </button>}
+        </label>
+        <PrFilterMenu entries={entries} filter={filter} set={set} home={home} />
+      </div>
+      <p role="status" className={cn("flex min-h-9 items-center gap-1.5 px-1 text-footnote tabular-nums text-muted-foreground sm:px-2.5", !narrowed && "sr-only")}>
+        {narrowed && <>
+          <span>{shown.length} of {plural(scoped.length, "PR")}</span>
+          <span aria-hidden>·</span>
+          <button type="button" onClick={clear} className={textAction}>Clear</button>
+        </>}
+      </p>
+      {shown.length > 0
+        ? <div className="flex flex-col [&>section:first-child>h3]:pt-1">
+          {repos.map((repo) => <RepoRun key={repo.key} repo={repo} home={home} session={session} opening={opening} />)}
+        </div>
+        : <p className="flex flex-wrap items-center gap-x-1.5 px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">
+          {scoped.length
+            ? <>No PR matches.<button type="button" onClick={clear} className={textAction}>Clear filters</button></>
+            : <>No open PRs in the repos your panes are in.<button type="button" onClick={showAll} className={textAction}>Show all {entries.length}</button></>}
+        </p>}
+      {elsewhere > 0 && scoped.length > 0 && (
+        <p className="mt-3 flex flex-wrap items-center gap-x-1.5 border-t border-border px-1 pt-1 text-footnote text-muted-foreground sm:px-2.5">
+          {elsewhere} more in repos no pane is in
+          <span aria-hidden>·</span>
+          <button type="button" onClick={showAll} className={textAction}>Show all</button>
+        </p>
+      )}
     </div>
   );
 }

@@ -133,7 +133,7 @@ describe("rootLoader", () => {
 });
 
 describe("rootLoader — pull requests", () => {
-  const pr = (number: number) => ({ repo: "a/b", number, title: `PR ${number}`, url: `https://github.com/a/b/pull/${number}`, branch: `b${number}`, draft: false, paneIds: [] });
+  const pr = (number: number) => ({ repo: "a/b", number, title: `PR ${number}`, url: `https://github.com/a/b/pull/${number}`, branch: `b${number}`, draft: false, paneIds: [], inUse: true });
 
   // The snapshot names the list's version; the list is read only when that version moves.
   function serve(lists: Record<string, ReturnType<typeof pr>[]>) {

@@ -52,7 +52,7 @@ it("counts by the snapshot alone the blocked panes", () => {
 describe("review queue", () => {
   const gh = (number: number, extra: Partial<PullRequestView> = {}): PullRequestView => ({
     repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`, branch: `feat/${number}`,
-    draft: false, updatedAt: number * 1000, paneIds: [], ...extra,
+    draft: false, updatedAt: number * 1000, paneIds: [], inUse: true, ...extra,
   });
 
   it("lists pull requests by where they stand: ready to merge, blocked, in review, drafts last, each newest first", () => {
@@ -138,7 +138,7 @@ describe("recent chats", () => {
 
   it("carries the pull request GitHub has on a session's branch", () => {
     const gh: PullRequestView = { repo: "acme/shop", number: 8, title: "Docs", url: "https://github.com/acme/shop/pull/8", branch: "docs", draft: false,
-      diff: { additions: 30, deletions: 1 }, paneIds: ["chat-quiet"], updatedAt: 1 };
+      diff: { additions: 30, deletions: 1 }, paneIds: ["chat-quiet"], inUse: true, updatedAt: 1 };
     const rows = recentChats(panes, new Set(["chat-asks"]), reviewQueue([gh]));
     const by = (id: string) => rows.find((row) => row.agent.paneId === id)!;
     expect(by("chat-quiet")).toMatchObject({ detail: "PR #8", diff: { additions: 30, deletions: 1 } });
