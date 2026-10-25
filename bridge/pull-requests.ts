@@ -9,7 +9,8 @@
 // A refresh asks GitHub once, for the viewer's own open pull requests (`viewer.pullRequests`, not the
 // search index: a PR opened a second ago is there, and searches have their own, tighter rate limit),
 // so a PR in a repo no pane sits in is listed too (ADR 0127). The panes' folders resolve alongside, to
-// match each PR to the panes on its branch by the `owner/name` their remotes name.
+// match each PR to the panes on its branch by the `owner/name` their remotes name, and to mark the PRs
+// of a repo some pane's folder names as in use, which is what Home shows unless asked for all (ADR 0128).
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -55,7 +56,7 @@ interface CwdInfo {
 }
 
 /** A PR as GitHub last reported it, without the panes (those are matched per snapshot read). */
-type RepoPr = Omit<PullRequestView, "paneIds">;
+type RepoPr = Omit<PullRequestView, "paneIds" | "inUse">;
 
 export interface PullRequestRegistryOptions {
   run?: CommandRun;
@@ -189,15 +190,19 @@ export function parseViewer(stdout: string): RepoPr[] {
   });
 }
 
-/** The list as kept on disk, with when it was read (epoch ms). */
-interface SavedList { at: number; prs: RepoPr[] }
+/**
+ * The list as kept on disk, with when it was read (epoch ms) and the repos the panes' folders named
+ * then (lower-cased `owner/name`), which mark PRs in use until the folders are read again.
+ */
+interface SavedList { at: number; prs: RepoPr[]; inUse: string[] }
 
 /** A saved list back from disk: the rows the last refresh kept, any other shape read as none. */
 function savedList(raw: unknown): SavedList {
-  const { at, prs } = record(raw);
-  if (typeof at !== "number" || !Array.isArray(prs)) return { at: 0, prs: [] };
+  const { at, prs, inUse } = record(raw);
+  if (typeof at !== "number" || !Array.isArray(prs)) return { at: 0, prs: [], inUse: [] };
   return {
     at,
+    inUse: Array.isArray(inUse) ? inUse.filter((repo): repo is string => typeof repo === "string") : [],
     prs: prs.filter((row): row is RepoPr => {
       const pr = record(row);
       return typeof pr.repo === "string" && typeof pr.number === "number" && typeof pr.title === "string"
@@ -287,6 +292,9 @@ export class PullRequestRegistry {
   /** When the saved list was last written, and what it held. */
   private savedAt = 0;
   private savedPrs = "";
+  /** The repos in use as the saved list kept them; read until the panes' folders are resolved once. */
+  private savedInUse: readonly string[] = [];
+  private resolved = false;
   /** The last good read, newest first. */
   private prs: RepoPr[] = [];
   /** The failure last logged, so a repeating one is logged once. */
@@ -311,9 +319,12 @@ export class PullRequestRegistry {
       this.saved = new PrefsFile(options.file, savedList);
       this.saved.loadSync();
       const kept = this.saved.current();
-      if (this.now() - kept.at < SAVED_MAX_AGE_MS) this.prs = kept.prs;
+      if (this.now() - kept.at < SAVED_MAX_AGE_MS) {
+        this.prs = kept.prs;
+        this.savedInUse = kept.inUse;
+      }
       this.savedAt = kept.at;
-      this.savedPrs = JSON.stringify(kept.prs);
+      this.savedPrs = JSON.stringify([kept.prs, kept.inUse]);
     }
   }
 
@@ -330,7 +341,10 @@ export class PullRequestRegistry {
     return this.rows(panes);
   }
 
-  /** Every PR the last refresh read, each with those of `panes` that sit on its branch. */
+  /**
+   * Every PR the last refresh read, each with those of `panes` that sit on its branch, and whether its
+   * repo is one their folders name, on any branch.
+   */
   private rows(panes: readonly AgentView[]): PullRequestView[] {
     const onBranch = new Map<string, string[]>();
     for (const pane of panes) {
@@ -341,7 +355,18 @@ export class PullRequestRegistry {
         onBranch.set(key, [...(onBranch.get(key) ?? []), pane.paneId]);
       }
     }
-    return this.prs.map((pr) => ({ ...pr, paneIds: onBranch.get(`${pr.repo.toLowerCase()}\0${pr.branch}`) ?? [] }));
+    const inUse = this.resolved ? new Set(this.inUse(panes)) : new Set(this.savedInUse);
+    return this.prs.map((pr) => ({ ...pr, paneIds: onBranch.get(`${pr.repo.toLowerCase()}\0${pr.branch}`) ?? [], inUse: inUse.has(pr.repo.toLowerCase()) }));
+  }
+
+  /** The repos (lower-cased `owner/name`) the folders of `panes` name through their remotes. */
+  private inUse(panes: readonly AgentView[]): string[] {
+    const repos = new Set<string>();
+    for (const pane of panes) {
+      const info = this.cwds.get(pane.cwd);
+      for (const name of (info && this.names.get(info.repo)?.repos) ?? []) repos.add(name);
+    }
+    return [...repos].sort();
   }
 
   /** The open PRs of the GitHub repos `cwd`'s remotes name, and that folder's place, as the last refresh read them. */
@@ -423,6 +448,7 @@ export class PullRequestRegistry {
     });
     this.cwds = cwds;
     this.names = names;
+    this.resolved = true;
   }
 
   /** What each session's page would read, to tell whether a refresh changed it. */
@@ -441,11 +467,12 @@ export class PullRequestRegistry {
     } else {
       this.failure = "";
       this.prs = mine;
-      const json = JSON.stringify(mine);
+      const inUse = this.inUse([...this.panes.values()].flat());
+      const json = JSON.stringify([mine, inUse]);
       if (this.saved && (json !== this.savedPrs || this.now() - this.savedAt >= RESAVE_MS)) {
         const at = this.now();
         // A write that fails is tried again on the next refresh.
-        await this.saved.set({ at, prs: mine }).then(() => {
+        await this.saved.set({ at, prs: mine, inUse }).then(() => {
           this.savedPrs = json;
           this.savedAt = at;
         }, () => {});

@@ -167,6 +167,20 @@ describe("registry", () => {
     expect(events).toEqual([{ session: "main", topic: "snapshot" }]);
   });
 
+  test("marks a PR in use when a pane's folder names its repo, on any branch, a fork's upstream included", async () => {
+    const fork = { "/r/fork": ["/r/fork/.git", "/r/fork", "main", `${remote("me/shop")}remote.upstream.url git@github.com:Acme/Lib.git\n`] as [string, string, string, string] };
+    const { run } = fakeRun({ folders: { ...folders, ...fork }, viewer: [inRepo("acme/shop", 1, "feat/z"), inRepo("acme/elsewhere", 2, "x"), inRepo("acme/lib", 3, "y"), inRepo("acme/api", 4, "main")] });
+    const { prs } = registry(run);
+    const panes = [pane("p1", "/h/worktrees/shop/b"), pane("p2", "/r/fork"), pane("p3", "/tmp")];
+    prs.list("main", panes);
+    await prs.refresh();
+    expect(prs.list("main", panes).map((pr) => [pr.number, pr.inUse])).toEqual([[1, true], [2, false], [3, true], [4, false]]);
+    // Each session marks the repos its own panes sit in.
+    prs.list("other", [pane("q1", "/r/api")]);
+    await prs.refresh();
+    expect(prs.list("other", [pane("q1", "/r/api")]).map((pr) => [pr.number, pr.inUse])).toEqual([[1, false], [2, false], [3, false], [4, true]]);
+  });
+
   test("caches for the TTL, then refreshes in the background on a read", async () => {
     const { run, calls } = fakeRun({ folders, viewer: [ghRow(1, "feat/a")] });
     const { prs, events, clock } = registry(run);
@@ -374,8 +388,10 @@ describe("registry", () => {
     first.prs.list("main", [pane("p1", "/r/shop")]);
     await first.prs.refresh();
     expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ at: 1_000_000, prs: [{ number: 1 }] });
+    expect(JSON.parse(readFileSync(file, "utf8")).inUse).toEqual(["acme/shop"]);
     const restarted = registry(fakeRun({ folders, viewer: "hang" }).run, clock, { gh: 50, git: 50 }, file);
-    expect(restarted.prs.list("main", [pane("p2", "/h/worktrees/shop/a")]).map((pr) => [pr.number, pr.paneIds])).toEqual([[1, []]]);
+    // In use as the saved list says, before any folder is read again.
+    expect(restarted.prs.list("main", [pane("p2", "/h/worktrees/shop/a")]).map((pr) => [pr.number, pr.paneIds, pr.inUse])).toEqual([[1, [], true]]);
     await restarted.prs.refresh();
     // Matched to its pane once the folders are read, though GitHub never answered.
     expect(restarted.prs.list("main", [pane("p2", "/h/worktrees/shop/a")]).map((pr) => [pr.number, pr.paneIds])).toEqual([[1, ["p2"]]]);
