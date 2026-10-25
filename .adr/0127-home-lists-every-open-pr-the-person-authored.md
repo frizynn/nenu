@@ -32,7 +32,9 @@ there, and it does not spend the search API's tighter rate limit. One request co
 1. **One read lists every open PR the person authored**, the newest 100 by last update, from
    `viewer.pullRequests` on github.com. A pane's folder no longer decides whether a PR is listed.
    It only decides which panes a PR opens in: a PR matches the panes on its branch in a repo whose
-   remotes name its `owner/name`. An ssh alias names its repo by its path.
+   remotes name its `owner/name`. Any remote counts, so a fork's PRs to its upstream match as well
+   as its own, and an ssh alias names its repo by its path. The remotes are read again only when
+   the repo's `config` file changes.
 2. **The list survives a restart.** The last good read is kept in `<stateDir>/pull-requests.json`
    (0600, written atomically). A restarted bridge shows it at once, unless it is older than a day.
 3. **Home groups them by repo.** Repos come by their latest PR update. Inside a repo, a PR one merge

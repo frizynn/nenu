@@ -60,7 +60,7 @@ test("eases in only the PRs Show N more adds", async () => {
   // And folds back from where it stands.
   await user.click(screen.getByRole("button", { name: "Show less of b" }));
   expect(screen.getAllByRole("listitem")).toHaveLength(3);
-  expect(screen.getByRole("button", { name: "Show 4 more in b" })).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByRole("button", { name: "Show 4 more in b" })).toBeInTheDocument();
 });
 
 // A repo is a heading over its own PRs; a fold that would hide one row shows it instead.

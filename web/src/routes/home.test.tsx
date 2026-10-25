@@ -622,7 +622,7 @@ it("does not vouch for a quiet herd from a stale snapshot", async () => {
   expect(headline()).not.toBe("Nothing needs you");
 });
 
-it("keeps failed commands and finished workflows out of Ready to review", async () => {
+it("keeps failed commands and finished workflows out of the PRs", async () => {
   const now = Date.now();
   const activity: ActivityResponse = {
     available: true, sessionKey: "s", truncated: false, artifacts: [],

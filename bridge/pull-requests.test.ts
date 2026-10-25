@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { parseRepo, parseViewer, PR_TTL_MS, PullRequestRegistry, remoteName, remoteRepo, summarizeChecks, viewerArgv, type CommandRun } from "./pull-requests.ts";
+import { parseRepo, parseViewer, PR_TTL_MS, PullRequestRegistry, remoteName, remoteRepos, summarizeChecks, viewerArgv, type CommandRun } from "./pull-requests.ts";
 import type { AgentView, LiveEvent } from "./types.ts";
 
 function pane(paneId: string, cwd: string): AgentView {
@@ -27,16 +27,19 @@ const remote = (name: string) => `remote.origin.url https://github.com/${name}.g
 
 /**
  * A fake git + gh. Folders map to (common dir, toplevel, branch, and the remotes `git config` prints);
- * the GraphQL request answers `viewer` (rows, a raw answer, or a hang or a throw). Every call is recorded.
+ * the GraphQL request answers `viewer` (rows, a raw answer, or a hang or a throw), and a git command
+ * named in `hang` as "<folder> <subcommand>" never answers. Every call is recorded.
  */
 function fakeRun(state: {
   folders: Record<string, [string, string, string, string?]>;
   viewer: ReturnType<typeof ghRow>[] | { code: number; stdout: string; stderr: string } | "hang" | "throw";
+  hang?: Set<string>;
 }) {
   const calls: Array<{ argv: string[]; cwd: string }> = [];
   const run: CommandRun = async (argv, { cwd }) => {
     calls.push({ argv, cwd });
     if (argv[0] === "git") {
+      if (state.hang?.has(`${cwd} ${argv[1]}`)) return new Promise(() => {});
       const folder = state.folders[cwd];
       if (!folder) return { code: 128, stdout: "", stderr: "fatal: not a git repository" };
       if (argv[1] === "config") return folder[3] ? { code: 0, stdout: folder[3], stderr: "" } : { code: 1, stdout: "", stderr: "" };
@@ -50,10 +53,13 @@ function fakeRun(state: {
   return { run, calls };
 }
 
-function registry(run: CommandRun, clock = { t: 1_000_000 }, timeouts = { gh: 15_000, git: 3_000 }, file?: string) {
+/** Each repo's `config` file is as old as `mtimes` says, else unchanged since the epoch. */
+function registry(run: CommandRun, clock = { t: 1_000_000 }, timeouts = { gh: 15_000, git: 3_000 }, file?: string, mtimes: Record<string, number> = {}) {
   const events: LiveEvent[] = [];
   const logs: string[] = [];
-  const prs = new PullRequestRegistry({ run, now: () => clock.t, live: { publish: (event) => events.push(event) }, log: (m) => logs.push(m), timeouts, file });
+  const prs = new PullRequestRegistry({
+    run, now: () => clock.t, live: { publish: (event) => events.push(event) }, log: (m) => logs.push(m), timeouts, file, mtime: (path) => mtimes[path] ?? 0,
+  });
   return { prs, events, logs, clock };
 }
 
@@ -91,33 +97,24 @@ describe("parsing", () => {
     expect(remoteName("ssh://git@ssh.github.com:443/acme/shop")).toBe("acme/shop");
     expect(remoteName("git+ssh://git@github.com/acme/shop")).toBe("acme/shop");
     expect(remoteName("git@github-work:acme/shop.git")).toBe("acme/shop");
-    // A remote on this machine names no repo.
-    expect(remoteName("/srv/git/shop.git")).toBeNull();
-    expect(remoteName("../shop")).toBeNull();
-    expect(remoteName("file:///srv/git/shop.git")).toBeNull();
-    // A deeper path or a name GitHub cannot have.
+    // A remote on this machine, a deeper path or a name GitHub cannot have names no repo.
+    expect(remoteName("/srv/git/shop.git")).toBeUndefined();
+    expect(remoteName("../shop")).toBeUndefined();
+    expect(remoteName("file:///srv/git/shop.git")).toBeUndefined();
     expect(remoteName("https://github.com/acme/shop/tree")).toBeUndefined();
     expect(remoteName("https://github.com/acme/%E0%A4%A")).toBeUndefined();
     expect(remoteName("https://github.com/acme/shop%20is:closed")).toBeUndefined();
   });
 
-  test("picks the remote gh picks: the one set as default, else upstream, github, origin, then by name", () => {
-    expect(remoteRepo("remote.origin.url https://github.com/me/shop\nremote.origin.fetch +refs/heads/*:refs/remotes/origin/*\n")).toBe("me/shop");
-    expect(remoteRepo("remote.origin.url https://github.com/me/shop\nremote.upstream.url git@github.com:acme/shop.git\n")).toBe("acme/shop");
-    expect(remoteRepo("remote.zed.url https://github.com/me/shop\nremote.abc.url https://github.com/acme/shop\n")).toBe("acme/shop");
-    expect(remoteRepo("remote.constructor.url https://github.com/me/shop\nremote.origin.url https://github.com/acme/shop\n")).toBe("acme/shop");
-    expect(remoteRepo("remote.origin.url https://github.com/me/shop\nremote.origin.gh-resolved base\nremote.upstream.url https://github.com/acme/shop\n")).toBe("me/shop");
-    expect(remoteRepo("remote.origin.url https://github.com/me/shop\nremote.origin.gh-resolved acme/other\n")).toBe("acme/other");
-    expect(remoteRepo("remote.my.fork.pushurl https://github.com/me/fork\n")).toBe("me/fork");
-    // gh skips remotes on this machine, even origin; with nothing else there is no GitHub repo.
-    expect(remoteRepo("remote.origin.url /home/me/shop\nremote.zz.url https://github.com/acme/shop\n")).toBe("acme/shop");
-    expect(remoteRepo("remote.origin.url /home/me/shop\n")).toBeNull();
-    // The push URL counts only when the fetch URL names no repo.
-    expect(remoteRepo("remote.origin.url /home/me/shop\nremote.origin.pushurl https://github.com/acme/shop\n")).toBe("acme/shop");
-    expect(remoteRepo("remote.origin.url git@github-work:me/shop\nremote.origin.pushurl git@github.com:acme/shop\n")).toBe("me/shop");
-    // A remote whose path is no repo is skipped; with no remote at all there is none.
-    expect(remoteRepo("remote.origin.url https://github.com/me/shop/tree\nremote.work.url git@github-work:acme/shop\n")).toBe("acme/shop");
-    expect(remoteRepo("")).toBeNull();
+  test("names every repo a checkout's remotes name, so a fork's PRs to its upstream count too", () => {
+    expect(remoteRepos("remote.origin.url https://github.com/me/shop\nremote.origin.fetch +refs/heads/*:refs/remotes/origin/*\n")).toEqual(["me/shop"]);
+    expect(remoteRepos("remote.origin.url https://github.com/me/shop\nremote.upstream.url git@github.com:acme/shop.git\n")).toEqual(["me/shop", "acme/shop"]);
+    expect(remoteRepos("remote.origin.url https://github.com/me/shop\nremote.origin.gh-resolved acme/other\nremote.origin.gh-resolved base\n")).toEqual(["me/shop", "acme/other"]);
+    expect(remoteRepos("remote.my.fork.pushurl https://github.com/me/fork\nremote.work.url git@github-work:acme/shop\n")).toEqual(["me/fork", "acme/shop"]);
+    // Another host's remote names its own repo, which a GitHub PR of the other remote never displaces.
+    expect(remoteRepos("remote.upstream.url https://gitlab.com/acme/mirror\nremote.origin.url https://github.com/me/shop\n")).toEqual(["acme/mirror", "me/shop"]);
+    expect(remoteRepos("remote.origin.url /home/me/shop\nremote.zz.url https://github.com/me/shop/tree\n")).toEqual([]);
+    expect(remoteRepos("")).toEqual([]);
   });
 
   test("reads the viewer's open PRs, as gh pr list would have printed them", () => {
@@ -133,8 +130,8 @@ describe("parsing", () => {
   });
 
   test("maps a worktree to its main repo and a detached HEAD to no branch", () => {
-    expect(parseRepo("/r/shop/.git\n/r/shop-wt\n", "feat/x\n")).toEqual({ repo: "/r/shop", toplevel: "/r/shop-wt", branch: "feat/x" });
-    expect(parseRepo("/r/bare.git\n/r/bare-wt\n", "")).toEqual({ repo: "/r/bare.git", toplevel: "/r/bare-wt", branch: "" });
+    expect(parseRepo("/r/shop/.git\n/r/shop-wt\n", "feat/x\n")).toEqual({ repo: "/r/shop", gitDir: "/r/shop/.git", toplevel: "/r/shop-wt", branch: "feat/x" });
+    expect(parseRepo("/r/bare.git\n/r/bare-wt\n", "")).toEqual({ repo: "/r/bare.git", gitDir: "/r/bare.git", toplevel: "/r/bare-wt", branch: "" });
     expect(parseRepo("", "main")).toBeUndefined();
   });
 });
@@ -272,6 +269,86 @@ describe("registry", () => {
     await prs.refresh();
     expect(calls.filter((call) => call.argv[0] === "gh").map((call) => call.argv[1])).toEqual(["api"]);
     expect(prs.list("main", panes).map((pr) => [pr.number, pr.paneIds])).toEqual([[9, ["p1"]]]);
+  });
+
+  test("reads a repo's remotes again only when its config file changes", async () => {
+    const local: Record<string, [string, string, string, string?]> = { "/r/new": ["/r/new/.git", "/r/new", "feat/x"] };
+    const mtimes: Record<string, number> = { "/r/new/.git/config": 1 };
+    const { run, calls } = fakeRun({ folders: local, viewer: [inRepo("acme/new", 5, "feat/x")] });
+    const { prs, clock, events } = registry(run, undefined, undefined, undefined, mtimes);
+    const panes = [pane("p1", "/r/new")];
+    prs.list("main", panes);
+    await prs.refresh();
+    // `git init` and no remote yet: the PR is listed, on no pane.
+    expect(prs.list("main", panes).map((pr) => pr.paneIds)).toEqual([[]]);
+    clock.t += PR_TTL_MS;
+    await prs.refresh();
+    expect(calls.filter((call) => call.argv[1] === "config").length).toBe(1);
+    // `gh repo create --source . --push` adds the remote: the config file changes, and the PR finds its pane.
+    local["/r/new"]![3] = remote("acme/new");
+    mtimes["/r/new/.git/config"] = 2;
+    clock.t += PR_TTL_MS;
+    await prs.refresh();
+    expect(calls.filter((call) => call.argv[1] === "config").length).toBe(2);
+    expect(prs.list("main", panes).map((pr) => pr.paneIds)).toEqual([["p1"]]);
+    expect(prs.onBranch("/r/new")).toMatchObject({ number: 5 });
+    expect(events.length).toBe(2);
+  });
+
+  test("a git that never answers keeps what the folder and its remotes said, and is asked again", async () => {
+    const state: Parameters<typeof fakeRun>[0] = { folders, viewer: [inRepo("acme/shop", 1, "feat/a")] };
+    const { run, calls } = fakeRun(state);
+    const mtimes: Record<string, number> = {};
+    const { prs, clock, events } = registry(run, undefined, { gh: 50, git: 50 }, undefined, mtimes);
+    const panes = [pane("p2", "/h/worktrees/shop/a")];
+    prs.list("main", panes);
+    await prs.refresh();
+    expect(prs.list("main", panes).map((pr) => pr.paneIds)).toEqual([["p2"]]);
+    state.hang = new Set(["/h/worktrees/shop/a branch", "/h/worktrees/shop/a config"]);
+    mtimes["/r/shop/.git/config"] = 7;
+    clock.t += PR_TTL_MS;
+    await prs.refresh();
+    expect(prs.list("main", panes).map((pr) => pr.paneIds)).toEqual([["p2"]]);
+    expect(events.length).toBe(1);
+    state.hang = undefined;
+    clock.t += PR_TTL_MS;
+    const before = calls.length;
+    await prs.refresh();
+    expect(calls.slice(before).filter((call) => call.argv[0] === "git").map((call) => call.argv[1])).toEqual(["branch", "config"]);
+  });
+
+  test("a fork's checkout finds its PR to the upstream repo, and its own", async () => {
+    const { run } = fakeRun({
+      folders: { "/r/fork": ["/r/fork/.git", "/r/fork", "fix/y", "remote.origin.url https://github.com/me/shop\nremote.upstream.url https://github.com/acme/shop\n"] },
+      viewer: [inRepo("acme/shop", 8, "fix/y"), inRepo("me/shop", 2, "fix/y"), inRepo("acme/api", 3, "fix/y")],
+    });
+    const { prs } = registry(run);
+    const panes = [pane("p1", "/r/fork")];
+    prs.list("main", panes);
+    await prs.refresh();
+    expect(prs.list("main", panes).map((pr) => [pr.repo, pr.paneIds])).toEqual([["acme/shop", ["p1"]], ["me/shop", ["p1"]], ["acme/api", []]]);
+    expect(prs.locate("/r/fork", 8)).toMatchObject({ pr: { repo: "acme/shop" } });
+    expect(prs.locate("/r/fork", 3)).toBeUndefined();
+  });
+
+  test("tells the pages only when what they read changed", async () => {
+    const moving = structuredClone(folders);
+    const { run } = fakeRun({ folders: moving, viewer: [inRepo("acme/shop", 1, "feat/a")] });
+    const { prs, clock, events } = registry(run);
+    const panes = [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a")];
+    prs.list("main", panes);
+    await prs.refresh();
+    expect(events.length).toBe(1);
+    // A branch no PR is opened from moves: nothing a page reads changed.
+    moving["/r/shop"]![2] = "develop-2";
+    clock.t += PR_TTL_MS;
+    await prs.refresh();
+    expect(events.length).toBe(1);
+    // The PR's branch leaves its pane: that is news.
+    moving["/h/worktrees/shop/a"]![2] = "feat/other";
+    clock.t += PR_TTL_MS;
+    await prs.refresh();
+    expect(events.length).toBe(2);
   });
 
   test("keeps the last list on disk, so a restart shows it before GitHub answers", async () => {

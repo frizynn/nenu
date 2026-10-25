@@ -86,7 +86,7 @@ export function FoldedList<T>({ items, rows, name, children }: { items: readonly
   return <EnterScope>
     <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{shown.map(children)}</ul>
     {folds && (
-      <button type="button" onClick={() => setAll(!all)} aria-expanded={all}
+      <button type="button" onClick={() => setAll(!all)}
         aria-label={name ? (all ? `Show less of ${name}` : `${more} in ${name}`) : undefined}
         className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
         {all ? "Show less" : more}

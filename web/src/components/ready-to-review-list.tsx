@@ -142,14 +142,15 @@ export const REPO_ROWS = 3;
 /** One repo's run: its owner unless it is `home`, its name and how many, then its PRs, the rest folded. */
 function RepoRun({ repo, home, session, opening }: { repo: RepoReviews; home?: string; session?: string; opening: string | null }) {
   const id = useId();
+  const owner = repo.owner && repo.owner !== home ? repo.owner : undefined;
   return (
     <section aria-labelledby={id} className="flex flex-col">
       <h3 id={id} className="flex min-w-0 items-baseline px-1 pb-1 pt-6 text-footnote sm:px-2.5">
-        {repo.owner && repo.owner !== home && <span className="min-w-0 truncate text-muted-foreground">{repo.owner}/</span>}
+        {owner && <span className="min-w-0 truncate text-muted-foreground">{owner}/</span>}
         <span className="truncate font-semibold text-foreground">{repo.name}</span>
         <span className="ml-auto shrink-0 pl-3 tabular-nums text-muted-foreground"><span className="sr-only">, </span>{repo.entries.length}<span className="sr-only"> open</span></span>
       </h3>
-      <FoldedList items={repo.entries} rows={REPO_ROWS} name={repo.name}>
+      <FoldedList items={repo.entries} rows={REPO_ROWS} name={owner ? `${owner}/${repo.name}` : repo.name}>
         {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />}
       </FoldedList>
     </section>

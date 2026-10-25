@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 // `gh pr list --json` prints them, wrapped as GitHub's GraphQL answer. Anything else fails.
 
 const file = process.env.NENU_E2E_GH_PRS;
-if (!file || process.argv[2] !== "api") {
+if (!file || process.argv[2] !== "api" || !process.argv.includes("graphql")) {
   console.error("gh stub: no pull requests");
   process.exit(1);
 }
