@@ -102,6 +102,8 @@ export interface ReviewEntry {
   updatedAt: number;
   /** The pane on its branch, where Review goes inside Nenu; absent means the PR's page on GitHub. */
   open?: { paneId: string };
+  /** Its repo is one a pane's folder names: what the PRs tab lists unless asked for all. */
+  inUse: boolean;
 }
 
 const PR_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/;
@@ -115,12 +117,19 @@ export function readyToMerge(entry: ReviewEntry): boolean {
   return !entry.draft && entry.review === "approved" && !entry.checks?.failed && !entry.checks?.pending;
 }
 
-/** Where a pull request stands: one merge away, then blocked (a check failing or changes asked for), then in review, drafts last. */
-function standing(entry: ReviewEntry): number {
-  if (readyToMerge(entry)) return 0;
-  if (entry.draft) return 3;
-  return entry.checks?.failed || entry.review === "changes_requested" ? 1 : 2;
+/** Where a pull request can stand, in the order a repo lists them. */
+export const PR_STATES = ["ready", "attention", "review", "draft"] as const;
+export type PrState = typeof PR_STATES[number];
+
+/** Where a pull request stands: one merge away, else a draft, else blocked (a check failing or changes asked for), else in review. */
+export function prState(entry: ReviewEntry): PrState {
+  if (readyToMerge(entry)) return "ready";
+  if (entry.draft) return "draft";
+  return entry.checks?.failed || entry.review === "changes_requested" ? "attention" : "review";
 }
+
+/** The run a pull request sits in, ready to merge first and drafts last. */
+const standing = (entry: ReviewEntry) => PR_STATES.indexOf(prState(entry));
 
 /** Home's review list: the person's open pull requests from GitHub, by where each stands, then newest first. */
 export function reviewQueue(pullRequests: readonly PullRequestView[] | undefined): ReviewEntry[] {
@@ -135,6 +144,7 @@ export function reviewQueue(pullRequests: readonly PullRequestView[] | undefined
       ...(pr.diff ? { diff: pr.diff } : {}),
       updatedAt: pr.updatedAt ?? 0,
       ...(pr.paneIds[0] ? { open: { paneId: pr.paneIds[0] } } : {}),
+      inUse: pr.inUse,
     });
   }
   return [...rows.values()].sort((a, b) => standing(a) - standing(b) || b.updatedAt - a.updatedAt);

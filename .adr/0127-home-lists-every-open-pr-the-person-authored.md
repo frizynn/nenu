@@ -1,6 +1,7 @@
 # 0127. Home lists every open pull request the person authored, read in one request
 
-- **Status:** Accepted (2026-10-25). Requested by the operator: "la pestaña de prs debe estar
+- **Status:** Accepted (2026-10-25). Amended by [ADR 0128](./0128-home-shows-the-prs-of-the-repos-in-use.md):
+  Home lists the PRs of the repos in use by default, filtered on the device. Requested by the operator: "la pestaña de prs debe estar
   ordenada por repositorios y verse bonita, además no aparecen todos y creo que tarda mucho".
 - **Trail:** `bridge/pull-requests.ts` · `web/src/lib/home-stats.ts` (`reviewQueue`, `reviewsByRepo`) ·
   `web/src/components/ready-to-review-list.tsx` · `scripts/e2e/fake-gh.ts`

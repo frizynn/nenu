@@ -111,7 +111,8 @@ Product details that shaped the loop:
   type"** fallback.
 - **Opinionated triage.** Home answers what needs you now, in one column on a phone and a desk: a
   headline that counts it (never the pull requests), **"Needs you"** (dialogs answered in place), the
-  open pull requests under their repos (what needs a hand first), then the sessions as Recents or one row
+  open pull requests of the repos the panes are in, under their repos (what needs a hand first; all
+  of them, by state or by repo, through a filter kept on the device), then the sessions as Recents or one row
   per Herdr workspace. Home's icon counts what the headline counts; the phone's tab bar is Home, New
   and Search, and the workspace tree lives in the sidebar (on a phone, under Search's box until
   something is typed). Simultaneous blocks batch into one summary notification, not three races.

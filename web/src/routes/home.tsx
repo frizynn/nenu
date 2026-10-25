@@ -15,6 +15,7 @@ import { useInteractions } from "@/hooks/use-interactions";
 import { isConnecting } from "@/lib/connection";
 import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
+import { filterReviews, usePrFilter } from "@/lib/pr-filter";
 import { openNewAgent } from "@/lib/spawn";
 import { isReadOnly } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -22,9 +23,10 @@ import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 // Home answers "what needs me now", top to bottom: one sentence saying what needs you, those asks
 // (answered in place), then one list under tabs: every session as Recents or by Workspace, each row
-// carrying its pull request; every open pull request, under its repo, as PRs. Then the workflows still
-// running. Starting something is New's. Figures come from the snapshot, the bridge's
-// detected dialogs and the Claude sessions' background work; nothing here is stored history.
+// carrying its pull request; the open pull requests of the repos in use, or all, under their repo, as
+// PRs. Then the workflows still running. Starting something is New's. Figures come from the
+// snapshot, the bridge's detected dialogs and the Claude sessions' background work; nothing here is
+// stored history.
 //
 // When the link fails, the connection banner (root.tsx) is the one place that names the problem and
 // dates the herd. Home keeps saying what the work is: a brief failure changes nothing on screen (the
@@ -41,6 +43,7 @@ export function HomeRoute() {
   const activity = useHomeActivity(live ? data.agents : [], data.session);
   const lost = useConnectionLost(isConnecting(data));
   const opening = useOpeningPath();
+  const { filter: prFilter } = usePrFilter();
   // The herd on screen is not live: a refusal at once, an outage once it is sustained.
   const stale = data.authError || lost;
   // `bridge` is only unknown when no snapshot was ever read: there is no herd to grey out.
@@ -63,7 +66,8 @@ export function HomeRoute() {
   // A pane Needs you holds (asking, or just answered) stays out of Recents.
   const recent = recentChats(panes, new Set([...needs, ...receipts].map((item) => item.paneId)), reviews);
   const running = runningWorkflows(activity);
-  const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
+  // The headline counts the PRs the PRs tab lists with the filter kept on this device; a search is not kept.
+  const counts = { needs: needs.length, review: filterReviews(reviews, prFilter).kept.length, working: data.agents.filter((a) => a.status === "working").length };
   const { title, detail } = homeHeadline(counts, data.agents.length, calm);
 
   // A phone leaves the date out and starts on the headline, so the first screen holds more of the list.

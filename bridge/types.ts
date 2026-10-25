@@ -208,6 +208,8 @@ export interface PullRequestView {
   /** Epoch ms. */
   updatedAt?: number;
   paneIds: string[];
+  /** Its repo is one a pane's folder names through its remotes: a repo the herd is using (ADR 0128). */
+  inUse: boolean;
 }
 
 /**

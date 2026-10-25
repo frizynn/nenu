@@ -307,7 +307,7 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, tabTouched, onTab, 
 /**
  * Home's lists under one control: Recents, every session that moved last first (what Needs you shows
  * stays out); Workspaces, one row per Herdr workspace that opens in place on its sessions; or PRs,
- * every pull request, drawn by `pullRequests`, there only while there is one. All read the snapshot
+ * every open pull request, drawn and filtered by `pullRequests`, there only while there is one. All read the snapshot
  * Home already has; the list is remembered on this device. Workspaces come in the order chosen on this
  * device: Herdr's, by name, or the operator's, dragged by each row's handle after Reorder
  * (lib/workspace-order.ts).
