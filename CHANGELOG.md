@@ -8,6 +8,20 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-25
+
+### Added
+
+- Home's PRs tab shows the repos in use in Herdr's panes by default, with a filter (In use or All repos, state, repo) kept per device and a search over title and number (eb511f48, f31c0ebb).
+
+### Changed
+
+- The PR count in Home's headline counts the PRs the tab lists (eb511f48).
+
+### Fixed
+
+- The repos in use only grow while a folder is still answering, so a slow or failing git never empties the In use view (35f72150, 6dd1f1c3, 4dc891dd).
+
 ## [2.5.0] - 2026-10-25
 
 ### Changed
