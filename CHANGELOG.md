@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-25
+
+### Changed
+
+- Home's PRs tab lists every open PR you authored, grouped by repo, ready to merge first and drafts last; the headline says "N open PRs" (eabbe5ec, 05424eae, 7b0cb474).
+
+### Fixed
+
+- PRs in a repo with no pane open now show, and a repo cloned in several folders is listed once (eabbe5ec).
+- A PR opens in the panes on its branch in any repo its remotes name, whatever the case, and diffs the PR of the repo asked for (3684a5c7, 619c2e11).
+- After a bridge restart the PRs list shows at once from a saved copy instead of staying empty for seconds (eabbe5ec).
+
 ## [2.4.0] - 2026-10-25
 
 ### Added
