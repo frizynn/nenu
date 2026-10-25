@@ -168,7 +168,7 @@ it("says on a session's own row its pull request and size, instead of in a secon
     draft: false, review: "approved", diff: { additions: 212, deletions: 148 }, paneIds: ["w2:p2"] }];
   const { user, router, main } = await setup({ ...twoWorkspaces, pullRequests });
   expect(headline()).toBe("1 needs you");
-  expect(subline()).toBe("1 to review · 1 working");
+  expect(subline()).toBe("1 open PR · 1 working");
   const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Mobile panel,/ });
   expect(row).toHaveAccessibleName(/,\s*Done,\s*hub,\s*PR #1342,\s*\+212 −148$/);
   expect(main.queryByRole("region", { name: /^Pull requests/ })).not.toBeInTheDocument();
@@ -553,7 +553,7 @@ describe("Recents and Workspaces", () => {
     const { user, main } = await setup({ ...data, agents });
     const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
     expect(recent.getAllByRole("listitem")).toHaveLength(6);
-    await user.click(recent.getByRole("button", { name: "Show all 8" }));
+    await user.click(recent.getByRole("button", { name: "Show 2 more" }));
     expect(recent.getAllByRole("listitem")).toHaveLength(8);
   });
 });
@@ -600,7 +600,7 @@ it("says in its headline that nothing needs you, never the pull requests, only w
     pullRequests: [{ repo: "a/b", number: 7, title: "PR 7", url: "https://github.com/a/b/pull/7", branch: "x", draft: false, paneIds: [] }] };
   const { main } = await setup(quiet);
   await waitFor(() => expect(headline()).toBe("Nothing needs you"));
-  expect(subline()).toBe("1 to review");
+  expect(subline()).toBe("1 open PR");
   expect(main.queryByText("Nothing needs you right now")).not.toBeInTheDocument();
   expect(main.queryByRole("region", { name: /^Needs you/ })).not.toBeInTheDocument();
   expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Home" })).toBeInTheDocument();
@@ -622,7 +622,7 @@ it("does not vouch for a quiet herd from a stale snapshot", async () => {
   expect(headline()).not.toBe("Nothing needs you");
 });
 
-it("keeps failed commands and finished workflows out of Ready to review", async () => {
+it("keeps failed commands and finished workflows out of the PRs", async () => {
   const now = Date.now();
   const activity: ActivityResponse = {
     available: true, sessionKey: "s", truncated: false, artifacts: [],
@@ -655,7 +655,7 @@ it("keeps workflows still running in the one column, each opening its chat", asy
 });
 
 // Pull requests are a tab of the sessions' switcher, never a section of their own.
-it("lists every pull request under the PRs tab, ready to merge first, and opens each in its session or on GitHub", async () => {
+it("lists every pull request under the PRs tab by repo, ready to merge first, and opens each in its session or on GitHub", async () => {
   const pr = (number: number, extra: Partial<PullRequestView>): PullRequestView => ({
     repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`,
     branch: `feat/${number}`, draft: false, updatedAt: number, paneIds: [], ...extra,
@@ -668,15 +668,17 @@ it("lists every pull request under the PRs tab, ready to merge first, and opens 
     pr(1696, { title: "Publish products", review: "approved", checks: { passed: 4, failed: 0, pending: 0 }, diff: { additions: 40, deletions: 2 } }),
   ] });
   expect(headline()).toBe("1 needs you");
-  expect(subline()).toBe("5 to review");
+  expect(subline()).toBe("5 open PRs");
   expect(main.queryByRole("region", { name: /^Pull requests/ })).not.toBeInTheDocument();
   expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces", "PRs"]);
   // A session's row still carries its pull request.
   expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
   await user.click(main.getByRole("tab", { name: "PRs" }));
   const prs = within(main.getByRole("tabpanel", { name: "PRs" }));
-  // The five the headline counts, ready to merge first.
-  expect(prs.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["Ready to merge", "In review"]);
+  // The five the headline counts under their repo, ready to merge first, then blocked, drafts last.
+  expect(prs.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["shop, 5 open"]);
+  expect(prs.getAllByRole("link")).toHaveLength(3);
+  await user.click(prs.getByRole("button", { name: "Show 2 more in shop" }));
   expect(prs.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual([
     "Orders panel, #1700, checks passed, approved",
     "Publish products, #1696, +40 −2, checks passed, approved",
@@ -696,8 +698,8 @@ it("shows the first pull requests and the rest on request, and remembers the tab
   const { user, main } = await setup({ ...data, pullRequests });
   await user.click(main.getByRole("tab", { name: "PRs" }));
   const review = within(main.getByRole("tabpanel", { name: "PRs" }));
-  expect(review.getAllByRole("link")).toHaveLength(5);
-  await user.click(review.getByRole("button", { name: "Show all 9" }));
+  expect(review.getAllByRole("link")).toHaveLength(3);
+  await user.click(review.getByRole("button", { name: "Show 6 more in b" }));
   expect(review.getAllByRole("link")).toHaveLength(9);
   expect(localStorage.getItem("nenu:home-list:v2")).toBe("prs");
 });

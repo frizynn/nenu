@@ -1,5 +1,5 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouCount, needsYouItems, readyToMerge, recentChats, reviewQueue, runningWorkflows } from "./home-stats";
+import { greeting, homeHeadline, needsYouCount, needsYouItems, readyToMerge, recentChats, reviewQueue, reviewsByRepo, runningWorkflows } from "./home-stats";
 import type { AgentView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -21,10 +21,10 @@ describe("headline", () => {
   });
 
   it("puts the live rest on a second line, never idle agents, and leaves it out when there is nothing else", () => {
-    expect(homeHeadline({ needs: 1, review: 1, working: 1 }, 9, true).detail).toBe("1 to review · 1 working");
-    expect(homeHeadline({ needs: 0, review: 17, working: 8 }, 15, true).detail).toBe("17 to review · 8 working");
+    expect(homeHeadline({ needs: 1, review: 1, working: 1 }, 9, true).detail).toBe("1 open PR · 1 working");
+    expect(homeHeadline({ needs: 0, review: 17, working: 8 }, 15, true).detail).toBe("17 open PRs · 8 working");
     expect(homeHeadline({ needs: 2, review: 0, working: 1 }, 9, true).detail).toBe("1 working");
-    expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9, false).detail).toBe("1 to review");
+    expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9, false).detail).toBe("1 open PR");
     expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9, false).detail).toBeNull();
     // "All quiet" already says it: a count of idle agents under it would repeat it.
     expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9, false).detail).toBeNull();
@@ -55,7 +55,7 @@ describe("review queue", () => {
     draft: false, updatedAt: number * 1000, paneIds: [], ...extra,
   });
 
-  it("lists pull requests only, drafts last, green and approved first, then the most recent", () => {
+  it("lists pull requests by where they stand: ready to merge, blocked, in review, drafts last, each newest first", () => {
     const rows = reviewQueue([
       gh(1),
       gh(2, { draft: true, updatedAt: 99_000 }),
@@ -63,8 +63,24 @@ describe("review queue", () => {
       gh(4, { checks: { passed: 1, failed: 1, pending: 0 } }),
       gh(5, { checks: { passed: 2, failed: 0, pending: 0 } }),
     ]);
-    expect(rows.map((row) => row.number)).toEqual([3, 5, 4, 1, 2]);
-    expect(rows[0]).toMatchObject({ key: "acme/shop#3", repo: "shop", branch: "feat/3", url: "https://github.com/acme/shop/pull/3" });
+    expect(rows.map((row) => row.number)).toEqual([3, 4, 5, 1, 2]);
+    expect(rows[0]).toMatchObject({ key: "acme/shop#3", repo: "shop", owner: "acme", branch: "feat/3", url: "https://github.com/acme/shop/pull/3" });
+  });
+
+  it("groups by repo: ready to merge, then blocked, then in review, drafts last, the latest-moved repo first", () => {
+    const green = { passed: 3, failed: 0, pending: 0 };
+    const other = (number: number, extra: Partial<PullRequestView> = {}) => gh(number, { url: `https://github.com/acme/api/pull/${number}`, ...extra });
+    const repos = reviewsByRepo(reviewQueue([
+      gh(1, { draft: true, updatedAt: 90_000 }),
+      gh(2),
+      gh(3, { review: "changes_requested" }),
+      gh(4, { checks: { passed: 1, failed: 1, pending: 0 } }),
+      gh(5, { review: "approved", checks: green }),
+      gh(6),
+      other(7, { updatedAt: 95_000 }),
+    ]));
+    expect(repos.map((repo) => [repo.key, repo.name, repo.owner])).toEqual([["acme/api", "api", "acme"], ["acme/shop", "shop", "acme"]]);
+    expect(repos[1]!.entries.map((row) => row.number)).toEqual([5, 4, 3, 6, 2, 1]);
   });
 
   it("calls a pull request ready to merge only when it is approved, its checks pass and it is no draft", () => {

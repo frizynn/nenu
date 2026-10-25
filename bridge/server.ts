@@ -134,7 +134,7 @@ export function startServer(opts: ServerDeps) {
     conversations,
     input,
     queue,
-    pullRequests: new PullRequestRegistry({ live }),
+    pullRequests: new PullRequestRegistry({ live, file: join(cfg.stateDir, "pull-requests.json") }),
     hasJournal: (agent) => adapterFor(journals ?? {}, agent) !== undefined,
     interactions: new Interactions(live, { waiting: (session, paneId) => agentStates.get(session, paneId)?.waiting !== undefined }),
     paneWatcher: new PaneWatcher(live),

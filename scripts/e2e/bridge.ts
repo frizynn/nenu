@@ -216,11 +216,11 @@ export async function startTestBridge(opts: {
   };
   for (const p of Object.values(paths)) await mkdir(p, { recursive: true });
   // The bridge shells out to these. `claude agents` fails, so session discovery never lists
-  // the operator's real Claude processes; `gh` never reaches GitHub: it prints the pull requests in
-  // $NENU_E2E_GH_PRS (a JSON file), or fails.
+  // the operator's real Claude processes; `gh` never reaches GitHub: it answers with the pull requests
+  // in $NENU_E2E_GH_PRS (a JSON file), or fails (fake-gh.ts).
   const stubs = {
     claude: "exit 1",
-    gh: `[ -n "$NENU_E2E_GH_PRS" ] && exec cat "$NENU_E2E_GH_PRS"\necho 'gh stub: no pull requests' >&2\nexit 1`,
+    gh: `exec "${process.execPath}" "${join(import.meta.dir, "fake-gh.ts")}" "$@"`,
     // Herdr's saved machines are the bench's ($NENU_E2E_MACHINES, a `machine list --json`), never the
     // operator's; nothing else of Herdr's CLI is the bridge's to run.
     herdr: `[ -n "$NENU_E2E_HERDR_CALLS" ] && echo "$*" >> "$NENU_E2E_HERDR_CALLS"\n[ "$1 $2" = "machine list" ] || { echo 'herdr stub: only machine list' >&2; exit 2; }\n[ -n "$NENU_E2E_MACHINES" ] && exec cat "$NENU_E2E_MACHINES"\necho '[]'`,
@@ -253,10 +253,11 @@ export async function startTestBridge(opts: {
   if (opts.fake) {
     fake = new FakeHerdr({ socketPath });
     herd = await (opts.seed ?? seedDemoHerd)(fake, { claudeRoot: paths.claude, cwd: dir, shift });
-    // With fake pull requests the demo panes sit in a repo on branch `e2e-demo`, so a PR on that
-    // branch opens its agent and the rest open on GitHub.
+    // With fake pull requests the demo panes sit in a clone of acme/shop on branch `e2e-demo`, so a PR
+    // on that branch opens its agent and the rest open on GitHub.
     if (process.env.NENU_E2E_GH_PRS) {
       Bun.spawnSync(["git", "init", "-q", "-b", "e2e-demo", dir]);
+      Bun.spawnSync(["git", "-C", dir, "remote", "add", "origin", "https://github.com/acme/shop"]);
       opts.repo?.(dir);
     }
     await fake.start();

@@ -56,9 +56,9 @@ it("keeps sessions with the same time in the order they first came, however they
   expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
 });
 
-it("eases in only the rows Show all adds", async () => {
+it("eases in only the rows Show N more adds", async () => {
   setup(Array.from({ length: 8 }, (_, i) => chat(`p${i}`, 900 - i)));
-  await userEvent.setup().click(screen.getByRole("button", { name: "Show all 8" }));
+  await userEvent.setup().click(screen.getByRole("button", { name: "Show 2 more" }));
   const rows = within(screen.getByRole("tabpanel", { name: "Recents" })).getAllByRole("listitem");
   expect(rows.map((row) => row.classList.contains("row-enter"))).toEqual([false, false, false, false, false, false, true, true]);
 });

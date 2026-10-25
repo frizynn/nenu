@@ -1,56 +1,60 @@
-// The person's open pull requests in the repos their agents work in, read from GitHub with `gh`, so
-// Home's "Ready to review" shows the PRs agents open on their own.
+// The person's open pull requests, read from GitHub with `gh`, so Home's PRs tab shows every PR they
+// have open, the ones agents open on their own included, and each chat finds the PR on its branch.
 //
 // Every read here runs in the background: a snapshot read gets the cached list at once and, when it
 // is stale, starts one refresh. A missing or hanging `gh` costs a logged line and a timeout, never a
-// blocked request, and a failed repo keeps the list it last read.
+// blocked request, and a failed read keeps the list it last read. The list is also kept in the state
+// dir, so a restarted bridge shows it before its first read comes back.
 //
-// A refresh asks GitHub with one `gh api graphql` per SEARCH_BATCH repos: for each repo whose remotes
-// name a github.com repo, the search `gh pr list --author @me` itself sends. A repo whose remotes only
-// gh can name (another host, an ssh alias, no remote) still runs `gh pr list` from its folder.
-import { basename, dirname } from "node:path";
+// A refresh asks GitHub once, for the viewer's own open pull requests (`viewer.pullRequests`, not the
+// search index: a PR opened a second ago is there, and searches have their own, tighter rate limit),
+// so a PR in a repo no pane sits in is listed too (ADR 0127). The panes' folders resolve alongside, to
+// match each PR to the panes on its branch by the `owner/name` their remotes name.
+import { statSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
 
 import { servicePath } from "./claude-sessions.ts";
+import { PrefsFile } from "./prefs-file.ts";
 import type { AgentView, LivePublisher, PullRequestView } from "./types.ts";
 
 /** One external command: fixed argv, no shell, run in `cwd`, killed after `timeoutMs`. */
 export type CommandRun = (argv: string[], opts: { cwd: string; timeoutMs: number }) => Promise<{ code: number; stdout: string; stderr: string }>;
 
-/** The fewest milliseconds between two GitHub reads of the same repos. */
+/** The fewest milliseconds between two reads of the list. */
 export const PR_TTL_MS = 60_000;
 /** A pane in a folder never resolved asks for a sooner refresh, but not more often than this. */
 const NEW_CWD_MIN_MS = 5_000;
-const MAX_REPOS = 12;
 const MAX_CWDS = 64;
+/** The newest open PRs one refresh reads; GitHub's page size. */
+const MAX_PRS = 100;
+/** A list kept on disk longer than this is not shown after a restart: those PRs may long be merged. */
+const SAVED_MAX_AGE_MS = 24 * 60 * 60_000;
 const GH_TIMEOUT_MS = 15_000;
 const GIT_TIMEOUT_MS = 3_000;
 const CONCURRENCY = 4;
-/** GitHub sums the searches of one request against its ~10 s budget, so a slow repo fails only its batch. */
-const SEARCH_BATCH = 4;
-const SCALAR_FIELDS = ["number", "title", "url", "headRefName", "baseRefName", "isDraft", "reviewDecision", "additions", "deletions", "updatedAt"];
-const PR_FIELDS = [...SCALAR_FIELDS, "statusCheckRollup"].join(",");
-/** PR_FIELDS in GraphQL, with the check contexts `gh` flattens into `statusCheckRollup`. */
-const SEARCH_FIELDS = SCALAR_FIELDS.join(" ")
+/** The fields `gh pr list --json` names, in GraphQL, with the check contexts it flattens into `statusCheckRollup`. */
+const GRAPHQL_FIELDS = "number title url headRefName baseRefName isDraft reviewDecision additions deletions updatedAt"
   + " commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{...on StatusContext{state} ...on CheckRun{status conclusion}}}}}}}";
 const SCP_RE = /^([^@]+@)?([^:]+):(\/?.+)$/;
 const REPO_NAME_RE = /^[\w.-]+\/[\w.-]+$/;
-/** Why a repo whose remotes are all on this machine has no PRs; gh fails there too. */
-const NO_GITHUB_REMOTE = "none of the git remotes point to GitHub";
-/** gh's order among remotes: upstream, then github, then origin, then the rest by name. */
-const REMOTE_RANK = new Map([["upstream", 3], ["github", 2], ["origin", 1]]);
+/** How often a list that has not changed is written again, so its date stays near its last read. */
+const RESAVE_MS = 60 * 60_000;
 const PR_URL_RE = /^https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)$/;
 
 /** Where a pane's folder sits: its repo (keyed by the shared git dir, so worktrees join their repo) and branch. */
 interface CwdInfo {
-  /** The repo's common git dir; one per repo whatever worktree the pane is in. */
+  /** The repo, by its common git dir; one per repo whatever worktree the pane is in. */
   repo: string;
-  /** A folder inside the repo to run `gh` from: the first worktree seen. */
+  /** The common git dir itself, which holds the repo's `config`. */
+  gitDir: string;
+  /** A folder inside the repo to read its remotes from: the first worktree seen. */
   toplevel: string;
   /** Empty when detached. */
   branch: string;
 }
 
-/** A repo's last good read, without the panes (those are matched per snapshot read). */
+/** A PR as GitHub last reported it, without the panes (those are matched per snapshot read). */
 type RepoPr = Omit<PullRequestView, "paneIds">;
 
 export interface PullRequestRegistryOptions {
@@ -60,6 +64,10 @@ export interface PullRequestRegistryOptions {
   log?: (message: string) => void;
   /** Per-command budgets; tests shorten them. */
   timeouts?: { gh: number; git: number };
+  /** A JSON file that keeps the last list across restarts. */
+  file?: string;
+  /** When a file last changed (ms), undefined when it cannot be read; tests fake it. */
+  mtime?: (path: string) => number | undefined;
 }
 
 const REVIEWS: Record<string, PullRequestView["review"]> = {
@@ -94,13 +102,7 @@ export function summarizeChecks(rollup: unknown): PullRequestView["checks"] {
   return checks;
 }
 
-/** `gh pr list --json` output to rows; a malformed row is dropped, never guessed at. */
-export function parsePullRequests(stdout: string): RepoPr[] {
-  const value: unknown = JSON.parse(stdout);
-  if (!Array.isArray(value)) throw new Error("gh pr list did not return a list");
-  return value.flatMap(parseRow);
-}
-
+/** A row shaped as `gh pr list --json` prints it; a malformed row is dropped, never guessed at. */
 function parseRow(raw: unknown): RepoPr[] {
   const row = record(raw);
   const url = typeof row.url === "string" ? row.url : "";
@@ -125,91 +127,83 @@ function parseRow(raw: unknown): RepoPr[] {
 }
 
 /**
- * The repo a remote URL names on github.com, as gh reads it: `git@host:o/n` is ssh, a subdomain of
- * github.com is github.com, and the path is exactly `owner/name`. Null for a remote on this machine (a
- * path or `file:`), which gh skips; undefined for any other host or shape.
+ * The repo a remote URL names, `owner/name` from its path as gh reads one: `git@host:o/n` is ssh and
+ * the path is exactly two parts. Any host counts: an ssh alias (`git@github-work:o/n`) names a
+ * github.com repo, and the list it is matched against is github.com's alone. Undefined for a remote on
+ * this machine (a path or `file:`) and for any other shape.
  */
-export function githubRepo(url: string): string | null | undefined {
+export function remoteName(url: string): string | undefined {
   const scp = url.includes("://") ? undefined : SCP_RE.exec(url);
-  if (url.startsWith("file:") || (!scp && !url.includes("://"))) return null;
-  let host: string;
+  if (url.startsWith("file:") || (!scp && !url.includes("://"))) return undefined;
   let parts: string[];
   try {
     const parsed = new URL(scp ? `ssh://${scp[1] ?? ""}${scp[2]}/${scp[3]!.replace(/^\//, "")}` : url);
-    host = parsed.hostname.toLowerCase();
     parts = decodeURIComponent(parsed.pathname).replace(/^\/+|\/+$/g, "").split("/");
   } catch {
     return undefined;
   }
-  if (host !== "github.com" && !host.endsWith(".github.com")) return undefined;
   const repo = `${parts[0]}/${parts[1]?.replace(/\.git$/, "")}`;
   return parts.length === 2 && REPO_NAME_RE.test(repo) ? repo : undefined;
 }
 
 /**
- * The repo `gh pr list` reads in a checkout, from `git config --get-regexp ^remote\.`: the remote
- * `gh repo set-default` marked, else the first by gh's order, skipping remotes on this machine as gh
- * does (null when that leaves none). Undefined when a remote names another host or alias, which only
- * gh can resolve, and for a repo with no remote at all, so gh says so as it always has.
+ * Every repo a checkout's remotes name, lower-cased as GitHub ignores case, from `git config
+ * --get-regexp ^remote\.`: each remote's fetch and push URL, and the repo `gh repo set-default` marked.
+ * A PR opened against any of them is this checkout's, so a fork's PRs to its upstream count as well as
+ * its own, and a remote on another host matches nothing on GitHub's list.
  */
-export function remoteRepo(config: string): string | null | undefined {
-  const remotes = new Map<string, { url?: string; pushurl?: string; resolved?: string }>();
+export function remoteRepos(config: string): string[] {
+  const repos = new Set<string>();
   for (const line of config.split("\n")) {
-    const match = /^remote\.(.+)\.(url|pushurl|gh-resolved) (.*)$/.exec(line.trim());
+    const match = /^remote\..+\.(url|pushurl|gh-resolved) (.*)$/.exec(line.trim());
     if (!match) continue;
-    const remote = remotes.get(match[1]!) ?? {};
-    const key = match[2] === "gh-resolved" ? "resolved" : match[2] as "url" | "pushurl";
-    remote[key] ??= match[3]!;
-    remotes.set(match[1]!, remote);
+    const repo = match[1] === "gh-resolved" ? match[2]! : remoteName(match[2]!);
+    if (repo && REPO_NAME_RE.test(repo)) repos.add(repo.toLowerCase());
   }
-  const named = [...remotes].map(([name, remote]) => {
-    // gh reads the push URL only when the fetch URL gives it no repo at all.
-    const fetch = remote.url === undefined ? null : githubRepo(remote.url);
-    const repo = fetch !== null ? fetch : remote.pushurl === undefined ? null : githubRepo(remote.pushurl);
-    return { name, repo, resolved: remote.resolved };
-  });
-  if (named.length === 0 || named.some((remote) => remote.repo === undefined)) return undefined;
-  const github = named.filter((remote): remote is typeof remote & { repo: string } => remote.repo !== null);
-  if (github.length === 0) return null;
-  const rank = (name: string) => REMOTE_RANK.get(name.toLowerCase()) ?? 0;
-  github.sort((a, b) => rank(b.name) - rank(a.name) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  for (const remote of github) {
-    if (remote.resolved === "base") return remote.repo;
-    if (remote.resolved && REPO_NAME_RE.test(remote.resolved)) return remote.resolved;
-  }
-  return github[0]!.repo;
+  return [...repos];
 }
 
-/** One GraphQL request holding, per repo `q<i>`, the search `gh pr list --author @me --limit 50` sends. */
-export function searchArgv(repos: readonly string[]): string[] {
-  const vars = repos.map((_, i) => `$q${i}:String!`).join(",");
-  const blocks = repos.map((_, i) => `r${i}:search(query:$q${i},type:ISSUE_ADVANCED,first:50){nodes{...pr}}`).join(" ");
-  // gh api would follow GH_HOST; only github.com repos get here.
-  return ["gh", "api", "--hostname", "github.com", "graphql", "-f", `query=fragment pr on PullRequest{${SEARCH_FIELDS}} query(${vars}){${blocks}}`,
-    ...repos.flatMap((repo, i) => ["-f", `q${i}=author:@me repo:${repo} state:open type:pr`])];
+/** The one GraphQL request a refresh sends: the viewer's open pull requests, newest first. */
+export function viewerArgv(): string[] {
+  // gh api would follow GH_HOST; the list is github.com's.
+  return ["gh", "api", "--hostname", "github.com", "graphql", "-f",
+    `query=query{viewer{pullRequests(states:OPEN,first:${MAX_PRS},orderBy:{field:UPDATED_AT,direction:DESC}){nodes{${GRAPHQL_FIELDS}}}}}`];
 }
 
 /**
- * That request's answer, one entry per repo in order: its rows, shaped as `gh pr list --json` prints
- * them, the error GraphQL gave for it, or undefined when the answer says nothing about it.
+ * That request's answer as rows shaped like `gh pr list --json` prints them. Throws with GitHub's own
+ * message when the answer holds no list.
  */
-export function parseSearch(stdout: string, count: number): Array<RepoPr[] | string | undefined> {
+export function parseViewer(stdout: string): RepoPr[] {
   const answer = record(JSON.parse(stdout));
-  const data = record(answer.data);
-  const errors = Array.isArray(answer.errors) ? answer.errors.map(record) : [];
-  return Array.from({ length: count }, (_, i) => {
-    const nodes = record(data[`r${i}`]).nodes;
-    if (Array.isArray(nodes)) {
-      return nodes.flatMap((node) => {
-        const pr = record(node);
-        const commits = record(pr.commits).nodes;
-        const commit = record(record(Array.isArray(commits) ? commits[0] : undefined).commit);
-        return parseRow({ ...pr, statusCheckRollup: record(record(commit.statusCheckRollup).contexts).nodes });
-      });
-    }
-    const error = errors.find((candidate) => Array.isArray(candidate.path) && candidate.path[0] === `r${i}`) ?? errors[0];
-    return typeof error?.message === "string" ? error.message : undefined;
+  const nodes = record(record(record(answer.data).viewer).pullRequests).nodes;
+  if (!Array.isArray(nodes)) {
+    const error = Array.isArray(answer.errors) ? record(answer.errors[0]).message : undefined;
+    throw new Error(typeof error === "string" ? error : "GitHub gave no pull requests");
+  }
+  return nodes.flatMap((node) => {
+    const pr = record(node);
+    const commits = record(pr.commits).nodes;
+    const commit = record(record(Array.isArray(commits) ? commits[0] : undefined).commit);
+    return parseRow({ ...pr, statusCheckRollup: record(record(commit.statusCheckRollup).contexts).nodes });
   });
+}
+
+/** The list as kept on disk, with when it was read (epoch ms). */
+interface SavedList { at: number; prs: RepoPr[] }
+
+/** A saved list back from disk: the rows the last refresh kept, any other shape read as none. */
+function savedList(raw: unknown): SavedList {
+  const { at, prs } = record(raw);
+  if (typeof at !== "number" || !Array.isArray(prs)) return { at: 0, prs: [] };
+  return {
+    at,
+    prs: prs.filter((row): row is RepoPr => {
+      const pr = record(row);
+      return typeof pr.repo === "string" && typeof pr.number === "number" && typeof pr.title === "string"
+        && typeof pr.url === "string" && PR_URL_RE.test(pr.url) && typeof pr.branch === "string" && typeof pr.draft === "boolean";
+    }),
+  };
 }
 
 /**
@@ -221,7 +215,7 @@ export function parseRepo(revParse: string, branch: string): CwdInfo | undefined
   if (!commonDir || !toplevel) return undefined;
   // A worktree's common dir is the main repo's `.git`; the repo is the folder holding it.
   const repo = basename(commonDir) === ".git" ? dirname(commonDir) : commonDir;
-  return { repo, toplevel, branch: branch.trim() };
+  return { repo, gitDir: commonDir, toplevel, branch: branch.trim() };
 }
 
 async function pool<T>(items: readonly T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
@@ -259,7 +253,7 @@ export function defaultCommandRun(): CommandRun {
 }
 
 /** A command that fails, throws or outlives its budget all read as a failure with a reason. */
-async function attempt(run: CommandRun, argv: string[], cwd: string, timeoutMs: number): Promise<{ ok: true; stdout: string } | { ok: false; reason: string; stdout: string }> {
+async function attempt(run: CommandRun, argv: string[], cwd: string, timeoutMs: number): Promise<{ ok: true; stdout: string } | { ok: false; code: number; reason: string; stdout: string }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
     // The runner kills on its own timer; this one guards a runner that never settles.
@@ -269,9 +263,9 @@ async function attempt(run: CommandRun, argv: string[], cwd: string, timeoutMs: 
     const result = await Promise.race([run(argv, { cwd, timeoutMs }), timeout]);
     if (result.code === 0) return { ok: true, stdout: result.stdout };
     const reason = result.code === 124 ? "timed out" : result.stderr.trim().split("\n")[0] || `exit ${result.code}`;
-    return { ok: false, reason, stdout: result.stdout };
+    return { ok: false, code: result.code, reason, stdout: result.stdout };
   } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error), stdout: "" };
+    return { ok: false, code: -1, reason: error instanceof Error ? error.message : String(error), stdout: "" };
   } finally {
     clearTimeout(timer);
   }
@@ -283,12 +277,20 @@ export class PullRequestRegistry {
   private readonly live?: LivePublisher;
   private readonly log: (message: string) => void;
   private readonly timeouts: { gh: number; git: number };
+  private readonly saved?: PrefsFile<SavedList>;
   /** Each session's panes as of its last snapshot read; their folders are what gets resolved. */
   private readonly panes = new Map<string, readonly AgentView[]>();
   private cwds = new Map<string, CwdInfo | null>();
-  private repos = new Map<string, RepoPr[]>();
-  /** The failure last logged per repo, so a repeating one is logged once. */
-  private readonly failures = new Map<string, string>();
+  /** The repos (`owner/name`) each repo's remotes name, as of its `config` file's `stamp`. */
+  private names = new Map<string, { stamp: number; repos: readonly string[] }>();
+  private readonly mtime: (path: string) => number | undefined;
+  /** When the saved list was last written, and what it held. */
+  private savedAt = 0;
+  private savedPrs = "";
+  /** The last good read, newest first. */
+  private prs: RepoPr[] = [];
+  /** The failure last logged, so a repeating one is logged once. */
+  private failure = "";
   private lastRefresh = -Infinity;
   private inFlight: Promise<void> | undefined;
 
@@ -298,11 +300,26 @@ export class PullRequestRegistry {
     this.live = options.live;
     this.timeouts = options.timeouts ?? { gh: GH_TIMEOUT_MS, git: GIT_TIMEOUT_MS };
     this.log = options.log ?? ((message) => console.warn(`[bridge] pull requests: ${message}`));
+    this.mtime = options.mtime ?? ((path) => {
+      try {
+        return statSync(path).mtimeMs;
+      } catch {
+        return undefined;
+      }
+    });
+    if (options.file) {
+      this.saved = new PrefsFile(options.file, savedList);
+      this.saved.loadSync();
+      const kept = this.saved.current();
+      if (this.now() - kept.at < SAVED_MAX_AGE_MS) this.prs = kept.prs;
+      this.savedAt = kept.at;
+      this.savedPrs = JSON.stringify(kept.prs);
+    }
   }
 
   /**
-   * The open PRs across every resolved repo, each with the panes of this session sitting on its
-   * branch. Answers from the cache at once; a stale cache or a folder never seen starts a refresh.
+   * Every open PR, each with the panes of this session sitting on its branch. Answers from the cache
+   * at once; a stale cache or a folder never seen starts a refresh.
    */
   list(session: string, panes: readonly AgentView[]): PullRequestView[] {
     this.panes.set(session, panes);
@@ -310,55 +327,46 @@ export class PullRequestRegistry {
     const unseen = panes.some((pane) => pane.cwd && !this.cwds.has(pane.cwd));
     if (age >= PR_TTL_MS || (unseen && age >= NEW_CWD_MIN_MS)) void this.refresh();
 
+    return this.rows(panes);
+  }
+
+  /** Every PR the last refresh read, each with those of `panes` that sit on its branch. */
+  private rows(panes: readonly AgentView[]): PullRequestView[] {
     const onBranch = new Map<string, string[]>();
     for (const pane of panes) {
       const info = this.cwds.get(pane.cwd);
       if (!info?.branch) continue;
-      const key = `${info.repo}\0${info.branch}`;
-      onBranch.set(key, [...(onBranch.get(key) ?? []), pane.paneId]);
+      for (const name of this.names.get(info.repo)?.repos ?? []) {
+        const key = `${name}\0${info.branch}`;
+        onBranch.set(key, [...(onBranch.get(key) ?? []), pane.paneId]);
+      }
     }
-    return [...this.repos].flatMap(([repo, prs]) => prs.map((pr) => ({ ...pr, paneIds: onBranch.get(`${repo}\0${pr.branch}`) ?? [] })));
+    return this.prs.map((pr) => ({ ...pr, paneIds: onBranch.get(`${pr.repo.toLowerCase()}\0${pr.branch}`) ?? [] }));
+  }
+
+  /** The open PRs of the GitHub repos `cwd`'s remotes name, and that folder's place, as the last refresh read them. */
+  private inRepo(cwd: string): { info: CwdInfo; prs: RepoPr[] } | undefined {
+    const info = this.cwds.get(cwd);
+    const repos = info && this.names.get(info.repo)?.repos;
+    return info && repos ? { info, prs: this.prs.filter((pr) => repos.includes(pr.repo.toLowerCase())) } : undefined;
   }
 
   /**
-   * Open PR `number` of the repo `cwd` sits in, and the branch `cwd` has checked out, as the last
-   * refresh read them. Runs nothing: a folder or PR not read yet is undefined.
+   * Open PR `number` of `repo` (`owner/name`, any case), one of the repos `cwd`'s remotes name, and the
+   * branch `cwd` has checked out, as the last refresh read them. Without `repo`, the newest PR of that
+   * number among them: a fork's checkout can see `me/shop#5` and `acme/shop#5`. Runs nothing: a folder
+   * or PR not read yet is undefined.
    */
-  locate(cwd: string, number: number): { pr: RepoPr; checkedOut: string } | undefined {
-    const info = this.cwds.get(cwd);
-    const pr = info ? this.repos.get(info.repo)?.find((candidate) => candidate.number === number) : undefined;
-    return info && pr ? { pr, checkedOut: info.branch } : undefined;
+  locate(cwd: string, number: number, repo?: string): { pr: RepoPr; checkedOut: string } | undefined {
+    const place = this.inRepo(cwd);
+    const pr = place?.prs.find((candidate) => candidate.number === number && (!repo || candidate.repo.toLowerCase() === repo.toLowerCase()));
+    return place && pr ? { pr, checkedOut: place.info.branch } : undefined;
   }
 
   /** The open PR of the branch `cwd` has checked out, as the last refresh read it. Runs nothing. */
   onBranch(cwd: string): RepoPr | undefined {
-    const info = this.cwds.get(cwd);
-    return info?.branch ? this.repos.get(info.repo)?.find((candidate) => candidate.branch === info.branch) : undefined;
-  }
-
-  /** The open PRs of each GitHub repo in `names`, from one request, or why a repo has none. */
-  private async search(names: readonly string[], cwd: string): Promise<Array<RepoPr[] | string>> {
-    const result = await attempt(this.run, searchArgv(names), cwd, this.timeouts.gh);
-    let answers: Array<RepoPr[] | string | undefined> = [];
-    let reason = result.ok ? "" : result.reason;
-    try {
-      // A partial answer exits 1 with its JSON on stdout: what it holds still counts.
-      answers = parseSearch(result.stdout, names.length);
-    } catch (error) {
-      reason ||= error instanceof Error ? error.message : String(error);
-    }
-    return names.map((_, i) => answers[i] ?? (reason || "GitHub gave no answer"));
-  }
-
-  /** The open PRs `gh pr list` reads from `cwd`, or why it read none. */
-  private async listOne(cwd: string): Promise<RepoPr[] | string> {
-    const result = await attempt(this.run, ["gh", "pr", "list", "--state", "open", "--author", "@me", "--limit", "50", "--json", PR_FIELDS], cwd, this.timeouts.gh);
-    if (!result.ok) return result.reason;
-    try {
-      return parsePullRequests(result.stdout);
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
+    const repo = this.inRepo(cwd);
+    return repo?.info.branch ? repo.prs.find((candidate) => candidate.branch === repo.info.branch) : undefined;
   }
 
   /** One refresh at a time; a call while one runs joins it. */
@@ -369,65 +377,82 @@ export class PullRequestRegistry {
     return this.inFlight;
   }
 
-  private async read(): Promise<void> {
-    this.lastRefresh = this.now();
-    const before = JSON.stringify([...this.repos, ...this.cwds]);
-    const folders = [...new Set([...this.panes.values()].flatMap((panes) => panes.map((pane) => pane.cwd)).filter(Boolean))].slice(0, MAX_CWDS);
+  /** The viewer's open PRs, or why GitHub gave none. */
+  private async readMine(): Promise<RepoPr[] | string> {
+    // gh api needs no repo; the home folder is one every account has.
+    const result = await attempt(this.run, viewerArgv(), homedir(), this.timeouts.gh);
+    try {
+      // A partial answer exits 1 with its JSON on stdout: what it holds still counts.
+      return parseViewer(result.stdout);
+    } catch (error) {
+      return result.ok ? (error instanceof Error ? error.message : String(error)) : result.reason;
+    }
+  }
 
+  /** Where each pane's folder sits, and the GitHub repo each of those repos names. */
+  private async resolveFolders(): Promise<void> {
+    const folders = [...new Set([...this.panes.values()].flatMap((panes) => panes.map((pane) => pane.cwd)).filter(Boolean))].slice(0, MAX_CWDS);
     const cwds = new Map<string, CwdInfo | null>();
     await pool(folders, CONCURRENCY, async (cwd) => {
-      const repo = await attempt(this.run, ["git", "rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"], cwd, this.timeouts.git);
-      const branch = repo.ok ? await attempt(this.run, ["git", "branch", "--show-current"], cwd, this.timeouts.git) : undefined;
+      // A folder stays in its repo; only its branch moves, so a folder read before costs one git call.
+      const known = this.cwds.get(cwd);
+      const repo = known ? undefined : await attempt(this.run, ["git", "rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"], cwd, this.timeouts.git);
+      const branch = known || repo?.ok ? await attempt(this.run, ["git", "branch", "--show-current"], cwd, this.timeouts.git) : undefined;
+      if (known) {
+        // A folder gone since is resolved afresh by the next refresh; a slow git keeps what it said.
+        if (branch?.ok) cwds.set(cwd, { ...known, branch: branch.stdout.trim() });
+        else if (branch?.code === 124) cwds.set(cwd, known);
+        return;
+      }
       // A folder outside any repo is remembered as such, so it does not ask for a refresh again.
-      cwds.set(cwd, repo.ok ? parseRepo(repo.stdout, branch?.ok ? branch.stdout : "") ?? null : null);
+      cwds.set(cwd, repo?.ok ? parseRepo(repo.stdout, branch?.ok ? branch.stdout : "") ?? null : null);
+    });
+
+    // A repo's remotes are read from the first worktree seen, again only when its config file changes.
+    const where = new Map<string, CwdInfo>();
+    for (const info of cwds.values()) if (info && !where.has(info.repo)) where.set(info.repo, info);
+    const names = new Map<string, { stamp: number; repos: readonly string[] }>();
+    await pool([...where], CONCURRENCY, async ([repo, info]) => {
+      const stamp = this.mtime(join(info.gitDir, "config"));
+      const last = this.names.get(repo);
+      if (last && stamp !== undefined && last.stamp === stamp) return void names.set(repo, last);
+      const remotes = await attempt(this.run, ["git", "config", "--get-regexp", "^remote\\."], info.toplevel, this.timeouts.git);
+      // git config exits 1 when there is no remote at all; any other failure keeps what it last said.
+      if (remotes.ok || remotes.code === 1) names.set(repo, { stamp: stamp ?? NaN, repos: remoteRepos(remotes.ok ? remotes.stdout : "") });
+      else if (last) names.set(repo, last);
     });
     this.cwds = cwds;
+    this.names = names;
+  }
 
-    // Each repo is asked from the first worktree seen; pane order is the herd's triage order.
-    const where = new Map<string, string>();
-    for (const info of cwds.values()) if (info && !where.has(info.repo)) where.set(info.repo, info.toplevel);
-    const targets = [...where].slice(0, MAX_REPOS);
+  /** What each session's page would read, to tell whether a refresh changed it. */
+  private shown(): string {
+    return JSON.stringify([...this.panes].map(([session, panes]) => [session, this.rows(panes)]));
+  }
 
-    const named = new Map<string, string>();
-    const outcomes = new Map<string, RepoPr[] | string>();
-    await pool(targets, CONCURRENCY, async ([repo, cwd]) => {
-      const remotes = await attempt(this.run, ["git", "config", "--get-regexp", "^remote\\."], cwd, this.timeouts.git);
-      const name = remotes.ok ? remoteRepo(remotes.stdout) : undefined;
-      if (name === null) outcomes.set(repo, NO_GITHUB_REMOTE);
-      else if (name) named.set(repo, name);
-    });
-
-    // Two clones of one GitHub repo share a search.
-    const names = [...new Set(named.values())];
-    const answers = new Map<string, RepoPr[] | string>();
-    const cwd = targets.find(([repo]) => named.has(repo))?.[1] ?? "";
-    const jobs = [
-      ...Array.from({ length: Math.ceil(names.length / SEARCH_BATCH) }, (_, i) => names.slice(i * SEARCH_BATCH, (i + 1) * SEARCH_BATCH)).map((batch) => async () => {
-        for (const [i, answer] of (await this.search(batch, cwd)).entries()) answers.set(batch[i]!, answer);
-      }),
-      ...targets.filter(([repo]) => !named.has(repo) && !outcomes.has(repo)).map(([repo, cwd]) => async () => {
-        outcomes.set(repo, await this.listOne(cwd));
-      }),
-    ];
-    await pool(jobs, CONCURRENCY, (job) => job());
-    for (const [repo, name] of named) outcomes.set(repo, answers.get(name)!);
-
-    const repos = new Map<string, RepoPr[]>();
-    for (const [repo] of targets) {
-      const outcome = outcomes.get(repo)!;
-      if (typeof outcome !== "string") {
-        this.failures.delete(repo);
-        repos.set(repo, outcome);
-        continue;
+  private async read(): Promise<void> {
+    this.lastRefresh = this.now();
+    const before = this.shown();
+    // GitHub's answer does not depend on the folders, so the two run side by side.
+    const [mine] = await Promise.all([this.readMine(), this.resolveFolders()]);
+    if (typeof mine === "string") {
+      if (this.failure !== mine) this.log(mine);
+      this.failure = mine;
+    } else {
+      this.failure = "";
+      this.prs = mine;
+      const json = JSON.stringify(mine);
+      if (this.saved && (json !== this.savedPrs || this.now() - this.savedAt >= RESAVE_MS)) {
+        const at = this.now();
+        // A write that fails is tried again on the next refresh.
+        await this.saved.set({ at, prs: mine }).then(() => {
+          this.savedPrs = json;
+          this.savedAt = at;
+        }, () => {});
       }
-      if (this.failures.get(repo) !== outcome) this.log(`${basename(repo)}: ${outcome}`);
-      this.failures.set(repo, outcome);
-      const last = this.repos.get(repo);
-      if (last) repos.set(repo, last);
     }
-    this.repos = repos;
 
-    if (JSON.stringify([...this.repos, ...this.cwds]) !== before) {
+    if (this.shown() !== before) {
       for (const session of this.panes.keys()) this.live?.publish({ session, topic: "snapshot" });
     }
   }

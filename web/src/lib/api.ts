@@ -967,9 +967,13 @@ export function fetchArtifactMetadata(paneId: string, paths: string[], session?:
   return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/files?${query}`, session), { signal });
 }
 
-/** What pull request `pr` changes, read from the pane's folder (bridge/pane-diff.ts); asked for when the viewer opens. */
-export function fetchPaneDiff(paneId: string, pr: number, session?: string, signal?: AbortSignal): Promise<PaneDiff> {
-  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/diff?pr=${pr}`, session), { signal });
+/**
+ * What pull request `pr` of `repo` (`owner/name`) changes, read from the pane's folder
+ * (bridge/pane-diff.ts); asked for when the viewer opens. `repo` tells a fork's PR from its upstream's.
+ */
+export function fetchPaneDiff(paneId: string, pr: number, repo: string | undefined, session?: string, signal?: AbortSignal): Promise<PaneDiff> {
+  const query = new URLSearchParams({ pr: String(pr), ...(repo ? { repo } : {}) });
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/diff?${query}`, session), { signal });
 }
 
 /** What the pane's session changed, `scope` deep, with or without a pull request (bridge/pane-diff.ts `sessionDiff`). */
