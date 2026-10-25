@@ -53,6 +53,95 @@ describe("PaneWatcher", () => {
     abort.abort();
   });
 
+  it("after a write, reads a quiet pane at once and lets its changes out on the short gap for a moment", async () => {
+    const { events, live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 20, quietMaxMs: 400, publishGapMs: 1_000, typedReadMs: 5, typedGapMs: 10, typedForMs: 200 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
+    // Quiet: backed off to reads at 0, 20, 60, 140 ms, the next not before 300 ms.
+    await Bun.sleep(150);
+    pane.set("b");
+    watcher.wrote("s", "p");
+    await Bun.sleep(25);
+    expect(events.length).toBe(1);
+    pane.set("c");
+    watcher.wrote("s", "p");
+    await Bun.sleep(50);
+    // Inside the one-second gap, the typed gap let the second change out.
+    expect(events.length).toBe(2);
+    abort.abort();
+  });
+
+  it("reads a typed pane about once per typed gap while writes keep coming", async () => {
+    const { live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 5, quietMaxMs: 400, typedReadMs: 1, typedGapMs: 25 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
+    await Bun.sleep(5);
+    const before = pane.reads.length;
+    const started = Date.now();
+    for (let i = 0; i < 50; i++) {
+      watcher.wrote("s", "p");
+      await Bun.sleep(2);
+    }
+    // One read per 25 ms gap, plus the one a write pulls and the timer's slack, where the 5 ms fast
+    // cadence alone would read about once per write.
+    const reads = pane.reads.length - before;
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(reads).toBeLessThanOrEqual(Math.ceil((Date.now() - started) / 25) + 2);
+    expect(reads).toBeLessThan(25);
+    abort.abort();
+  });
+
+  it("keeps reading while writes come faster than its first read: a held key never freezes the mirror", async () => {
+    const { live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 50, quietMaxMs: 1_000, typedReadMs: 30, settledMs: 300, typedGapMs: 100 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
+    await Bun.sleep(5);
+    const before = pane.reads.length;
+    // Key repeat: a write every 10 ms for 400 ms, each sooner than the 30 ms read it asks for.
+    for (let i = 0; i < 40; i++) {
+      watcher.wrote("s", "p");
+      await Bun.sleep(10);
+    }
+    expect(pane.reads.length - before).toBeGreaterThanOrEqual(3);
+    abort.abort();
+  });
+
+  it("reads a burst of writes once it settles, not a typed gap later", async () => {
+    const { events, live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 20, quietMaxMs: 400, publishGapMs: 1_000, typedReadMs: 1, settledMs: 20, typedGapMs: 400 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
+    await Bun.sleep(150);
+    pane.set("w");
+    watcher.wrote("s", "p");
+    await Bun.sleep(10);
+    expect(events.length).toBe(1);
+    for (const next of ["wo", "wor", "word"]) {
+      pane.set(next);
+      watcher.wrote("s", "p");
+      await Bun.sleep(5);
+    }
+    // The burst's last key shows about 20 ms after it, inside both the 400 ms gap and the one-second one.
+    await Bun.sleep(40);
+    expect(events.length).toBe(2);
+    abort.abort();
+  });
+
+  it("ignores a write to a pane nobody watches", () => {
+    const { events, live } = recorder();
+    const watcher = new PaneWatcher(live);
+    watcher.wrote("s", "p");
+    expect(watcher.watching).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
   it("a change resets the wait to the fast cadence; quiet reads double it up to the cap", () => {
     expect([0, 1, 2, 3, 4, 10].map((quiet) => quietDelay(quiet, 200, 1_000))).toEqual([200, 400, 800, 1_000, 1_000, 1_000]);
     expect(quietDelay(3, 200, 0)).toBe(200);

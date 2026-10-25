@@ -75,11 +75,13 @@ const eventKey = (event: LiveEvent) => `${event.session}\u0000${event.topic}\u00
 /**
  * Publish one event key at most once per `gapMs`. A change after a quiet spell goes out after
  * `delayMs` (0 = at once); changes inside the gap collapse into one trailing publish, so a screen that
- * repaints four times a second costs a watching phone one re-read a second.
+ * repaints four times a second costs a watching phone one re-read a second. A publish may name a
+ * shorter gap for itself (a pane being typed into): it moves a trailing publish held for the longer
+ * one earlier, never later.
  */
 export class LiveThrottle {
   private readonly last = new Map<string, number>();
-  private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly pending = new Map<string, { timer: ReturnType<typeof setTimeout>; at: number }>();
 
   constructor(
     private readonly live: LivePublisher,
@@ -87,23 +89,26 @@ export class LiveThrottle {
     private readonly delayMs = 0,
   ) {}
 
-  publish(event: LiveEvent): void {
+  publish(event: LiveEvent, gapMs = this.gapMs): void {
     const key = eventKey(event);
-    if (this.pending.has(key)) return;
-    const wait = Math.max(this.delayMs, (this.last.get(key) ?? -Infinity) + this.gapMs - Date.now());
+    const now = Date.now();
+    const wait = Math.max(this.delayMs, (this.last.get(key) ?? -Infinity) + gapMs - now);
+    const held = this.pending.get(key);
+    if (held && held.at <= now + wait) return;
+    if (held) clearTimeout(held.timer);
     const fire = () => {
       this.pending.delete(key);
       this.last.set(key, Date.now());
       this.live.publish(event);
     };
     if (wait <= 0) fire();
-    else this.pending.set(key, setTimeout(fire, wait));
+    else this.pending.set(key, { timer: setTimeout(fire, wait), at: now + wait });
   }
 
   /** Drop what is held for this event: the producer stopped watching it. */
   forget(event: LiveEvent): void {
     const key = eventKey(event);
-    clearTimeout(this.pending.get(key));
+    clearTimeout(this.pending.get(key)?.timer);
     this.pending.delete(key);
     this.last.delete(key);
   }

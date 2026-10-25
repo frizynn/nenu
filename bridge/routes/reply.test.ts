@@ -5,7 +5,7 @@ import type { Config } from "../config.ts";
 import type { HerdrClient, PaneRead } from "../herdr-client.ts";
 import { PaneWrites } from "../pane-writes.ts";
 import type { SessionRuntime } from "../sessions.ts";
-import { replyPane, sendPane } from "./reply.ts";
+import { pasteFilePane, replyPane, sendPane } from "./reply.ts";
 
 // The two write routes as the phone uses them: the one-request send, and the older reply route that
 // the browser guard and the queue still call. Each test uses its own pane id, because the request-id
@@ -297,5 +297,30 @@ describe("POST reply (kept for the browser guard and the queue)", () => {
     expect(await res.json()).toMatchObject({ ok: true });
     expect(box.calls.map((c) => c.method)).toEqual(["pane.read", "pane.send_text", "pane.read", "pane.read", "pane.send_keys"]);
     expect(elapsed).toBeLessThan(250);
+  });
+});
+
+describe("paste-file route", () => {
+  const state = "/srv/nenu-state";
+  const uploads = "/srv/nenu-state/uploads";
+  const pasteCfg = { ...cfg, stateDir: state } as Config;
+
+  test("pastes only a path Nenu saved straight under an uploads directory", async () => {
+    for (const path of ["/etc/passwd", `${uploads}/../secrets.png`, `${uploads}/nested/w1_p1-mv8g-0a1b2c3d.png`, `${uploads}/w1_p1-mv8g-0a1b2c3d.png\nrm -rf /`, 7]) {
+      const box = new Box();
+      const res = await pasteFilePane(box as unknown as HerdrClient, pasteCfg, "w9:p1", post({ path }), recorder().audit, null, "default");
+      expect(res.status).toBe(400);
+      expect(box.calls).toEqual([]);
+    }
+  });
+
+  test("hands a saved file's path to the pane and audits it", async () => {
+    const box = new Box();
+    box.agent = "shell";
+    const rec = recorder();
+    const path = `${uploads}/w1_p1-mv8g-0a1b2c3d-notes.txt`;
+    const res = await pasteFilePane(box as unknown as HerdrClient, pasteCfg, "w9:p2", post({ path }), rec.audit, null, "default");
+    expect(await res.json()).toEqual({ ok: true });
+    expect(box.calls.filter((c) => c.method === "pane.send_text").map((c) => c.arg)).toEqual([path]);
   });
 });

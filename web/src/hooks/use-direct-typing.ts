@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   ChangeEvent,
+  ClipboardEvent as ReactClipboardEvent,
   CompositionEvent as ReactCompositionEvent,
   KeyboardEvent as ReactKeyboardEvent,
   RefObject,
@@ -38,7 +39,7 @@ function keyForInputType(inputType: string): string | null {
  * held with it (`alt+Left`), and Ctrl with a printable key is that chord (`ctrl+c`). Shift rides only
  * on keys a phone keyboard has no Shift for (`shift+Tab`): its auto-capital must not turn Return into
  * another key. Command stays the browser's (copy, paste, close the tab), and so does Ctrl+V where it
- * is the paste: the pasted text reaches the pane through the change path. Option alone with a
+ * is the paste: the paste event takes it from there (`onPaste`, ADR 0126). Option alone with a
  * printable key types a character on a Mac, so it stays text as well.
  */
 function keyForKeyDown(event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">): string | undefined {
@@ -73,6 +74,16 @@ interface DirectTypingOptions {
    *  where a keyboard nobody asked for would cover the mirror. */
   autoFocus: boolean;
   sendKeys: (keys: string[]) => Promise<boolean>;
+  /**
+   * A text paste as ONE bracketed paste, for a CLI known to take one (Claude, Codex): a paste of
+   * several lines then stays in its box instead of every line break pressing Enter. Null elsewhere: a
+   * pane that never asked for bracketed paste would print the markers, so it gets the text as keys.
+   */
+  pasteText: ((text: string) => Promise<boolean>) | null;
+  /** Save a pasted or picked file the way the composer attaches one; its path, or null once it said why not. */
+  saveFile: (file: File) => Promise<string | null>;
+  /** Paste a saved file's path into the pane (bridge `paste-file`). */
+  pastePath: (path: string) => Promise<boolean>;
   onActivate: () => void;
   focusInput: () => void;
 }
@@ -81,7 +92,7 @@ interface DirectTypingOptions {
 // with no trailing Enter. This hook owns the armed state, the transient Android IME composition
 // value, the pane-boundary reset, special-key capture, and the lifecycle rules that disarm it.
 // Transport ordering stays in useOrderedKeySender so this hook never permits concurrent one-shot
-// Herdr writes.
+// Herdr writes to one pane.
 //
 // Arming is a choice the operator can read on screen, never a gesture: the "Type into terminal" row
 // in the composer's + menu on a phone, the switch of that name in a desk's Terminal tab, or a
@@ -120,6 +131,9 @@ export function useDirectTyping({
   auto,
   autoFocus,
   sendKeys,
+  pasteText,
+  saveFile,
+  pastePath,
   onActivate,
   focusInput,
 }: DirectTypingOptions) {
@@ -140,8 +154,8 @@ export function useDirectTyping({
   const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
   const sender = useOrderedKeySender(sendKeys, () => {
     resetMode();
-    // A failed batch is the connection's word, not the view's: a terminal view on screen stays off
-    // until it is entered again. Armed from the + with no view, there is nothing to keep off.
+    // A failed batch (or a file that could not be saved) is the connection's word, not the view's: a
+    // terminal view on screen stays off until it is entered again. Armed from the + with no view, there is nothing to keep off.
     if (autoRef.current) optedOut.current = true;
     // Stop the phone keyboard too: otherwise continued typing after a transport failure silently
     // becomes a buffered Reply, which is a different action with an eventual Enter attached.
@@ -269,8 +283,10 @@ export function useDirectTyping({
   }, []);
 
   // Direct input never crosses a pane boundary. Reset also invalidates keys accumulated behind an
-  // in-flight call; the call already on the wire captured the old pane and cannot be recalled.
-  useEffect(() => {
+  // in-flight call; the call already on the wire captured the old pane and cannot be recalled. A layout
+  // effect, in the same commit that hands the sender the new pane's sendKeys, so a call finishing in
+  // between can never pump the old pane's keys into the new one.
+  useLayoutEffect(() => {
     resetMode();
     // The new pane's field is not the one that disarm was about — neither the blur it scheduled nor
     // the notice it owes. Dropping the debt matters because a pane can change WHILE hidden: a push
@@ -355,6 +371,46 @@ export function useDirectTyping({
     setValue("");
   }
 
+  /**
+   * Files pasted, picked or dropped while armed reach the pane as a terminal takes them: each saved
+   * as an attachment is, then its path pasted in its place in the line of keys. Uploads start at once;
+   * the keys typed meanwhile wait behind the paste, so a picture sits where it was pasted. A path saved
+   * after the mode ended, or for a pane no longer on screen, is not pasted.
+   */
+  function pasteFiles(files: Iterable<File>) {
+    for (const file of files) {
+      const saved = saveFile(file);
+      sender.enqueue([async (current, moved) => {
+        // A pane change gives the line up at once, so the next pane's keys never wait on this upload.
+        const path = await Promise.race([saved, moved.then(() => null)]);
+        if (!current()) {
+          setStatus("The file was not pasted: you left that pane before it was saved.", "info");
+          return true;
+        }
+        if (path === null) return false;
+        if (!activeRef.current) {
+          setStatus("The file was not pasted: typing into the terminal stopped first.", "info");
+          return true;
+        }
+        return pastePath(path);
+      }]);
+    }
+  }
+
+  function onPaste(event: ReactClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.items, (item) => (item.kind === "file" ? item.getAsFile() : null)).filter((file) => file !== null);
+    if (files.length > 0) {
+      event.preventDefault();
+      pasteFiles(files);
+      return;
+    }
+    const text = event.clipboardData.getData("text/plain");
+    // An escape inside a paste would end it early and type the rest as keys; that text goes as keys.
+    if (pasteText === null || text === "" || /[\x1b\x9b]/.test(text)) return;
+    event.preventDefault();
+    sender.enqueue([() => pasteText(text)]);
+  }
+
   function onKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     const key = keyForKeyDown(event);
     if (key === undefined) return;
@@ -372,5 +428,7 @@ export function useDirectTyping({
     onCompositionStart,
     onCompositionEnd,
     onKeyDown,
+    onPaste,
+    pasteFiles,
   };
 }

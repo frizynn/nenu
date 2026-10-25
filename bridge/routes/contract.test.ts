@@ -36,7 +36,7 @@ const CASES: Case[] = [
   pane("", "GET", "read"),
   ...["history", "conversations", "skills", "models", "file", "subagents", "subagent-history", "files", "html-preview", "journal-image", "queue", "activity", "diff"]
     .map((action) => pane(action, "GET", "read")),
-  ...["start", "send", "reply", "keys", "clear-draft", "take-back", "interrupt", "upload", "close", "rename", "connect", "send-report", "queue"]
+  ...["start", "send", "reply", "keys", "paste-file", "clear-draft", "take-back", "interrupt", "upload", "close", "rename", "connect", "send-report", "queue"]
     .map((action) => pane(action, "POST", "write")),
   // A pane action's gate follows its level, not the method: a mismatched method still clears the
   // gate and the session lookup before it 405s.

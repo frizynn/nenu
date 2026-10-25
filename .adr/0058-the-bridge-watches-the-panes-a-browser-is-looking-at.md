@@ -4,6 +4,8 @@
 - **Amends:** [ADR 0054](./0054-the-browser-hears-what-changed-not-the-state.md). The stream still
   names only what changed and the fallback poll stays. What changes is the clause "a terminal mirror
   on screen keeps its fast poll", and the hidden mirror's fallback goes from 4 s to 10 s.
+- **Amended by:** [ADR 0126](./0126-a-paste-into-the-terminal-goes-as-a-terminal-pastes.md): a write
+  sets when a watched pane is read next, and for 1.5 s after it each change goes out at once.
 - **Trail:** `bridge/pane-watcher.ts` · `bridge/journal-watch.ts` · `bridge/live-events.ts` ·
   `bridge/routes/events.ts` · `web/src/lib/revalidation.ts`
 

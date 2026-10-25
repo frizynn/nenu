@@ -44,6 +44,22 @@ describe("LiveThrottle", () => {
     expect(events).toEqual([a, b, a]);
   });
 
+  it("lets a publish name a shorter gap, which moves a held trailing event earlier and never later", async () => {
+    const events: LiveEvent[] = [];
+    const throttle = new LiveThrottle({ publish: (event) => events.push(event) }, 200);
+    const a = { session: "s", topic: "pane" as const, paneId: "a" };
+    throttle.publish(a);
+    throttle.publish(a);
+    expect(events).toEqual([a]);
+    throttle.publish(a, 20);
+    await Bun.sleep(40);
+    expect(events).toEqual([a, a]);
+    throttle.publish(a, 20);
+    throttle.publish(a);
+    await Bun.sleep(40);
+    expect(events).toEqual([a, a, a]);
+  });
+
   it("waits out the delay before the first event, and forgets a key on request", async () => {
     const events: LiveEvent[] = [];
     const throttle = new LiveThrottle({ publish: (event) => events.push(event) }, 0, 10);
