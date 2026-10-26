@@ -1,6 +1,6 @@
 # 0080. The desk's bar lists projects and chats; the tree is Search's, and a finished chat is a +1 on its row
 
-- **Status:** Amended by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24), which removed projects, coordinators and threads. Accepted (2026-10-15). Amends [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md):
+- **Status:** Point 1's lead (New chat, Search, Home) is amended by [ADR 0129](./0129-the-desks-bar-ends-in-homes-counts-and-small-actions.md) (2026-10-26): Search leads with New beside it, and Home's counts end the bar. Amended by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24), which removed projects, coordinators and threads. Accepted (2026-10-15). Amends [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md):
   the tree is still drawn as Organizations draws it, but the desk's sidebar no longer draws it.
   Point 3's "A phone keeps its toast" is amended by [ADR 0094](./0094-a-finished-agent-is-a-mark-on-its-row-on-a-phone-too.md). Point 1 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md): the bar leads with Projects, not Routines. Point 1's period names are amended by [ADR 0107](./0107-home-lists-the-projects-as-rows.md).
 - **Trail:** `web/src/components/desk-nav.tsx` · `web/src/lib/desk-nav.ts` ·
