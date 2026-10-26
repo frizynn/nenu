@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-26
+
+### Added
+
+- A desk's Home starts a chat from its own composer (Start), in the folder this device last started one, through the New flow's own start (ab0e9d6a, 58eee76b).
+- A desk's Home lays the herd out as a Board by state: Needs you, Working, Ready to review, and the chats at rest folded at the foot (ab0e9d6a, 13d027ff).
+
+### Changed
+
+- On a desk, Recents, Workspaces and PRs are views of Home's header, beside its counts; the view is kept per device. The phone's Home is unchanged (ab0e9d6a).
+
 ## [2.8.1] - 2026-10-26
 
 ### Fixed
