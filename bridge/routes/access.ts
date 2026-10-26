@@ -34,9 +34,11 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
  *  - Same-origin only (Origin host must equal Host) — defeats cross-site requests/CSRF. Browsers
  *    omit Origin on same-origin GETs (so the snapshot poll passes); they send it on POSTs.
  *    localhost and explicitly-configured origins are also allowed.
- *  - Origin required for writes: a state-changing (`level === "write"`) request with no Origin is
- *    trusted only from loopback (curl on the host). Browsers always send Origin on fetch/SW POSTs,
- *    so a missing Origin on a remote write is a non-browser or Origin-stripped request — reject it.
+ *  - Origin required for writes: a state-changing (`level === "write"`, not GET) request with no
+ *    Origin is trusted only from loopback (curl on the host). Browsers always send Origin on fetch/SW
+ *    POSTs, so a missing Origin on a remote write is a non-browser or Origin-stripped request — reject
+ *    it. A write-level GET is exempt: it only reads, like the snapshot poll, and the device gate below
+ *    still decides who may make it.
  *  - Tailscale identity: when a trusted user is configured under `tailscale serve`, the request
  *    must carry a matching `Tailscale-User-Login`. A missing header is rejected too — serve injects
  *    none for tagged nodes. Under COLLIE_SKIP_SERVE=1 or COLLIE_TRUSTED_USER_OPTIONAL=1, only a
@@ -68,8 +70,9 @@ export function checkAccess(
       LOOPBACK_HOST.test(originHost) ||
       cfg.allowedOrigins.includes(origin);
     if (!allowed) return { ok: false, reason: "cross-origin rejected" };
-  } else if (level === "write" && !LOOPBACK_HOST.test(host)) {
+  } else if (level === "write" && req.method !== "GET" && !LOOPBACK_HOST.test(host)) {
     // A write with no Origin header from a non-loopback Host isn't a real browser request — refuse.
+    // A write-level GET (the folder picker) changes nothing and a browser sends it without Origin.
     return { ok: false, reason: "origin required" };
   }
 

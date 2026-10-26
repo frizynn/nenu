@@ -126,7 +126,8 @@ export function DirPicker({ home, shortcuts, onHome, onPick, session }: DirPicke
       <section aria-label="Folders" className="flex-1">
         {showShortcuts && <h3 className="px-2 pt-2 pb-1 text-footnote font-medium text-muted-foreground">In {shown === "~" ? "Home" : baseName(shown)}</h3>}
         {listing.state === "loading" && <p className="px-2 py-3 text-subhead text-muted-foreground">Loading…</p>}
-        {listing.state === "error" && <p className="px-2 py-3 text-subhead text-muted-foreground">Can't list this folder. You can still use the path as typed.</p>}
+        {/* A `~` path needs home to resolve, and home comes from a listing; without one, Use stays off. */}
+        {listing.state === "error" && <p className="px-2 py-3 text-subhead text-muted-foreground">{target ? "Can't list this folder. You can still use the path as typed." : "Can't list this folder. Type its full path to use it."}</p>}
         {dirs && matches.length === 0 && <p className="px-2 py-3 text-subhead text-muted-foreground">{filter ? `No folder starts with “${filter}”.` : "No folders here."}</p>}
         <ul>
           {matches.map((name) => (
