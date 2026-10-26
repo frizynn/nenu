@@ -11,7 +11,9 @@ import {
   spawnState,
   suggestDirs,
   PERMISSIONS,
+  loadModel,
   loadPermission,
+  saveModel,
   savePermission,
   withDir,
   type SpawnDeps,
@@ -96,7 +98,7 @@ describe("spawn", () => {
     expect(result).toEqual({ ok: true, pane });
     expect(body).toEqual({ label: "api", cwd: "/srv/api" });
     await vi.waitFor(() => expect(spawnState(pane.paneId)?.phase).toBe("done"));
-    expect(d.startAgent).toHaveBeenCalledWith("w9:p1", "claude", undefined, "plan");
+    expect(d.startAgent).toHaveBeenCalledWith("w9:p1", "claude", undefined, "plan", undefined);
     expect(d.changeMessageQueue).toHaveBeenCalledWith("w9:p1", expect.objectContaining({ action: "add", scope: "s1", text: "fix the tests" }), undefined);
     expect(loadAgent()).toBe("claude");
     expect(loadPermission("claude")).toBe("plan");
@@ -112,6 +114,30 @@ describe("spawn", () => {
     expect(d.startAgent).not.toHaveBeenCalled();
     expect(spawnState("w9:p2")).toBeUndefined();
     expect(loadAgent()).toBe("shell");
+  });
+
+  it("opens a pane beside an existing tab's and starts the chosen model", async () => {
+    let url = "";
+    let body: unknown;
+    server.use(http.post("/api/tab/:tabId/split", async ({ request }) => { url = new URL(request.url).pathname; body = await request.json(); return HttpResponse.json({ ok: true, pane: { ...pane, paneId: "w9:p3" } }); }));
+    const d = deps();
+    await spawn(input({ target: { kind: "pane", tabId: "w9:t2" }, model: "opus[1m]", message: "" }), d);
+    expect(url).toBe("/api/tab/w9%3At2/split");
+    expect(body).toEqual({ cwd: "/srv/api" });
+    await vi.waitFor(() => expect(spawnState("w9:p3")?.phase).toBe("done"));
+    expect(d.startAgent).toHaveBeenCalledWith("w9:p3", "claude", undefined, "plan", "opus[1m]");
+    expect(loadModel("claude")).toBe("opus[1m]");
+    expect(loadModel("codex")).toBe("default");
+  });
+
+  it("keeps the model remembered when a start sends none", async () => {
+    saveModel("claude", "opus");
+    server.use(http.post("/api/workspace", () => HttpResponse.json({ ok: true, pane: { ...pane, paneId: "m1" } })));
+    const d = deps();
+    await spawn(input({ model: undefined, message: "" }), d);
+    await vi.waitFor(() => expect(spawnState("m1")?.phase).toBe("done"));
+    expect(d.startAgent).toHaveBeenCalledWith("m1", "claude", undefined, "plan", undefined);
+    expect(loadModel("claude")).toBe("opus");
   });
 
   it("returns the bridge error and remembers nothing when creation fails", async () => {

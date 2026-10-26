@@ -44,6 +44,13 @@ the socket assumptions behind the design in [`ARCHITECTURE.md`](./ARCHITECTURE.m
 | `agent.send` | `{target, text}` | (ack) — writes **literal** text, no Enter |
 | `pane.process_info` | `{pane_id}` | `process_info` → `{pane_id, shell_pid, foreground_process_group_id, foreground_processes[{pid, name, argv0, argv, cmdline, cwd}]}` |
 | `agent.start` | `{pane_id, kind, name, timeout_ms, args}` | (ack) once the agent is detected ready; `agent_pane_busy` unless the shell is at its prompt, `timeout` ("timed out waiting for agent startup") when it never comes up |
+| `pane.layout` | `{pane_id}` | `pane_layout` → `layout{…}` (that pane's tab; see Split below) |
+| `pane.split` | `{target_pane_id, direction, cwd?, focus?}` | `pane_info` → `pane{…}` (the new shell; see Split below) |
+
+- **`agent.start` types its command into the pane's shell, quoting each argument** (live-probed
+  2026-10-27 on 0.9.5): `args: ["--model", "opus[1m]"]` arrived as `claude --model 'opus[1m]'`, and
+  the reply echoes the `argv` it used. Nenu still passes only arguments from its own tables
+  (`bridge/agent-start.ts`).
 
 - **A shell is at its prompt exactly when `foreground_process_group_id == shell_pid`** (live-probed
   2026-10-15 on 0.9.3, disposable server): at the prompt both were the zsh's pid and the foreground
@@ -280,6 +287,24 @@ Three sibling RPCs set a display label on a workspace, tab, or pane. Live-verifi
 - **`agent.rename` `{target, name}`** also exists in the schema, but it is a DIFFERENT operation
   (renames an agent session, not a pane/tab/workspace) — **unverified and unwired by Nenu**. Listed
   only so it isn't mistaken for the label renames above.
+
+## Split — a new pane in an existing tab (verified)
+
+Live-probed 2026-10-27 on Herdr 0.9.5 in an isolated lab session (`bridge/herdr-client.ts` `splitTab`).
+
+| Method | Params | Returns (`result.type`) |
+|---|---|---|
+| `pane.layout` | `{pane_id}` | `pane_layout` → `layout{workspace_id, tab_id, area, focused_pane_id, panes[{pane_id, focused, rect{x,y,width,height}}], splits[]}` |
+| `pane.split` | `{target_pane_id, direction, cwd?, focus?, ratio?, env?}` | `pane_info` → `pane{…}` (the new shell pane) |
+
+- **The pane to split is `target_pane_id`.** `pane_id` and `target` are silently ignored, and Herdr
+  then splits the focused pane: three probes naming another pane by those fields all split the
+  focused one. Only `direction` is required (`right` | `down`; anything else is
+  ``invalid_request: unknown variant``).
+- `focus` defaults to `false`; `cwd` omitted starts the new shell in the split pane's folder.
+- `rect` is in terminal cells, so a pane twice as wide as tall is about square on screen.
+- Nenu checks the new pane's `tab_id` against the layout's and closes a pane that landed elsewhere,
+  so a rename of `target_pane_id` fails a start instead of splitting the focused pane.
 
 ## Close methods — kill a pane or a whole tab (verified)
 

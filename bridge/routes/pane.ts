@@ -2,7 +2,7 @@ import { launchAgent, startPaneAgent } from "../agent-start.ts";
 import type { Config } from "../config.ts";
 import type { HerdrClient, PaneRead } from "../herdr-client.ts";
 import { JsonBody, notModified, notModifiedResponse, SharedLoads } from "../http-cache.ts";
-import { discoverPaneModels } from "../models.ts";
+import { discoverPaneModels, startCatalog } from "../models.ts";
 import { discoverPaneSkills } from "../skills.ts";
 import { object as record } from "../subagent-files.ts";
 import { withWeekly } from "../claude-telemetry.ts";
@@ -45,15 +45,16 @@ export const panePaneActions: Record<string, PaneAction> = {
   start: {
     level: "write",
     marksSeen: true,
-    async handle({ audit }, { req, rt, paneId, device }) {
-      const launch = launchAgent(await req.json().catch(() => null));
-      if (!launch) return jsonError("Choose Codex or Claude Code and a listed permission level.", 400, null);
+    async handle({ cfg, audit }, { req, rt, paneId, device }) {
+      const models = await startCatalog(cfg.journalRoots);
+      const launch = launchAgent(await req.json().catch(() => null), models);
+      if (!launch) return jsonError("Choose Codex or Claude Code, a listed permission level and a listed model.", 400, null);
       try {
         // A pane created a moment ago is not in the cached snapshot yet; refresh once before refusing it.
         const isPane = (p: { paneId: string }) => p.paneId === paneId;
         const shell = rt.engine.current().shellPanes.find(isPane) ?? (await rt.engine.refresh()).shellPanes.find(isPane);
-        await startPaneAgent(shell, launch, rt.herdr);
-        audit.record({ action: "agent.start", paneId, session: rt.name, device, detail: { agent: launch.kind, permission: launch.permission } });
+        await startPaneAgent(shell, launch, models, rt.herdr);
+        audit.record({ action: "agent.start", paneId, session: rt.name, device, detail: { agent: launch.kind, permission: launch.permission, model: launch.model } });
         return json({ ok: true }, null);
       } catch (err) {
         return jsonError(err instanceof Error ? err.message : "Agent startup failed.", 409, null);

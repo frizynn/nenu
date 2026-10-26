@@ -69,7 +69,18 @@ describe("NewAgentForm", () => {
     await user.type(screen.getByLabelText("Name (optional)"), "web");
     await user.type(screen.getByLabelText("First message (optional)"), "hello");
     await user.click(screen.getByRole("button", { name: "Start Codex" }));
-    expect(onSubmit).toHaveBeenCalledWith({ agent: "codex", cwd: "/old/project", name: "web", message: "hello", permission: "full" });
+    expect(onSubmit).toHaveBeenCalledWith({ agent: "codex", cwd: "/old/project", name: "web", message: "hello", permission: "full", model: "default" });
+  });
+
+  it("takes the folder of another place, and keeps the one shown while the herd moves under the same place", async () => {
+    const props: FormProps = { defaultCwd: `${HOME}/code/api`, liveDirs: [], readOnly: false, onSubmit: vi.fn(async () => null), place: "tab" };
+    const { rerender } = render(<Hosted {...props} />);
+    await waitFor(() => expect(directory()).toHaveAccessibleName("Directory: ~/code/api"));
+    // A poll: another pane of the same place is focused now, in another folder.
+    rerender(<Hosted {...props} defaultCwd={`${HOME}/other`} />);
+    expect(directory()).toHaveAccessibleName("Directory: ~/code/api");
+    rerender(<Hosted {...props} defaultCwd={`${HOME}/code/kiwi`} place="pane:t2" />);
+    expect(directory()).toHaveAccessibleName("Directory: ~/code/kiwi");
   });
 
   it("offers each CLI its own permissions and warns about the dangerous ones", async () => {

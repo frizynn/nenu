@@ -789,11 +789,30 @@ export function createTab(
   });
 }
 
-/** `permission` is a choice from the bridge's table (lib/spawn's PERMISSIONS); omitted = the CLI's default. */
-export function startAgent(paneId: string, agent: "codex" | "claude", session?: string, permission?: string): Promise<ActionResponse> {
-  return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/start`, session), {
-    method: "POST", body: JSON.stringify({ agent, permission }),
+/** Open a fresh shell pane in an existing tab, beside its largest pane. `cwd` omitted = that pane's folder. */
+export function splitTab(tabId: string, opts: { cwd?: string } = {}, session?: string): Promise<CreateResponse> {
+  return req<CreateResponse>(withSession(`/api/tab/${encodeURIComponent(tabId)}/split`, session), {
+    method: "POST",
+    body: JSON.stringify(opts),
   });
+}
+
+/**
+ * `permission` and `model` are choices from the bridge's tables (lib/spawn's PERMISSIONS, and
+ * {@link fetchStartModels}); omitted = the CLI's own default.
+ */
+export function startAgent(paneId: string, agent: "codex" | "claude", session?: string, permission?: string, model?: string): Promise<ActionResponse> {
+  return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/start`, session), {
+    method: "POST", body: JSON.stringify({ agent, permission, model }),
+  });
+}
+
+/** A model a new agent may start on; `id` "default" leaves the agent's own default in charge. */
+export interface StartModel { id: string; label: string; hint: string }
+export type StartModels = Record<"claude" | "codex", StartModel[]>;
+/** The models the bridge lets a new chat start on, per agent (bridge/agent-start.ts). */
+export function fetchStartModels(session?: string, signal?: AbortSignal): Promise<StartModels> {
+  return doReq(withSession("/api/start/models", session), { signal });
 }
 
 /** Folder names under the bridge host's home directory, for the new-chat picker. */
