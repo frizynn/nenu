@@ -1,40 +1,24 @@
-import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
+
+import { diskFs, repoRoot, type RepoFs } from "./repo-root.ts";
 
 /**
  * The project a pane works in, as the sidebar groups chats by it: the repository its folder sits in,
  * named by the repo its `origin` remote names (else its first remote, else the checkout's folder), so
- * a repo's clones and worktrees join under one name; a folder in no repo is named by itself. Read from
- * the filesystem without running git: walk up from the cwd to the first `.git`, a directory in a main
- * checkout and a file (`gitdir: <main>/.git/worktrees/<name>`) in a worktree. The walk stops below the
- * home folder, whose `.git` is usually a dotfiles repo rather than the project. Only the last segment
- * of a remote's path comes out, never its host or any credential in it.
+ * a repo's clones and worktrees join under one name; a folder in no repo is named by itself. Only the
+ * last segment of a remote's path comes out, never its host or any credential in it.
  */
-export function projectOf(cwd: string, fs: ProjectFs = realFs, home = homedir()): string | undefined {
+export function projectOf(cwd: string, fs: RepoFs = diskFs, home = homedir()): string | undefined {
   if (!cwd || !isAbsolute(cwd)) return undefined;
-  for (let dir = cwd, i = 0; i < 64 && dir !== home; i++) {
-    const git = join(dir, ".git");
-    const kind = fs.kind(git);
-    if (kind === "dir") return remoteName(fs.read(join(git, "config"))) ?? (basename(dir) || undefined);
-    if (kind === "file") {
-      const target = /^gitdir:\s*(.+)$/m.exec(fs.read(git) ?? "")?.[1]?.trim();
-      if (!target) return basename(dir) || undefined;
-      const gitDir = isAbsolute(target) ? target : resolve(dir, target);
-      // <main>/.git/worktrees/<name> → <main>/.git, which holds the repo's config.
-      const marker = gitDir.lastIndexOf("/.git/worktrees/");
-      const common = marker > 0 ? gitDir.slice(0, marker + "/.git".length) : gitDir;
-      return remoteName(fs.read(join(common, "config"))) ?? (basename(marker > 0 ? dirname(common) : dir) || undefined);
-    }
-    const up = dirname(dir);
-    if (up === dir) break;
-    dir = up;
-  }
-  return basename(cwd) || undefined;
+  const repo = repoRoot(cwd, home, fs);
+  if (!repo) return basename(cwd) || undefined;
+  const config = join(repo.commonDir, "config");
+  return configRepoName(fs.kind(config) === "file" ? fs.read(config) : undefined) ?? (basename(repo.root).replace(/\.git$/, "") || undefined);
 }
 
 /** The repo name a git config's remotes give: `origin`'s URL first, else the first remote's. */
-export function remoteName(config: string | undefined): string | undefined {
+export function configRepoName(config: string | undefined): string | undefined {
   if (!config) return undefined;
   const urls = new Map<string, string>();
   let remote: string | undefined;
@@ -51,43 +35,27 @@ export function remoteName(config: string | undefined): string | undefined {
   return name || undefined;
 }
 
-export interface ProjectFs {
-  kind(path: string): "dir" | "file" | undefined;
-  read(path: string): string | undefined;
-}
-
-const realFs: ProjectFs = {
-  kind(path) {
-    try {
-      const stat = statSync(path);
-      return stat.isDirectory() ? "dir" : stat.isFile() ? "file" : undefined;
-    } catch {
-      return undefined;
-    }
-  },
-  read(path) {
-    try {
-      return readFileSync(path, "utf8");
-    } catch {
-      return undefined;
-    }
-  },
-};
-
 /** How long a folder's project is kept before it is read again: long enough that a poll reads no disk. */
 const PROJECT_TTL_MS = 60_000;
 
-/** `projectOf` per folder, read again once a minute and forgotten once no pane is in it. */
+/**
+ * `projectOf` per folder, read again about once a minute and forgotten once no pane is in it. Each entry's
+ * minute is stretched by up to half again, so folders seen in one poll are not all read again in one.
+ */
 export class ProjectCache {
-  private entries = new Map<string, { project: string | undefined; at: number }>();
+  private entries = new Map<string, { project: string | undefined; until: number }>();
 
-  constructor(private readonly now: () => number = Date.now, private readonly read: (cwd: string) => string | undefined = projectOf) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly read: (cwd: string) => string | undefined = projectOf,
+    private readonly jitter: () => number = Math.random,
+  ) {}
 
   get(cwd: string): string | undefined {
     const found = this.entries.get(cwd);
-    if (found && this.now() - found.at < PROJECT_TTL_MS) return found.project;
+    if (found && this.now() < found.until) return found.project;
     const project = this.read(cwd);
-    this.entries.set(cwd, { project, at: this.now() });
+    this.entries.set(cwd, { project, until: this.now() + PROJECT_TTL_MS * (1 + this.jitter() / 2) });
     return project;
   }
 

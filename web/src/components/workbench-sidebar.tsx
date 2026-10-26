@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, FolderTree, Gauge, GitPullRequest, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
+import { FolderTree, Gauge, GitPullRequest, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { DeskLists, OnlyList, ProjectList, useHeldChats } from "@/components/desk-nav";
 import { SessionSwitcher } from "@/components/session-switcher";
@@ -16,9 +16,9 @@ import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { currentMachine, machineSearch, type MachineSearchGroup } from "@/lib/machines";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
-import { COUNTED_STATES, deskChats, type CountedState, type DeskChat } from "@/lib/desk-nav";
+import { COUNTED, deskChats, type CountedState, type DeskChat } from "@/lib/desk-nav";
 import { useProjectView } from "@/lib/desk-projects";
-import { needsYouCount, reviewQueue } from "@/lib/home-stats";
+import { reviewQueue } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, panePath, settingsPath, usagePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
@@ -62,7 +62,6 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   const listId = useId();
   const navigate = useNavigate();
   const { key } = useLocation();
-  const attention = needsYouCount(data);
   const phone = variant !== "sidebar";
   const order = answered?.query === query ? answered.order : undefined;
   const results: Array<SearchGroup | MachineSearchGroup> = searching ? [...navSearch(data, query, { order }), ...machineSearch(data, query, { order })] : [];
@@ -189,7 +188,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
 
       {/* The host belongs to browsing: on a phone's Search sheet, until something is typed. */}
       {(!phone || !query.trim()) && <div className="nav-footer">
-        {variant !== "sheet" && <DeskStatus data={data} attention={attention} only={only} onPick={(state) => {
+        {variant !== "sheet" && <DeskStatus data={data} only={only} onPick={(state) => {
           closeSearch();
           setOnly(state === only ? undefined : state);
         }} />}
@@ -269,7 +268,8 @@ function PhoneLists({ data, drawer, only, onClear, onNewChat }: { data: HomeData
   const { paneId } = useParams();
   const { view } = useProjectView();
   const held = useHeldChats();
-  const chats = drawer ? drawerSections(data, paneId) : undefined;
+  const sections = drawer ? drawerSections(data, paneId) : undefined;
+  const chats = held.order(deskChats(data));
   const now = Date.now();
   const row = (chat: DeskChat) => <ChatRow key={chat.paneId} pane={chat.pane} current={chat.paneId === paneId} now={now} session={data.session} />;
   const section = (label: string, rows: readonly DrawerChat[], counted: boolean, end?: ReactNode) => (rows.length > 0 || end) && (
@@ -282,13 +282,13 @@ function PhoneLists({ data, drawer, only, onClear, onNewChat }: { data: HomeData
         session={data.session} />)}
     </section>
   );
-  if (drawer && only) return <OnlyList state={only} chats={held.order(deskChats(data)).filter((chat) => chat.pane.status === only)} row={row} onClear={onClear} className="nav-group" />;
+  if (drawer && only) return <OnlyList key={only} state={only} chats={chats} row={row} onClear={onClear} className="nav-group" />;
   const projects = drawer && view === "projects";
   return <>
-    {chats && section("Needs you", chats.needsYou, true)}
-    {projects && <ProjectList chats={held.order(deskChats(data))} held={held} row={row} currentPaneId={paneId} end={<ViewToggle />} className="nav-group" />}
+    {sections && section("Needs you", sections.needsYou, true)}
+    {projects && <ProjectList chats={chats} held={held} row={row} currentPaneId={paneId} end={<ViewToggle />} className="nav-group" />}
     <SidebarTree data={data} folded onNewChat={onNewChat} />
-    {chats && !projects && section("Recent", chats.recent, false, <ViewToggle />)}
+    {sections && !projects && section("Recent", sections.recent, false, <ViewToggle />)}
     <MachinesSlot data={data} place="nav" />
   </>;
 }
@@ -330,18 +330,17 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
  * finished unseen. A tap lists only those chats in the bar, pressed until it is tapped again or Show all.
  * Every count shows at zero too, so the rows never move; a state's glyph shows only while it counts something.
  */
-function DeskStatus({ data, attention, only, onPick }: { data: HomeData; attention: number; only?: CountedState; onPick: (state: CountedState) => void }) {
-  const count = (status: CountedState) => status === "blocked" ? attention : data.agents.filter((pane) => pane.status === status).length;
+function DeskStatus({ data, only, onPick }: { data: HomeData; only?: CountedState; onPick: (state: CountedState) => void }) {
   return (
     <section aria-label="Home" className="nav-status">
-      {COUNTED_STATES.map(([status, label]) => {
-        const n = count(status);
+      {COUNTED.map(({ state, label }) => {
+        const n = data.agents.filter((pane) => pane.status === state).length;
         return (
-          <button key={status} type="button" className="nav-row" aria-label={`${label}, ${n}`} aria-pressed={only === status}
-            data-live={n > 0 || undefined} onClick={() => onPick(status)}>
-            <span className="nav-lead">{n > 0 && <StatusDot status={status} />}</span>
+          <button key={state} type="button" className="nav-row" aria-label={`${label}, ${n}`} aria-pressed={only === state}
+            data-live={n > 0 || undefined} onClick={() => onPick(state)}>
+            <span className="nav-lead">{n > 0 && <StatusDot status={state} />}</span>
             <span className="nav-row-text">{label}</span>
-            <span className="nav-row-meta" aria-hidden>{n}<ChevronRight size={14} /></span>
+            <span className="nav-row-meta" aria-hidden>{n}</span>
           </button>
         );
       })}

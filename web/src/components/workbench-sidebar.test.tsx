@@ -647,11 +647,13 @@ describe("the sidebar by project", () => {
     expect(projectRows().every((row) => row.getAttribute("aria-expanded") === "false")).toBe(true);
     const shop = projects().getByRole("button", { name: /^shop, / });
     expect(shop).toHaveAccessibleName("shop, 2 chats, 1 working, 1 done, 1 new");
-    expect(shop.querySelector(".nav-row-meta")).toHaveTextContent("2");
-    expect(shop.querySelector(".nav-row-meta [data-node-state='working']")).not.toBeNull();
+    // The state sits where a chat's mark does, the count apart from it, so neither reads as the other.
+    expect(shop.querySelector(".nav-row-meta")).toHaveTextContent(/^2$/);
+    expect(shop.querySelector(".nav-lead [data-node-state='working']")).not.toBeNull();
+    expect(shop.querySelector(".nav-row-meta [data-node-state]")).toBeNull();
     expect(shop.querySelector("[data-unread]") ?? shop.querySelector(".nav-unread")).toHaveTextContent("+1");
     // A resting project draws no state.
-    expect(projects().getByRole("button", { name: /^notes, / }).querySelector(".nav-row-meta svg")).toBeNull();
+    expect(projects().getByRole("button", { name: /^notes, / }).querySelector(".nav-lead")).toBeEmptyDOMElement();
     // Folded, its chats are out of reach.
     expect(projects().queryByRole("link", { name: /^clone/ })).toBeNull();
   });
@@ -712,11 +714,34 @@ describe("the sidebar by project", () => {
     expect(within(screen.getByRole("region", { name: "Recent" })).getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("gives the drawer's counts and its toggle a finger's reach, side by side", () => {
+  it("gives the drawer's counts, its toggle and a heading's text buttons a finger's reach, the counts side by side", () => {
     const nav = readFileSync(resolve(import.meta.dirname, "../styles/nav.css"), "utf8");
     const drawer = declarations(nav, '.workbench-navigation[data-variant="drawer"] .nav-status', ["@layer components"]);
     expect(drawer["flex-direction"]).toBe("row");
     const touch = ["@media (max-width: 1023px), (pointer: coarse)"];
     expect(declarations(nav, ".nav-row", touch)["min-height"]).toBe("44px");
+    expect(declarations(nav, ".nav-label-updates::before", touch).height).toBe("44px");
+    const workbench = readFileSync(resolve(import.meta.dirname, "../workbench.css"), "utf8");
+    expect(declarations(workbench, ".workbench-icon-button", ["@media (max-width: 1023px), (pointer: coarse)"]).height).toBe("44px");
+  });
+
+  it("keeps a chat that leaves a tapped count's state on screen, in its new state, until a return to the window", async () => {
+    let show: (data: HomeData) => void = () => undefined;
+    function Live() {
+      const [source, setSource] = useState(herd);
+      show = setSource;
+      return <WorkbenchSidebar data={source} />;
+    }
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Live /> }])} />);
+    const user = userEvent.setup({ advanceTimers: () => undefined });
+    await user.click(screen.getByRole("button", { name: "Done, 2" }));
+    const listed = () => within(screen.getByRole("region", { name: "Done" })).getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(listed()).toEqual(["/pane/clone", "/pane/site"]);
+    act(() => show({ ...herd, agents: herd.agents.map((agent) => agent.paneId === "clone" ? { ...agent, status: "idle" as const } : agent) }));
+    expect(listed()).toEqual(["/pane/clone", "/pane/site"]);
+    expect(within(screen.getByRole("region", { name: "Done" })).getByRole("heading")).toHaveTextContent("Done 1");
+    expect(screen.getByRole("link", { name: /^clone, idle/ })).toBeInTheDocument();
+    act(() => { window.dispatchEvent(new Event("focus")); });
+    expect(listed()).toEqual(["/pane/site"]);
   });
 });

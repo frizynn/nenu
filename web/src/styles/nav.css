@@ -90,7 +90,7 @@
    something, and how many. A count of nothing reads in the muted ink. */
 /* The desk's list fades out where it meets the counts instead of cutting a row in half; its bottom
    padding is the faded band, so the last row reads in full once scrolled to. */
-.workbench-navigation[data-variant="sidebar"] .nav-scroll { mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent); }
+.workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-scroll { mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent); }
 .nav-status { display: flex; flex-direction: column; gap: 1px; }
 .nav-status > .nav-row { color: var(--muted-foreground); }
 .nav-status > .nav-row[data-live] { color: var(--foreground); }
@@ -98,18 +98,16 @@
 /* A count tapped lists only its chats: it stays filled, as a row on screen is, until tapped again. */
 .nav-status > .nav-row[aria-pressed="true"] { color: var(--foreground); }
 
-/* A project in the bar: its chevron where a chat's mark sits, its name, then the most pressing state among
-   its chats and how many it holds. Its chats sit one step in. Folded over the chat on screen, it takes the
-   hover fill, as a folded workspace does. */
-.nav-project-fold { color: var(--subtle-foreground); transition: transform var(--motion-control) var(--motion-ease); }
-.nav-project-row[aria-expanded="true"] .nav-project-fold { transform: rotate(90deg); }
-.nav-project-row[aria-current="true"] { background: var(--workbench-row-hover); }
-.nav-project-body > :is(.nav-row, .nav-pane) { padding-left: calc(var(--nav-pad, 10px) + var(--nav-indent, 16px)); }
-.nav-projects > .nav-label { padding-top: 14px; }
-/* The view toggle: filled while the chats are under their projects. In a list's heading its 44px target
-   overhangs the heading rather than pushing the rows down. */
-.nav-view-toggle[aria-pressed="true"] { color: var(--foreground); background: var(--workbench-row-selected); }
-.nav-label > .nav-view-toggle { margin-block: -10px; margin-right: -8px; padding: 6px; background-clip: content-box; }
+/* A project in the bar (a repo, not the workspace tree's .nav-project): the most pressing state among its
+   chats where a chat's mark sits, its name, then how many it holds and the chevron that folds them. Its
+   chats sit a step in. Folded over the chat on screen, it takes the hover fill, as a folded workspace does. */
+.nav-repos, .nav-only { padding-top: 14px; }
+.nav-repo-fold { color: var(--subtle-foreground); transition: transform var(--motion-control) var(--motion-ease); }
+.nav-repo-row[aria-expanded="true"] .nav-repo-fold { transform: rotate(90deg); }
+.nav-repo-row[aria-current="true"] { background: var(--workbench-row-hover); }
+.nav-repo-body > :is(.nav-row, .nav-pane) { padding-left: calc(var(--nav-pad, 10px) + 8px); }
+/* In a list's heading the view toggle's 44px target overhangs the heading rather than pushing the rows down. */
+.nav-label > .nav-view-toggle { margin-block: -10px; margin-right: -8px; }
 
 /* A chat's row in every list (tree, search, Needs you, Recent, the pane switcher): mark, name, where it lives. */
 .nav-pane { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 40px; padding: 5px var(--nav-pad, 10px); border-radius: var(--radius-md); color: var(--foreground); text-decoration: none; }
@@ -208,6 +206,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .nav-desk .nav-group { padding-top: 10px; }
   .nav-chats > .nav-reveal:first-child .nav-group { padding-top: 18px; }
   .nav-desk .nav-label { min-height: 26px; padding: 0 10px; color: var(--subtle-foreground); font-size: var(--text-caption); font-weight: 400; }
+  .nav-desk:is(.nav-repos, .nav-only) { padding-top: 18px; }
   .workbench-navigation[data-variant="sidebar"] .nav-host { border-top: 0; }
   /* Small actions where a mouse drives them; a touch screen keeps their 44px. */
   .workbench-navigation[data-variant="sidebar"] :is(.nav-host, .nav-top) > .workbench-icon-button { width: 32px; height: 32px; }
@@ -217,6 +216,10 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 /* The foot's actions in the quiet ink. Outside the components layer, as .workbench-icon-button's own
    colour is (workbench.css), or that unlayered rule would win whatever this one's specificity. */
 .workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host > .workbench-icon-button:not(:hover) { color: var(--subtle-foreground); }
+/* The view toggle, there for the same reason: full ink while the chats are under their projects, the quiet
+   ink while they are by time. No fill, so the default view never outweighs New beside it. */
+.nav-view-toggle:not(:hover) { color: var(--subtle-foreground); }
+.nav-view-toggle[aria-pressed="true"]:not(:hover) { color: var(--foreground); }
 
 /* The tree Search opens fades down into place. More's rows open and close (above) on a press, and also when a
    poll lets go of a row it held in view past the fold, such as a chat that stopped asking. */
@@ -224,7 +227,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-enter { animation: nav-enter var(--motion-control) var(--motion-ease); }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-disclosure > svg, .nav-tab-fold, .nav-project-fold, .nav-more-chevron, .nav-reveal, .nav-row, .nav-pane { transition: none; }
+  .nav-disclosure > svg, .nav-tab-fold, .nav-repo-fold, .nav-more-chevron, .nav-reveal, .nav-row, .nav-pane { transition: none; }
   .nav-enter { animation: none; }
   .nav-kbd { transition: none; }
 }
@@ -251,6 +254,9 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-host-meta, .nav-chat-place { font-size: var(--text-footnote); }
   .nav-chat-row { padding-block: 6px; }
   .nav-chat-row > .nav-lead, .nav-chat-line { height: auto; line-height: var(--text-body--line-height); }
+  /* A heading's text button (N updates, Show all) reaches 44px tall without growing the heading. */
+  .nav-label-updates { position: relative; }
+  .nav-label-updates::before { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 44px; transform: translateY(-50%); }
   /* Three counts share the drawer's width: the footnote size keeps each inside its third. */
   .workbench-navigation[data-variant="drawer"] .nav-status > .nav-row { font-size: var(--text-footnote); }
 }

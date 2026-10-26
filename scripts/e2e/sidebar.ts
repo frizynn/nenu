@@ -26,7 +26,7 @@ const WIDTHS = [220, 272, 420];
 
 /** Opens every project the bar lists folded, so its chats are on screen to measure. */
 async function openProjects(page: Page): Promise<void> {
-  const folded = page.locator('.nav-project-row[aria-expanded="false"]');
+  const folded = page.locator('.nav-repo-row[aria-expanded="false"]');
   for (let n = await folded.count(); n > 0; n--) await folded.first().click();
 }
 

@@ -5,7 +5,7 @@
   by the operator, pointing at T3 Code's sidebar: "la sidebar tiene que ser, por default, ordenada tipo
   por proyecto … y que haya un botoncito que sea tipo un toggle que se muestre la otra como que si
   fuesen threads", and "cuando yo toco Done … no hace nada".
-- **Trail:** `bridge/pane-project.ts` (`projectOf`, `ProjectCache`) · `bridge/state-engine.ts` ·
+- **Trail:** `bridge/repo-root.ts` · `bridge/pane-project.ts` (`projectOf`, `ProjectCache`) · `bridge/state-engine.ts` ·
   `web/src/lib/desk-projects.ts` · `web/src/components/desk-nav.tsx` (`ProjectList`, `OnlyList`) ·
   `web/src/components/workbench-sidebar.tsx` (`DeskStatus`, `ViewToggle`, `PhoneLists`)
 
@@ -24,17 +24,20 @@ Measured on the operator's herd on 2026-10-26 (31 agents, Nenu 2.7.0):
 1. **A pane's project is the repo its folder sits in**, named by the repo its `origin` remote names (else
    its first remote, else the checkout's folder), so a repo's clones and worktrees share one name; a
    folder in no repo is named by itself, and a pane with no folder by its workspace. The bridge reads it
-   off the filesystem without running git, once a minute per folder, and sends it as the pane's
-   `project`. Only the last segment of a remote's path leaves the bridge.
-2. **The bar lists chats by project by default**: one row per project with its name, the most pressing
-   state among its chats and how many it holds, folded until opened. Projects where something needs you
-   come first, then those at work, then by the last move; like the chats, a project keeps its place while
-   on screen until "N updates" or a return to the window. Opened projects and the view are remembered per
-   device.
+   off the filesystem without running git (a worktree's `commondir` leads to its repo, bare ones
+   included), about once a minute per folder, and sends it as the pane's `project`. Only the last
+   segment of a remote's path leaves the bridge.
+2. **The bar lists chats by project by default**: one row per project with the most pressing state among
+   its chats where a chat's mark sits, its name, and how many it holds, folded until opened. Projects
+   where something needs you come first, then those at work, then by the last move; like the chats, a
+   project keeps its place while on screen until "N updates" or a return to the window. Opened projects
+   and the view are remembered per device.
 3. **A toggle switches to the list by time** (ADR 0129's), on a desk beside Search and on a phone at the
-   end of the drawer's list heading. The drawer by time is the 2.7.0 drawer.
+   end of the drawer's list heading. By time, the drawer lists what 2.7.0's did.
 4. **A count lists only the chats in its state**, in the bar, pressed until tapped again, Show all or
-   Escape. The phone's drawer shows the same counts side by side above its foot. Home is the brand's.
+   Escape; a chat that leaves the state stays in the list until a return to the window, so no row moves
+   under the pointer. The phone's drawer shows the same counts side by side above its foot. Home is the
+   brand's.
 
 ## Consequences
 

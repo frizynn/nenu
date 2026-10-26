@@ -1,4 +1,4 @@
-import { memo, useId, useState, type ReactNode } from "react";
+import { memo, useEffect, useId, useReducer, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronDown, ChevronRight } from "@/components/ui/icon";
 
@@ -6,7 +6,7 @@ import { OpeningMark, PaneMark, PlaceText } from "@/components/nav-rows";
 import { AGENT_STATE, StateMark, StatusDot } from "@/components/status-badge";
 import { useDayTurn } from "@/hooks/use-day-turn";
 import { useHeldTime } from "@/hooks/use-held-time";
-import { COUNTED_STATES, deskChats, NONE_IN_STATE, type CountedState, type DeskChat } from "@/lib/desk-nav";
+import { COUNTED, deskChats, type CountedState, type DeskChat } from "@/lib/desk-nav";
 import { groupByProject, projectWeight, useProjectView, type ProjectGroup } from "@/lib/desk-projects";
 import { displayPlace } from "@/lib/display-name";
 import { TITLE_SEP } from "@/lib/pane-name";
@@ -73,7 +73,7 @@ export function DeskLists({ data, only, onClear }: { data: HomeData; only?: Coun
   const chats = held.order(deskChats(data));
   const now = Date.now();
   const row = (chat: DeskChat) => <ChatRow key={chat.paneId} chat={chat} session={data.session} current={chat.paneId === paneId} now={now} />;
-  if (only) return <OnlyList state={only} chats={chats.filter((chat) => chat.pane.status === only)} row={row} onClear={onClear} className="nav-desk" />;
+  if (only) return <OnlyList key={only} state={only} chats={chats} row={row} onClear={onClear} className="nav-desk" />;
   if (view === "projects") return <ProjectList chats={chats} held={held} row={row} currentPaneId={paneId} className="nav-desk" />;
   return <DeskChats chats={chats} held={held} row={row} currentPaneId={paneId} now={now} />;
 }
@@ -139,7 +139,7 @@ export function ProjectList({ chats, held, row, currentPaneId, end, className }:
     heldGroups.reorder();
   };
   return (
-    <section aria-label="Projects" className={cn("nav-chats nav-projects", className)}>
+    <section aria-label="Projects" className={cn("nav-chats nav-repos", className)}>
       <div className="nav-label">
         <h3 className="nav-label-text">Projects</h3>
         <UpdatesButton count={held.moved(chats)} onClick={reorder} />
@@ -168,26 +168,32 @@ function ProjectFold({ group, open, onToggle, currentPaneId, children }: {
 }) {
   const id = useId();
   const unread = group.items.filter((chat) => chat.unread && chat.paneId !== currentPaneId).length;
-  const states = COUNTED_STATES.map(([status, label]) => [group.items.filter((chat) => chat.pane.status === status).length, label.toLowerCase()] as const)
+  const states = COUNTED.map(({ state, label }) => [group.items.filter((chat) => chat.pane.status === state).length, label.toLowerCase()] as const)
     .filter(([n]) => n > 0).map(([n, label]) => `${n} ${label}`);
   const said = [`${group.items.length} ${group.items.length === 1 ? "chat" : "chats"}`, ...states, ...(unread > 0 && !open ? [`${unread} new`] : [])];
   return (
-    <section aria-label={group.label} className="nav-project-group">
-      <button type="button" className="nav-row nav-project-row" aria-expanded={open} aria-controls={id} onClick={() => onToggle(!open)}
+    <section aria-label={group.label} className="nav-repo-group">
+      <button type="button" className="nav-row nav-repo-row" aria-expanded={open} aria-controls={id} onClick={() => onToggle(!open)}
         aria-current={!open && group.items.some((chat) => chat.paneId === currentPaneId) ? "true" : undefined}
         data-live={group.state || unread > 0 ? true : undefined}>
-        <span className="nav-lead" aria-hidden><ChevronRight size={14} className="nav-project-fold" /></span>
+        {/* Its state where a chat's sits, its count apart from it, so "◌ 16" never reads as sixteen at work. */}
+        <span className="nav-lead" aria-hidden>{group.state && <StatusDot status={group.state} />}</span>
         <span className="nav-row-text">{group.label}</span>
         <span className="sr-only">, {said.join(", ")}</span>
         {unread > 0 && !open && <span className="nav-unread" aria-hidden>+{unread}</span>}
-        <span className="nav-row-meta" aria-hidden>{group.state && <StatusDot status={group.state} />}{group.items.length}</span>
+        <span className="nav-row-meta" aria-hidden>{group.items.length}<ChevronRight size={14} className="nav-repo-fold" /></span>
       </button>
-      <Reveal folded={!open}><div id={id} className="nav-project-body">{children}</div></Reveal>
+      <Reveal folded={!open}><div id={id} className="nav-repo-body">{children}</div></Reveal>
     </section>
   );
 }
 
-/** Only the chats in one state, as a tapped count asks: newest first, and a way back to every chat. */
+/**
+ * Only the chats in one state, as a tapped count asks, in the bar's order, and a way back to every chat. A
+ * chat that leaves the state while the list is on screen stays, drawn in its new state, so no row moves
+ * under the pointer; a return to the window lets it go, as it puts the bar's chats in order. Keyed by its
+ * state, so another tap starts afresh.
+ */
 export function OnlyList({ state, chats, row, onClear, className }: {
   state: CountedState;
   chats: DeskChat[];
@@ -195,14 +201,32 @@ export function OnlyList({ state, chats, row, onClear, className }: {
   onClear: () => void;
   className?: string;
 }) {
-  const label = COUNTED_STATES.find(([status]) => status === state)![1];
+  const { label, none } = COUNTED.find((count) => count.state === state)!;
+  const shown = useRef(new Set<string>());
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      shown.current = new Set();
+      redraw();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, []);
+  const listed = chats.filter((chat) => chat.pane.status === state || shown.current.has(chat.paneId));
+  for (const chat of listed) shown.current.add(chat.paneId);
+  const count = chats.filter((chat) => chat.pane.status === state).length;
   return (
     <section aria-label={label} className={cn("nav-chats nav-only", className)}>
       <div className="nav-label">
-        <h3 className="nav-label-text">{label} <span className="nav-count">{chats.length}</span></h3>
+        <h3 className="nav-label-text">{label} <span className="nav-count">{count}</span></h3>
         <button type="button" className="nav-label-updates" onClick={onClear}>Show all</button>
       </div>
-      {chats.length > 0 ? chats.map(row) : <p className="nav-empty">{NONE_IN_STATE[state]}</p>}
+      {listed.length > 0 ? listed.map(row) : <p className="nav-empty">{none}</p>}
     </section>
   );
 }
