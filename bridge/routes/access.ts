@@ -9,6 +9,9 @@ import { text } from "./http.ts";
 // (or a co-located proxy) can reach the bridge's port, so a loopback caller is the on-host operator.
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
+// The header Nenu's own fetches send (web/src/lib/api.ts XHR_HEADER).
+const XHR_HEADER = "x-requested-with";
+
 /**
  * Whether a TCP peer address is loopback. Unlike the `Host` header — which the client writes —
  * this comes from the kernel and cannot be forged.
@@ -37,8 +40,9 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
  *  - Origin required for writes: a state-changing (`level === "write"`, not GET) request with no
  *    Origin is trusted only from loopback (curl on the host). Browsers always send Origin on fetch/SW
  *    POSTs, so a missing Origin on a remote write is a non-browser or Origin-stripped request — reject
- *    it. A write-level GET is exempt: it only reads, like the snapshot poll, and the device gate below
- *    still decides who may make it.
+ *    it. A same-origin GET carries no Origin, so a write-level GET (the folder picker) shows it is
+ *    Nenu's own fetch with `X-Requested-With` instead: a cross-site no-cors request cannot set a
+ *    custom header (that makes it a preflighted CORS request, and the bridge answers no preflight).
  *  - Tailscale identity: when a trusted user is configured under `tailscale serve`, the request
  *    must carry a matching `Tailscale-User-Login`. A missing header is rejected too — serve injects
  *    none for tagged nodes. Under COLLIE_SKIP_SERVE=1 or COLLIE_TRUSTED_USER_OPTIONAL=1, only a
@@ -70,9 +74,8 @@ export function checkAccess(
       LOOPBACK_HOST.test(originHost) ||
       cfg.allowedOrigins.includes(origin);
     if (!allowed) return { ok: false, reason: "cross-origin rejected" };
-  } else if (level === "write" && req.method !== "GET" && !LOOPBACK_HOST.test(host)) {
+  } else if (level === "write" && !LOOPBACK_HOST.test(host) && !(req.method === "GET" && req.headers.get(XHR_HEADER) !== null)) {
     // A write with no Origin header from a non-loopback Host isn't a real browser request — refuse.
-    // A write-level GET (the folder picker) changes nothing and a browser sends it without Origin.
     return { ok: false, reason: "origin required" };
   }
 

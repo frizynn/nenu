@@ -21,7 +21,13 @@ describe("DirPicker when the bridge will not list", () => {
     expect(await screen.findByText("Can't list this folder. Type its full path to use it.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this folder" })).toBeDisabled();
 
+    // Nor below it: with no home, `~/projects` is not `/projects`.
     const path = screen.getByLabelText("Folder path");
+    await user.clear(path);
+    await user.type(path, "~/projects/");
+    expect(await screen.findByText("Can't list this folder. Type its full path to use it.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use this folder" })).toBeDisabled();
+
     await user.clear(path);
     await user.type(path, "/srv/data/");
     expect(await screen.findByText("Can't list this folder. You can still use the path as typed.")).toBeInTheDocument();

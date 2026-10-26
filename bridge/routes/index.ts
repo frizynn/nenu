@@ -58,7 +58,7 @@ export const SEEN_HEADER = "x-collie-seen";
  * same-origin `fetch` sets it freely.
  *
  * Write actions (reply/keys/upload/close/rename) need no header: they already cleared
- * `guard(…, "write")`, which requires an `Origin`. Each action declares `marksSeen` in its table.
+ * `guard(…, "write")`, which requires an `Origin` on a POST. Each action declares `marksSeen` in its table.
  */
 export function marksPaneSeen(req: Request, action: string | undefined): boolean {
   if (req.headers.get(SEEN_HEADER) !== null) return true;

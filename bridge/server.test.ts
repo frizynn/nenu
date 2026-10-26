@@ -284,9 +284,12 @@ describe("checkAccess — Origin required for writes", () => {
     });
   });
 
-  test("a write-level GET with no Origin from a non-loopback Host passes (the folder picker)", () => {
-    // Browsers send no Origin on a same-origin GET; the device gate still decides who may list.
-    expect(checkAccess(req({ host: "collie.example.ts.net" }, "GET"), cfg(), "write")).toEqual({ ok: true });
+  test("a write-level GET with no Origin passes only as Nenu's own fetch (the folder picker)", () => {
+    // Browsers send no Origin on a same-origin GET; a cross-site no-cors GET cannot add a header.
+    const host = "collie.example.ts.net";
+    expect(checkAccess(req({ host, "x-requested-with": "XMLHttpRequest" }, "GET"), cfg(), "write")).toEqual({ ok: true });
+    expect(checkAccess(req({ host }, "GET"), cfg(), "write")).toEqual({ ok: false, reason: "origin required" });
+    expect(checkAccess(req({ host, "x-requested-with": "XMLHttpRequest" }), cfg(), "write")).toEqual({ ok: false, reason: "origin required" });
   });
 
   test("write with no Origin from loopback is allowed (curl on the host)", () => {

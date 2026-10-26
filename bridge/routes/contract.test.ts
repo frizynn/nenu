@@ -137,8 +137,7 @@ describe("every route keeps its gate order", () => {
 
     test(`${name}: a ${c.level} from a non-loopback host without Origin`, async () => {
       const result = await send(c.method, withSession(c.path, "nope"), { host: "nenu.example", "x-device": "phone" });
-      // A browser sends no Origin on a same-origin GET, so only a write that changes something needs one.
-      if (c.level === "write" && c.method !== "GET") expect(result).toEqual({ status: 403, body: "origin required" });
+      if (c.level === "write") expect(result).toEqual({ status: 403, body: "origin required" });
       else expect(result.body).not.toBe("origin required");
     });
 
@@ -185,15 +184,18 @@ describe("pane actions", () => {
   });
 });
 
+// A browser sends no Origin on a same-origin GET; Nenu's own fetch carries X-Requested-With instead.
 describe("the folder picker over the tailnet", () => {
-  test("lists home for a write device's same-origin GET, which carries no Origin", async () => {
-    const result = await send("GET", "/api/dirs?path=~%2F", { host: "nenu.example", "x-device": "phone" });
-    expect(result.status).toBe(200);
-    expect(JSON.parse(result.body)).toMatchObject({ entries: expect.any(Array) });
+  const tailnet = { host: "nenu.example", "x-requested-with": "XMLHttpRequest" };
+
+  test("reaches the listing for a write device's same-origin GET, which carries no Origin", async () => {
+    // Past the gate the answer is home-dirs.ts's (200, or 404 where the runner has no home).
+    const result = await send("GET", "/api/dirs?path=~%2F", { ...tailnet, "x-device": "phone" });
+    expect(result.status).not.toBe(403);
   });
 
   test("still refuses a read-only device", async () => {
-    const result = await send("GET", "/api/dirs?path=~%2F", { host: "nenu.example", "x-device": "tablet" });
+    const result = await send("GET", "/api/dirs?path=~%2F", { ...tailnet, "x-device": "tablet" });
     expect(result).toEqual({ status: 403, body: "device not authorised" });
   });
 });
