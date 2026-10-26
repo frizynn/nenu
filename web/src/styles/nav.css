@@ -11,7 +11,8 @@
 .workbench-navigation { --nav-pad: 10px; --nav-fold: 20px; --nav-indent: 16px; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; color: var(--foreground); }
 .nav-top { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 6px; }
 /* Positioned so the rows' sr-only labels sit inside the list: placed against the bar instead, the ones
-   below the fold stretched the app's frame, and bringing one into view scrolled the whole page away. */
+   below the fold stretched the app's frame, and bringing one into view scrolled the whole page away.
+   Folded rows are contained one level down (.nav-reveal-inner). */
 .nav-scroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 16px; scrollbar-width: thin; }
 .nav-footer { display: flex; flex-direction: column; gap: 4px; margin-top: auto; padding: 8px; }
 .nav-footer > button { align-self: flex-start; }
@@ -170,7 +171,9 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
    scroller, so the box would keep a grid item's minimum, its longest name, and widen the whole list. */
 .nav-reveal { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
 .nav-reveal[data-folded] { grid-template-rows: 0fr; opacity: 0; }
-.nav-reveal-inner { min-width: 0; min-height: 0; overflow: clip; }
+/* Positioned for the same reason as .nav-scroll: the clip holds a folded row's sr-only labels only when
+   it is their containing block, or they keep their height in the list. */
+.nav-reveal-inner { position: relative; min-width: 0; min-height: 0; overflow: clip; }
 /* A period's name stays on top of its chats while they scroll under it, so a row deep in the list still says when it moved. */
 .nav-chats .nav-group > .nav-label { position: sticky; top: 0; z-index: 1; background: var(--workbench-sidebar); }
 /* The bar's chats held in place: a quiet text button that puts them in order. Its height stays inside the label's. */

@@ -51,6 +51,13 @@ function measure(desk: boolean) {
     else if (long.scrollWidth <= long.clientWidth) broken.push("the long name shows whole, so nothing cut it to the bar");
   }
   if (!scrollers.length) broken.push("no list on screen");
+  // The list ends with its last shown row: a folded row's labels must not leave empty room to scroll into.
+  for (const scroller of scrollers) {
+    const top = scroller.getBoundingClientRect().top - scroller.scrollTop;
+    const shown = Array.from(scroller.querySelectorAll<HTMLElement>(".nav-row, .nav-label")).filter((el) => el.getClientRects().length && !el.closest("[data-folded]"));
+    const end = Math.max(0, ...shown.map((el) => el.getBoundingClientRect().bottom - top)) + parseFloat(getComputedStyle(scroller).paddingBottom);
+    if (scroller.scrollHeight > Math.max(end, scroller.clientHeight) + 2) broken.push(`the list scrolls ${Math.round(scroller.scrollHeight - end)}px past its last row`);
+  }
   // Nothing in the list may reach past the frame: the frame clips it, but bringing a hidden label into view
   // (a focus, a find, a click) scrolls the frame itself and leaves an empty page under the bar.
   const frame = document.querySelector<HTMLElement>(".app-viewport");
@@ -58,6 +65,7 @@ function measure(desk: boolean) {
     if (frame.scrollHeight > frame.clientHeight) broken.push(`the frame holds ${frame.scrollHeight}px in ${frame.clientHeight}px`);
     for (const scroller of scrollers) {
       const label = Array.from(scroller.querySelectorAll<HTMLElement>(".sr-only")).at(-1);
+      if (!label) broken.push("the list has no hidden label to bring into view");
       label?.scrollIntoView({ block: "end" });
       if (frame.scrollTop) broken.push(`bringing the list's last label into view scrolls the frame ${frame.scrollTop}px`);
       frame.scrollTop = 0;
@@ -96,8 +104,12 @@ async function main(): Promise<void> {
         await page.addInitScript((w) => localStorage.setItem("nenu:sidebar-width:v1", String(w)), width);
         await page.goto(bridge.url + "/");
         await page.locator(".workbench-sidebar .nav-chats .nav-row >> visible=true").first().waitFor({ timeout: 30_000 });
+        await page.waitForTimeout(600);
+        for (const line of await page.evaluate(measure, true)) failures.push(`desk ${width}px ${scheme} folded: ${line}`);
         await openProjects(page);
         await page.waitForTimeout(600);
+        // The checks below only mean something on a list longer than the screen.
+        if (!await page.locator(".workbench-sidebar .nav-scroll").evaluate((el) => el.scrollHeight > el.clientHeight)) failures.push(`desk ${width}px ${scheme}: the open list fits the screen, so nothing tests the overflow`);
         for (const line of await page.evaluate(measure, true)) failures.push(`desk ${width}px ${scheme}: ${line}`);
         // A resting chat steps back to the muted ink, and the pointer brings the full ink back.
         const ink = (selector: string) => page.locator(selector).first().evaluate((el) => getComputedStyle(el).color);
