@@ -141,7 +141,6 @@ export function paneTextWithDraft(base = "hello from the pane"): string {
   return `${base}\n${BOX_RULE}\n❯ ${typedDraft}\n${BOX_RULE}`;
 }
 
-// Default happy-path handlers; individual tests can override via server.use(...).
 /** What the bridge lets a new chat start on (bridge/agent-start.ts), trimmed. */
 export const fixtureStartModels = {
   claude: [
@@ -155,6 +154,7 @@ export const fixtureStartModels = {
   ],
 };
 
+// Default happy-path handlers; individual tests can override via server.use(...).
 export const handlers = [
   // A send that does not end in "sent" reports itself; tests that care override this.
   http.post(/\/api\/pane\/[^/]+\/send-report$/, () => HttpResponse.json({ ok: true })),

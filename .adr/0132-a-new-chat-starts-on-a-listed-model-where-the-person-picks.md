@@ -47,7 +47,10 @@
      can still be picked after.
    A destination closed since it was picked opens by folder. The New flow offers the same places
    through its own steps: Quick question, In a new folder, and Here in a workspace with *Opens in* a
-   new tab or beside one of its tabs.
+   new tab or beside one of its tabs (a new tab once the tab chosen there closes).
+4. **A model the list does not hold starts on the default and stays remembered**: the list not
+   loaded yet, or a machine that does not offer it, never erases the choice. Only a start on a listed
+   model is remembered, per agent, on this device.
 
 ## Consequences
 

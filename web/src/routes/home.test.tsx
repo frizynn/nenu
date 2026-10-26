@@ -951,6 +951,34 @@ describe("on a desk", () => {
     await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "ask", model: "opus[1m]" }]));
   });
 
+  it("leaves the focus on the chosen row where a finger opens the menu, so no keyboard comes up unasked", async () => {
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: /^Model: Claude Code/ }));
+    expect(within(page().getByRole("group", { name: "Claude Code" })).getByRole("menuitemradio", { name: /^Default/ })).toHaveFocus();
+    expect(page().getByRole("searchbox", { name: "Search models" })).not.toHaveFocus();
+  });
+
+  it("keeps the choice when Enter closes the menu with nothing typed, and walks back to the search with the arrows", async () => {
+    // A desk with a mouse: the search field takes the focus as the menu opens.
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(min-width: 1024px)" || query === "(pointer: fine)", media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    }));
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: /^Model: Claude Code/ }));
+    await user.click(page().getByRole("menuitemradio", { name: /^gpt-6\.1-sol/ }));
+    await user.click(page().getByRole("button", { name: "Model: Codex, gpt-6.1-sol" }));
+    const search = page().getByRole("searchbox", { name: "Search models" });
+    expect(search).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(page().getAllByRole("menuitemradio").at(-1)).toHaveFocus();
+    await user.keyboard("{ArrowDown}{ArrowUp}");
+    expect(search).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(page().getByRole("button", { name: "Model: Codex, gpt-6.1-sol" })).toBeInTheDocument();
+    expect(page().queryByRole("menu", { name: "Model" })).not.toBeInTheDocument();
+  });
+
   it("switches agent through a model of the other one", async () => {
     const { posts } = recordStarts();
     const { user } = await setup();

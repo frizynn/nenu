@@ -18,7 +18,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { useHoldReload } from "@/lib/reload-guard";
 import { workspaceName } from "@/lib/spaces";
-import { agentLabel, loadAgent, loadModel, loadPermission, type SpawnTarget } from "@/lib/spawn";
+import { agentLabel, DEFAULT_MODEL, loadAgent, loadModel, loadPermission, type SpawnTarget } from "@/lib/spawn";
 import { ModelMenu, type StartAgent } from "@/components/start-pickers";
 import { listedModel, useStartModels } from "@/hooks/use-start-models";
 import { destinationFolder, destinationTarget, SCRATCH } from "@/lib/start-destination";
@@ -197,7 +197,7 @@ function AgentPane({ target, data, readOnly, message, browsing, onBrowsing, onDo
   const [session, setSession] = useState(data?.session);
   const picked = machines.find((m) => m.session === session);
   const form = (
-    <NewAgentForm key={session ?? ""} machine={machines.length > 1 ? { session } : undefined}
+    <NewAgentForm key={session ?? ""} machine={machines.length > 1 ? { session } : undefined} session={data?.session}
       defaultCwd={picked && session !== data?.session ? "" : target.kind === "pane" && data ? destinationFolder(target, data) ?? "" : defaultCwdFor(target, data)} defaultMessage={message}
       liveDirs={picked?.herd ? liveDirsOf(picked.herd) : liveDirsOf(data)} readOnly={readOnly}
       browsing={browsing} onBrowsing={onBrowsing} onSubmit={(values) => spawnInto(target, values)} />
@@ -239,7 +239,7 @@ function TabPane({ workspaces, workspaceId, onWorkspace, ...pane }: AgentPanePro
           </Field>
         </>
       )}
-      <AgentPane key={`${workspaceId}:${tab?.tabId ?? ""}`} target={target} {...pane} />
+      <AgentPane key={workspaceId} target={target} {...pane} />
     </div>
   );
 }
@@ -252,6 +252,7 @@ function QuickChatPane({ data, readOnly, message: preset = "", onDone }: { data:
   const [models, setModels] = useState(() => ({ claude: loadModel("claude"), codex: loadModel("codex") }));
   const listed = useStartModels(data?.session, !readOnly);
   const model = listedModel(listed, agent, models[agent]);
+  const shownModel = model ?? DEFAULT_MODEL;
   const [message, setMessage] = useState(preset);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -274,7 +275,7 @@ function QuickChatPane({ data, readOnly, message: preset = "", onDone }: { data:
   return (
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <div className="flex items-center text-footnote text-muted-foreground">
-        <ModelMenu models={listed} agent={agent} model={model} onPick={(a, m) => { setAgent(a); setModels((current) => ({ ...current, [a]: m })); }} />
+        <ModelMenu models={listed} agent={agent} model={shownModel} onPick={(a, m) => { setAgent(a); setModels((current) => ({ ...current, [a]: m })); }} />
       </div>
       <textarea aria-label="Message" value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
         placeholder="Ask anything" className={textField} data-autofocus />

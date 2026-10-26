@@ -545,12 +545,18 @@ export class HerdrClient {
    * (live-probed on Herdr 0.9.5).
    */
   async splitTab(paneId: string, opts: { cwd?: string } = {}): Promise<CreatedShell> {
-    const { layout } = await this.request<{ layout: { panes: LayoutPane[] } }>("pane.layout", { pane_id: paneId });
+    const { layout } = await this.request<{ layout: { tab_id: string; panes: LayoutPane[] } }>("pane.layout", { pane_id: paneId });
     const target = splitTarget(layout.panes);
     if (!target) throw new Error("That tab has no pane to open beside.");
     const params: Record<string, unknown> = { target_pane_id: target.paneId, direction: target.direction, focus: false };
     if (opts.cwd) params.cwd = opts.cwd;
     const { pane: p } = await this.request<{ pane: WirePane }>("pane.split", params);
+    // A Herdr that stopped knowing `target_pane_id` would split the focused pane, anywhere: undo
+    // that rather than start an agent in a tab nobody chose.
+    if (p.tab_id !== layout.tab_id) {
+      await this.closePane(p.pane_id).catch(() => undefined);
+      throw new Error("Herdr opened the pane in another tab; it was closed again.");
+    }
     return { paneId: p.pane_id, workspaceId: p.workspace_id, tabId: p.tab_id, cwd: p.cwd };
   }
 

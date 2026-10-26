@@ -54,7 +54,8 @@ export interface SpawnInput {
   message: string;
   /** A {@link PERMISSIONS} id for the chosen agent; ignored for a shell. */
   permission: string;
-  /** A model id the bridge lists for the chosen agent (api.fetchStartModels); absent = its default. */
+  /** A model id the bridge lists for the chosen agent (api.fetchStartModels), remembered once it
+   *  starts; absent = its default, and the model remembered stays as it was. */
   model?: string;
   session?: string;
 }
@@ -255,7 +256,7 @@ export async function spawn(input: SpawnInput, deps: SpawnDeps = liveDeps): Prom
   if (cwd) rememberDir(cwd);
   if (input.agent !== "shell") {
     savePermission(input.agent, input.permission);
-    saveModel(input.agent, input.model ?? DEFAULT_MODEL);
+    if (input.model) saveModel(input.agent, input.model);
     const model = input.model && input.model !== DEFAULT_MODEL ? input.model : undefined;
     set(created.pane.paneId, { agent: input.agent, permission: input.permission, model, stage: "start", phase: "working", message: input.message.trim(), session: input.session });
     void runSpawn(created.pane.paneId, deps);

@@ -32,7 +32,10 @@ export function useStartModels(session: string | undefined, enabled = true): Sta
   return models?.key === key ? models.value : DEFAULT_ONLY;
 }
 
-/** The chosen model while the list still has it, else the agent's default. */
-export function listedModel(models: StartModels, agent: keyof StartModels, id: string): string {
-  return models[agent].some((m) => m.id === id) ? id : DEFAULT_MODEL;
+/**
+ * The chosen model while the list has it, else nothing: the agent then starts on its default, and a
+ * choice the list has not loaded yet, or another machine does not offer, stays remembered.
+ */
+export function listedModel(models: StartModels, agent: keyof StartModels, id: string): string | undefined {
+  return models[agent].some((m) => m.id === id) ? id : undefined;
 }

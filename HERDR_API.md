@@ -44,6 +44,13 @@ the socket assumptions behind the design in [`ARCHITECTURE.md`](./ARCHITECTURE.m
 | `agent.send` | `{target, text}` | (ack) — writes **literal** text, no Enter |
 | `pane.process_info` | `{pane_id}` | `process_info` → `{pane_id, shell_pid, foreground_process_group_id, foreground_processes[{pid, name, argv0, argv, cmdline, cwd}]}` |
 | `agent.start` | `{pane_id, kind, name, timeout_ms, args}` | (ack) once the agent is detected ready; `agent_pane_busy` unless the shell is at its prompt, `timeout` ("timed out waiting for agent startup") when it never comes up |
+| `pane.layout` | `{pane_id}` | `pane_layout` → `layout{…}` (that pane's tab; see Split below) |
+| `pane.split` | `{target_pane_id, direction, cwd?, focus?}` | `pane_info` → `pane{…}` (the new shell; see Split below) |
+
+- **`agent.start` types its command into the pane's shell, quoting each argument** (live-probed
+  2026-10-27 on 0.9.5): `args: ["--model", "opus[1m]"]` arrived as `claude --model 'opus[1m]'`, and
+  the reply echoes the `argv` it used. Nenu still passes only arguments from its own tables
+  (`bridge/agent-start.ts`).
 
 - **A shell is at its prompt exactly when `foreground_process_group_id == shell_pid`** (live-probed
   2026-10-15 on 0.9.3, disposable server): at the prompt both were the zsh's pid and the foreground
@@ -296,8 +303,8 @@ Live-probed 2026-10-27 on Herdr 0.9.5 in an isolated lab session (`bridge/herdr-
   ``invalid_request: unknown variant``).
 - `focus` defaults to `false`; `cwd` omitted starts the new shell in the split pane's folder.
 - `rect` is in terminal cells, so a pane twice as wide as tall is about square on screen.
-- **`agent.start` types its command into the shell, quoting each argument**: `args: ["--model",
-  "opus[1m]"]` arrived as `claude --model 'opus[1m]'`, and the reply echoes the `argv` it used.
+- Nenu checks the new pane's `tab_id` against the layout's and closes a pane that landed elsewhere,
+  so a rename of `target_pane_id` fails a start instead of splitting the focused pane.
 
 ## Close methods — kill a pane or a whole tab (verified)
 

@@ -27,12 +27,13 @@ const matches = (query: string, ...words: string[]) => {
   return !q || words.some((word) => word.toLowerCase().includes(q));
 };
 
-/** The search field at the top of a picker; Enter takes the first row it leaves. */
+/** The search field at the top of a picker; Enter takes the first row a search leaves, and with nothing typed keeps the choice. */
 function MenuSearch({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   const onKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    event.currentTarget.closest('[role="menu"]')?.querySelector<HTMLElement>('[role="menuitemradio"]')?.click();
+    const row = value.trim() ? '[role="menuitemradio"]' : '[role="menuitemradio"][aria-checked="true"]';
+    event.currentTarget.closest('[role="menu"]')?.querySelector<HTMLElement>(row)?.click();
   };
   return (
     <div className="sticky top-0 z-10 -mx-1 -mt-1 mb-1 flex items-center gap-2 border-b border-border bg-popover px-3">
@@ -76,13 +77,13 @@ const modelOf = (models: StartModels, agent: StartAgent, id: string) => models[a
  * agent while it runs on its default and the model once one is chosen; `agents` narrows it to one,
  * whose chip then names only the model.
  */
-export function ModelMenu({ models, agent, model, onPick, agents = AGENTS, className }: {
+export function ModelMenu({ models, agent, model, onPick, agents = AGENTS, disabled }: {
   models: StartModels;
   agent: StartAgent;
   model: string;
   onPick: (agent: StartAgent, model: string) => void;
   agents?: readonly StartAgent[];
-  className?: string;
+  disabled?: boolean;
 }) {
   const chosen = modelOf(models, agent, model);
   const onDefault = !chosen || chosen.id === DEFAULT_MODEL;
@@ -90,7 +91,7 @@ export function ModelMenu({ models, agent, model, onPick, agents = AGENTS, class
   const label = agents.length > 1 ? (onDefault ? agentLabel(agent) : chosen.label) : onDefault ? "Default model" : chosen.label;
   return (
     <QuietMenu icon={AGENT_MARKS[agent]} label={label} ariaLabel={`Model: ${agentLabel(agent)}, ${chosen?.label ?? "Default"}`} menuLabel="Model"
-      className={className} menuClassName="w-80 max-w-[calc(100vw-2rem)] max-h-[min(26rem,60dvh)] overflow-y-auto">
+      disabled={disabled} menuClassName="w-80 max-w-[calc(100vw-2rem)] max-h-[min(26rem,60dvh)] overflow-y-auto">
       {(close) => <ModelRows models={models} agent={agent} model={model} agents={agents} onPick={(a, m) => { onPick(a, m); close(); }} />}
     </QuietMenu>
   );
@@ -133,7 +134,7 @@ export function DestinationMenu({ places, destination, onPick, disabled }: {
   const label = destinationLabel(destination, places);
   return (
     <QuietMenu icon={DESTINATION_ICONS[destination.kind]} label={<span className="block max-w-56 truncate">{label}</span>} ariaLabel={`Opens: ${label}`}
-      menuLabel="Where it opens" className={cn("min-w-0", disabled && "pointer-events-none opacity-50")}
+      menuLabel="Where it opens" className="min-w-0" disabled={disabled}
       menuClassName="w-80 max-w-[calc(100vw-2rem)] max-h-[min(26rem,60dvh)] overflow-y-auto">
       {(close) => <DestinationRows places={places} destination={destination} onPick={(next) => { onPick(next); close(); }} />}
     </QuietMenu>

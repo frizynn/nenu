@@ -18,6 +18,7 @@ import {
   SPAWN_AGENTS,
   agentLabel,
   loadAgent,
+  DEFAULT_MODEL,
   loadDirs,
   loadModel,
   loadPermission,
@@ -87,9 +88,11 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
  * The agent form of the New flow. Mounting it starts a fresh form. The folder picker takes the form's
  * place while `browsing`, and the host owns that switch, so its header can title the step and step back.
  */
-export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing, machine }: {
+export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing, machine, session }: {
   /** The machine picked for it, when there is more than one: its folders, and where it starts. */
   machine?: { session: string | undefined };
+  /** The session on screen, whose models it offers when no machine was picked. */
+  session?: string;
   defaultCwd: string;
   defaultMessage?: string;
   liveDirs: string[];
@@ -102,8 +105,15 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
   const [agent, setAgent] = useState<SpawnAgent>(loadAgent);
   const [permissions, setPermissions] = useState(() => ({ claude: loadPermission("claude"), codex: loadPermission("codex") }));
   const [models, setModels] = useState(() => ({ claude: loadModel("claude"), codex: loadModel("codex") }));
-  const listed = useStartModels(machine?.session, !readOnly);
+  // The models of the machine it starts on: the one picked, else the one on screen.
+  const listed = useStartModels(machine ? machine.session : session, !readOnly);
   const [cwd, setCwd] = useState(defaultCwd);
+  // A new place for it (the New flow's Opens in) brings its folder and keeps the rest of the form.
+  const [placeCwd, setPlaceCwd] = useState(defaultCwd);
+  if (placeCwd !== defaultCwd) {
+    setPlaceCwd(defaultCwd);
+    setCwd(defaultCwd);
+  }
   const [name, setName] = useState("");
   const [message, setMessage] = useState(defaultMessage);
   const [recent] = useState(loadDirs);
@@ -166,7 +176,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
 
       {!shell && (
         <div className="-mt-1 flex items-center gap-1 text-footnote text-muted-foreground">
-          <ModelMenu models={listed} agent={agent} agents={[agent]} model={listedModel(listed, agent, models[agent])}
+          <ModelMenu models={listed} agent={agent} agents={[agent]} model={listedModel(listed, agent, models[agent]) ?? DEFAULT_MODEL}
             onPick={(a, m) => setModels((current) => ({ ...current, [a]: m }))} />
         </div>
       )}

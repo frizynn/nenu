@@ -13,6 +13,7 @@ import {
   PERMISSIONS,
   loadModel,
   loadPermission,
+  saveModel,
   savePermission,
   withDir,
   type SpawnDeps,
@@ -127,6 +128,16 @@ describe("spawn", () => {
     expect(d.startAgent).toHaveBeenCalledWith("w9:p3", "claude", undefined, "plan", "opus[1m]");
     expect(loadModel("claude")).toBe("opus[1m]");
     expect(loadModel("codex")).toBe("default");
+  });
+
+  it("keeps the model remembered when a start sends none", async () => {
+    saveModel("claude", "opus");
+    server.use(http.post("/api/workspace", () => HttpResponse.json({ ok: true, pane: { ...pane, paneId: "m1" } })));
+    const d = deps();
+    await spawn(input({ model: undefined, message: "" }), d);
+    await vi.waitFor(() => expect(spawnState("m1")?.phase).toBe("done"));
+    expect(d.startAgent).toHaveBeenCalledWith("m1", "claude", undefined, "plan", undefined);
+    expect(loadModel("claude")).toBe("opus");
   });
 
   it("returns the bridge error and remembers nothing when creation fails", async () => {

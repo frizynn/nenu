@@ -78,5 +78,6 @@ describe("model allowlist", () => {
     expect(launchAgent({ agent: "codex", model: "gpt-6.1-sol" }, own)).toBeNull();
     expect(models.codex.slice(1)).toEqual([...CODEX_DOC_MODELS]);
     expect(models.claude).toBe(CLAUDE_MODELS);
+    expect(startModels([{ name: "default", description: "" }, { name: "gpt-7", description: "" }]).codex.map((m) => m.id)).toEqual(["default", "gpt-7"]);
   });
 });

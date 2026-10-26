@@ -13,9 +13,11 @@ const ITEMS = '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbo
  * A quiet button that names what is chosen and opens a short menu under it. The menu grows from its
  * button and fades back to it (180 ms in, 120 ms out); it closes on Escape, a press outside, the focus
  * leaving it, or a row that calls `close`. Opening moves the focus to the menu's search field when it
- * has one (`data-autofocus`), else the chosen row, else the first; the arrows, Home and End walk the rows.
+ * has one (`data-autofocus`) and a fine pointer opened it (a finger gets no keyboard unasked), else
+ * the chosen row, else the first; the arrows, Home and End walk the rows, and Up from the first row
+ * returns to the search field.
  */
-export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "start", className, menuClassName, children }: {
+export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "start", className, menuClassName, disabled, children }: {
   icon: IconComponent;
   label: ReactNode;
   ariaLabel: string;
@@ -23,6 +25,7 @@ export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "st
   align?: "start" | "end";
   className?: string;
   menuClassName?: string;
+  disabled?: boolean;
   children: (close: () => void) => ReactNode;
 }) {
   const id = useId();
@@ -36,7 +39,8 @@ export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "st
     if (!open) return;
     // Into the menu, as a menu button does; a finger's tap draws no ring for it.
     const rows = items();
-    const search = layer.current?.querySelector<HTMLElement>("[data-autofocus]");
+    const fine = typeof window.matchMedia === "function" && window.matchMedia("(pointer: fine)").matches;
+    const search = fine ? layer.current?.querySelector<HTMLElement>("[data-autofocus]") : null;
     (search ?? rows.find((row) => row.getAttribute("aria-checked") === "true") ?? rows[0])?.focus({ preventScroll: true });
     const outside = (event: PointerEvent) => {
       const target = event.target;
@@ -64,8 +68,11 @@ export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "st
     const focus = (at: number) => rows[(at + rows.length) % rows.length]?.focus({ preventScroll: true });
     // Home and End move the caret while the search field has the focus.
     const typing = event.target instanceof HTMLInputElement;
+    const search = layer.current?.querySelector<HTMLElement>("[data-autofocus]");
     if (event.key === "ArrowDown") focus(index + 1);
-    else if (event.key === "ArrowUp") focus(index - 1);
+    else if (event.key === "ArrowUp" && index === 0 && search) search.focus({ preventScroll: true });
+    // From the search field (no row focused) Up goes to the last row.
+    else if (event.key === "ArrowUp") focus(index === -1 ? rows.length - 1 : index - 1);
     else if (event.key === "Home" && !typing) focus(0);
     else if (event.key === "End" && !typing) focus(rows.length - 1);
     else if (event.key === "Escape") close();
@@ -77,9 +84,9 @@ export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "st
   return (
     <div className={cn("relative shrink-0", className)}>
       <button ref={trigger} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
-        aria-label={ariaLabel} onClick={() => (open ? close() : setOpen(true))}
+        aria-label={ariaLabel} disabled={disabled} onClick={() => (open ? close() : setOpen(true))}
         onKeyDown={(event) => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); setOpen(true); } }}
-        className="quiet-action">
+        className="quiet-action disabled:pointer-events-none disabled:opacity-50">
         <Icon aria-hidden className="size-3.5 shrink-0" />
         <span className="whitespace-nowrap">{label}</span>
         <ChevronDown aria-hidden className="-ml-0.5 size-3 shrink-0" />

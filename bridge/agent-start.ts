@@ -59,7 +59,9 @@ export const CODEX_DOC_MODELS: readonly StartModel[] = [
 
 /** The models a start may name: each agent's default first, then its list. */
 export function startModels(codex: ReadonlyArray<{ name: string; description: string }>): StartModels {
-  const listed = codex.length ? codex.map((m) => ({ id: m.name, label: m.name, hint: m.description })) : CODEX_DOC_MODELS;
+  // A slug named like the default would be a second row no one could pick.
+  const own = codex.filter((m) => m.name !== DEFAULT_MODEL.id);
+  const listed = own.length ? own.map((m) => ({ id: m.name, label: m.name, hint: m.description })) : CODEX_DOC_MODELS;
   return { claude: CLAUDE_MODELS, codex: [DEFAULT_MODEL, ...listed] };
 }
 

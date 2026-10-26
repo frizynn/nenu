@@ -33,7 +33,7 @@ import { needYou, type NeedsYouItem, type RecentChat } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { useHoldReload } from "@/lib/reload-guard";
-import { agentLabel, loadAgent, loadDirs, loadModel, loadPermission, PERMISSIONS, suggestDirs } from "@/lib/spawn";
+import { agentLabel, DEFAULT_MODEL, loadAgent, loadDirs, loadModel, loadPermission, PERMISSIONS, suggestDirs } from "@/lib/spawn";
 import { BY_FOLDER, destinationFolder, destinationTarget, liveDestination, takesFolder, type StartDestination } from "@/lib/start-destination";
 import { canCreate, isReadOnly, type AgentStatus, type Interaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -287,7 +287,7 @@ function StartComposer({ data, start, models, onStart, onBegin }: { data: HomeDa
   const folder = takesFolder(destination);
   const cwd = folder ? start.folder?.cwd ?? "" : "";
   const where = cwd ? tildePath(cwd, home) : "~";
-  const model = listedModel(models, agent, start.models[agent]);
+  const model = listedModel(models, agent, start.models[agent]) ?? DEFAULT_MODEL;
   // A workspace or tab brings its own folder along; another can still be picked after it.
   const toDestination = (next: StartDestination) => {
     const there = destinationFolder(next, data);
@@ -301,7 +301,7 @@ function StartComposer({ data, start, models, onStart, onBegin }: { data: HomeDa
           rows={2} disabled={!allowed} placeholder={`Ask ${agentLabel(agent)} anything, or describe the task`}
           className="composer-input min-h-16 w-full resize-none bg-transparent px-4 pt-3.5 text-body outline-none disabled:cursor-not-allowed" />
         <div className="flex items-center gap-1 px-2 pb-2">
-          <ModelMenu models={models} agent={agent} model={model}
+          <ModelMenu models={models} agent={agent} model={model} disabled={!allowed}
             onPick={(a, m) => onStart({ agent: a, models: { ...start.models, [a]: m } })} />
           <QuietMenu icon={permission.danger ? TriangleAlert : Lock} label={permission.label} ariaLabel={`Permissions: ${permission.label}`}
             menuLabel="Permissions" menuClassName="w-80" className={cn(permission.danger && "text-status-working")}>

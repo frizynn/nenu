@@ -96,11 +96,13 @@ export async function discoverPaneModels(pane: Pick<AgentView, "agent" | "agentS
   return pane.agent === "claude" ? claudeModels() : unavailable();
 }
 
-/** What a new chat may start on: Claude's aliases and the models the bridge user's Codex lists. The
- * route that starts an agent checks its choice against this same answer (agent-start.ts). */
+/** What a new chat may start on: Claude's aliases and the models the first Codex profile that caches
+ * a list names. The route that starts an agent checks its choice against this same answer (agent-start.ts). */
 export async function startCatalog(roots: Pick<JournalRoots, "codex">): Promise<StartModels> {
-  const root = roots.codex[0];
-  const profile = root ? dirname(root) : null;
-  const codex = profile ? codexModels(await metadata(join(profile, "models_cache.json"), profile)) : unavailable();
-  return startModels(codex.models);
+  for (const root of roots.codex.slice(0, 8)) {
+    const profile = dirname(root);
+    const codex = codexModels(await metadata(join(profile, "models_cache.json"), profile));
+    if (codex.available) return startModels(codex.models);
+  }
+  return startModels([]);
 }

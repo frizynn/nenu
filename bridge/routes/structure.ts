@@ -334,17 +334,18 @@ async function splitTab(
   device: string | null,
   session: string,
 ): Promise<Response> {
-  let body: { cwd?: string };
+  let body: unknown;
   try {
-    body = (await req.json()) as typeof body;
+    body = await req.json();
   } catch {
     return text("bad body", 400);
   }
   const ae = req.headers.get("accept-encoding");
+  const asked = typeof body === "object" && body !== null && "cwd" in body ? body.cwd : undefined;
   const snapshot = engine.current();
   const inTab = [...snapshot.agents, ...snapshot.shellPanes].find((p) => p.tabId === tabId);
   if (!inTab) return json({ ok: false, error: "That tab is gone." } satisfies CreateResponse, ae);
-  const cwd = typeof body.cwd === "string" && body.cwd.trim() ? body.cwd.trim() : undefined;
+  const cwd = typeof asked === "string" && asked.trim() ? asked.trim() : undefined;
   try {
     const created = await herdr.splitTab(inTab.paneId, { cwd });
     audit.record({ action: "pane.split", paneId: created.paneId, session, device, detail: { tabId, cwd } });
