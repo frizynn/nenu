@@ -9,12 +9,11 @@ import { diskFs, repoRoot, type RepoFs } from "./repo-root.ts";
  * a repo's clones and worktrees join under one name; a folder in no repo is named by itself. Only the
  * last segment of a remote's path comes out, never its host or any credential in it.
  */
-export function projectOf(cwd: string, fs: RepoFs = diskFs, home = homedir()): string | undefined {
+export function projectOf(cwd: string, home = homedir(), fs: RepoFs = diskFs): string | undefined {
   if (!cwd || !isAbsolute(cwd)) return undefined;
   const repo = repoRoot(cwd, home, fs);
   if (!repo) return basename(cwd) || undefined;
-  const config = join(repo.commonDir, "config");
-  return configRepoName(fs.kind(config) === "file" ? fs.read(config) : undefined) ?? (basename(repo.root).replace(/\.git$/, "") || undefined);
+  return configRepoName(fs.read(join(repo.commonDir, "config"))) ?? repo.name;
 }
 
 /** The repo name a git config's remotes give: `origin`'s URL first, else the first remote's. */
@@ -47,7 +46,7 @@ export class ProjectCache {
 
   constructor(
     private readonly now: () => number = Date.now,
-    private readonly read: (cwd: string) => string | undefined = projectOf,
+    private readonly read: (cwd: string) => string | undefined = (cwd) => projectOf(cwd),
     private readonly jitter: () => number = Math.random,
   ) {}
 

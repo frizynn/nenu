@@ -9,7 +9,7 @@ import { accountHash } from "./accounts.ts";
  * carries a hash of the root so two repos with one name stay apart, and never the path itself.
  */
 export function repoOf(cwd: string, home = homedir(), fs: RepoFs = diskFs): { key: string; label: string } {
-  return named(repoRoot(cwd, home, fs)?.root ?? cwd);
+  const repo = repoRoot(cwd, home, fs);
+  const label = repo?.name ?? (basename(cwd) || "/");
+  return { key: `${label}~${accountHash(repo?.root ?? cwd).slice(0, 6)}`, label };
 }
-
-const named = (root: string) => ({ key: `${basename(root) || "/"}~${accountHash(root).slice(0, 6)}`, label: basename(root) || "/" });

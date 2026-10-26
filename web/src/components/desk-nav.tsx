@@ -1,11 +1,11 @@
-import { memo, useEffect, useId, useReducer, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useId, useReducer, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronDown, ChevronRight } from "@/components/ui/icon";
 
 import { OpeningMark, PaneMark, PlaceText } from "@/components/nav-rows";
 import { AGENT_STATE, StateMark, StatusDot } from "@/components/status-badge";
 import { useDayTurn } from "@/hooks/use-day-turn";
-import { useHeldTime } from "@/hooks/use-held-time";
+import { useHeldTime, useOnReturn } from "@/hooks/use-held-time";
 import { COUNTED, deskChats, type CountedState, type DeskChat } from "@/lib/desk-nav";
 import { groupByProject, projectWeight, useProjectView, type ProjectGroup } from "@/lib/desk-projects";
 import { displayPlace } from "@/lib/display-name";
@@ -191,8 +191,8 @@ function ProjectFold({ group, open, onToggle, currentPaneId, children }: {
 /**
  * Only the chats in one state, as a tapped count asks, in the bar's order, and a way back to every chat. A
  * chat that leaves the state while the list is on screen stays, drawn in its new state, so no row moves
- * under the pointer; a return to the window lets it go, as it puts the bar's chats in order. Keyed by its
- * state, so another tap starts afresh.
+ * under the pointer; "N updates" or a return to the window lets it go, as they put the bar's chats in
+ * order. Keyed by its state, so another tap starts afresh.
  */
 export function OnlyList({ state, chats, row, onClear, className }: {
   state: CountedState;
@@ -204,19 +204,11 @@ export function OnlyList({ state, chats, row, onClear, className }: {
   const { label, none } = COUNTED.find((count) => count.state === state)!;
   const shown = useRef(new Set<string>());
   const [, redraw] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => {
-    const onReturn = () => {
-      if (document.visibilityState !== "visible") return;
-      shown.current = new Set();
-      redraw();
-    };
-    document.addEventListener("visibilitychange", onReturn);
-    window.addEventListener("focus", onReturn);
-    return () => {
-      document.removeEventListener("visibilitychange", onReturn);
-      window.removeEventListener("focus", onReturn);
-    };
+  const release = useCallback(() => {
+    shown.current = new Set();
+    redraw();
   }, []);
+  useOnReturn(release);
   const listed = chats.filter((chat) => chat.pane.status === state || shown.current.has(chat.paneId));
   for (const chat of listed) shown.current.add(chat.paneId);
   const count = chats.filter((chat) => chat.pane.status === state).length;
@@ -224,6 +216,7 @@ export function OnlyList({ state, chats, row, onClear, className }: {
     <section aria-label={label} className={cn("nav-chats nav-only", className)}>
       <div className="nav-label">
         <h3 className="nav-label-text">{label} <span className="nav-count">{count}</span></h3>
+        <UpdatesButton count={listed.length - count} onClick={release} />
         <button type="button" className="nav-label-updates" onClick={onClear}>Show all</button>
       </div>
       {listed.length > 0 ? listed.map(row) : <p className="nav-empty">{none}</p>}

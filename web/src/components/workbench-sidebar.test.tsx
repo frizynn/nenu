@@ -643,6 +643,7 @@ describe("the sidebar by project", () => {
   it("lists the projects by default, folded: what needs you first, then what works, then by the last move", () => {
     open();
     expect(screen.getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Group by project" }).querySelector("[data-icon='folder-tree'], svg")).not.toBeNull();
     expect(projectRows().map((row) => row.querySelector(".nav-row-text")?.textContent)).toEqual(["scratch", "shop", "notes", "site"]);
     expect(projectRows().every((row) => row.getAttribute("aria-expanded") === "false")).toBe(true);
     const shop = projects().getByRole("button", { name: /^shop, / });
@@ -737,11 +738,18 @@ describe("the sidebar by project", () => {
     await user.click(screen.getByRole("button", { name: "Done, 2" }));
     const listed = () => within(screen.getByRole("region", { name: "Done" })).getAllByRole("link").map((link) => link.getAttribute("href"));
     expect(listed()).toEqual(["/pane/clone", "/pane/site"]);
-    act(() => show({ ...herd, agents: herd.agents.map((agent) => agent.paneId === "clone" ? { ...agent, status: "idle" as const } : agent) }));
+    const cloneIdle = herd.agents.map((agent) => agent.paneId === "clone" ? { ...agent, status: "idle" as const } : agent);
+    act(() => show({ ...herd, agents: cloneIdle }));
     expect(listed()).toEqual(["/pane/clone", "/pane/site"]);
     expect(within(screen.getByRole("region", { name: "Done" })).getByRole("heading")).toHaveTextContent("Done 1");
     expect(screen.getByRole("link", { name: /^clone, idle/ })).toBeInTheDocument();
     act(() => { window.dispatchEvent(new Event("focus")); });
     expect(listed()).toEqual(["/pane/site"]);
+
+    // "N updates" lets a held row go too, for a desk that never loses focus.
+    act(() => show({ ...herd, agents: cloneIdle.map((agent) => agent.paneId === "site" ? { ...agent, status: "idle" as const } : agent) }));
+    expect(listed()).toEqual(["/pane/site"]);
+    await user.click(within(screen.getByRole("region", { name: "Done" })).getByRole("button", { name: "1 update" }));
+    expect(within(screen.getByRole("region", { name: "Done" })).getByText("Nothing finished unseen.")).toBeInTheDocument();
   });
 });

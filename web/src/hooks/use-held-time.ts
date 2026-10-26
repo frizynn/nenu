@@ -25,17 +25,7 @@ export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number
     held.current = new Map();
     redraw();
   }, []);
-  useEffect(() => {
-    const onReturn = () => {
-      if (document.visibilityState === "visible") reorder();
-    };
-    document.addEventListener("visibilitychange", onReturn);
-    window.addEventListener("focus", onReturn);
-    return () => {
-      document.removeEventListener("visibilitychange", onReturn);
-      window.removeEventListener("focus", onReturn);
-    };
-  }, [reorder]);
+  useOnReturn(reorder);
   const entry = (item: T) => {
     const id = key(item);
     let found = held.current.get(id);
@@ -50,4 +40,19 @@ export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number
   };
   const moved = (items: readonly T[]) => items.filter((item) => at(item) !== heldAt(item)).length;
   return { at: heldAt, order, moved, reorder };
+}
+
+/** Calls `fn` when the operator comes back to the page: it was hidden, or the window lost focus. */
+export function useOnReturn(fn: () => void): void {
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState === "visible") fn();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [fn]);
 }

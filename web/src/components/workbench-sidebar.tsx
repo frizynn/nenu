@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { FolderTree, Gauge, GitPullRequest, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
+import { FolderTree, Gauge, History, GitPullRequest, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { DeskLists, OnlyList, ProjectList, useHeldChats } from "@/components/desk-nav";
 import { SessionSwitcher } from "@/components/session-switcher";
@@ -269,7 +269,9 @@ function PhoneLists({ data, drawer, only, onClear, onNewChat }: { data: HomeData
   const { view } = useProjectView();
   const held = useHeldChats();
   const sections = drawer ? drawerSections(data, paneId) : undefined;
-  const chats = held.order(deskChats(data));
+  const projects = drawer && view === "projects";
+  // Only the lists that hold chats in place take the bar's order: a list taking it records the times it holds.
+  const chats = drawer && (only || projects) ? held.order(deskChats(data)) : [];
   const now = Date.now();
   const row = (chat: DeskChat) => <ChatRow key={chat.paneId} pane={chat.pane} current={chat.paneId === paneId} now={now} session={data.session} />;
   const section = (label: string, rows: readonly DrawerChat[], counted: boolean, end?: ReactNode) => (rows.length > 0 || end) && (
@@ -283,7 +285,6 @@ function PhoneLists({ data, drawer, only, onClear, onNewChat }: { data: HomeData
     </section>
   );
   if (drawer && only) return <OnlyList key={only} state={only} chats={chats} row={row} onClear={onClear} className="nav-group" />;
-  const projects = drawer && view === "projects";
   return <>
     {sections && section("Needs you", sections.needsYou, true)}
     {projects && <ProjectList chats={chats} held={held} row={row} currentPaneId={paneId} end={<ViewToggle />} className="nav-group" />}
@@ -294,15 +295,17 @@ function PhoneLists({ data, drawer, only, onClear, onNewChat }: { data: HomeData
 }
 
 /**
- * How this device lists the chats: under their projects (pressed, the default) or as one list by time.
- * The desk's sits in its search row, as T3 Code keeps its own; the drawer's at the end of its list's heading.
+ * How this device lists the chats: under their projects (pressed, the default) or as one list by time,
+ * its icon the view on screen. The desk's sits in its search row, as T3 Code keeps its own; the drawer's
+ * at the end of its list's heading.
  */
 function ViewToggle() {
   const { view, setView } = useProjectView();
+  const Icon = view === "projects" ? FolderTree : History;
   return (
     <button type="button" className="workbench-icon-button nav-view-toggle" aria-pressed={view === "projects"}
       aria-label="Group by project" title="Group by project" onClick={() => setView(view === "projects" ? "time" : "projects")}>
-      <FolderTree aria-hidden size={16} />
+      <Icon aria-hidden size={16} />
     </button>
   );
 }

@@ -88,13 +88,12 @@
 .workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host-dot { margin-left: 6px; }
 /* Home's counts above the foot, as T3 Code ends its list: a state's word, its glyph while it counts
    something, and how many. A count of nothing reads in the muted ink. */
-/* The desk's list fades out where it meets the counts instead of cutting a row in half; its bottom
-   padding is the faded band, so the last row reads in full once scrolled to. */
+/* The desk's and the drawer's list fades out where it meets the counts instead of cutting a row in half;
+   its bottom padding is the faded band, so the last row reads in full once scrolled to. */
 .workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-scroll { mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent); }
 .nav-status { display: flex; flex-direction: column; gap: 1px; }
 .nav-status > .nav-row { color: var(--muted-foreground); }
 .nav-status > .nav-row[data-live] { color: var(--foreground); }
-.nav-status .nav-row-meta > svg { margin-right: -2px; color: var(--subtle-foreground); }
 /* A count tapped lists only its chats: it stays filled, as a row on screen is, until tapped again. */
 .nav-status > .nav-row[aria-pressed="true"] { color: var(--foreground); }
 
@@ -191,7 +190,6 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .workbench-navigation[data-variant="drawer"] .nav-status > .nav-row { flex: 1 1 0; justify-content: center; gap: 6px; padding-inline: 4px; }
 .workbench-navigation[data-variant="drawer"] .nav-status > .nav-row > :is(.nav-row-text, .nav-lead) { flex: none; width: auto; }
 .workbench-navigation[data-variant="drawer"] .nav-status .nav-row-meta { margin-left: 0; font-size: inherit; }
-.workbench-navigation[data-variant="drawer"] .nav-status .nav-row-meta > svg { display: none; }
 }
 
 /* The desk's bar, drawn as Cursor's where a mouse drives it: small type, airy groups, faint
@@ -257,6 +255,8 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   /* A heading's text button (N updates, Show all) reaches 44px tall without growing the heading. */
   .nav-label-updates { position: relative; }
   .nav-label-updates::before { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 44px; transform: translateY(-50%); }
+  /* A heading that holds one is as tall as its reach, so the reach never lies over the row below. */
+  .nav-label:has(> .nav-label-updates) { min-height: 44px; }
   /* Three counts share the drawer's width: the footnote size keeps each inside its third. */
   .workbench-navigation[data-variant="drawer"] .nav-status > .nav-row { font-size: var(--text-footnote); }
 }
