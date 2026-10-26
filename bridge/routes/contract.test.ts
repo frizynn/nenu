@@ -191,7 +191,8 @@ describe("the folder picker over the tailnet", () => {
   test("reaches the listing for a write device's same-origin GET, which carries no Origin", async () => {
     // Past the gate the answer is home-dirs.ts's (200, or 404 where the runner has no home).
     const result = await send("GET", "/api/dirs?path=~%2F", { ...tailnet, "x-device": "phone" });
-    expect(result.status).not.toBe(403);
+    expect([200, 404]).toContain(result.status);
+    expect(result.body).toStartWith("{");
   });
 
   test("still refuses a read-only device", async () => {

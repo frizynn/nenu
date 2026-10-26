@@ -37,7 +37,7 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
  *  - Same-origin only (Origin host must equal Host) — defeats cross-site requests/CSRF. Browsers
  *    omit Origin on same-origin GETs (so the snapshot poll passes); they send it on POSTs.
  *    localhost and explicitly-configured origins are also allowed.
- *  - Origin required for writes: a state-changing (`level === "write"`, not GET) request with no
+ *  - Origin required for writes: a state-changing (`level === "write"`) request with no
  *    Origin is trusted only from loopback (curl on the host). Browsers always send Origin on fetch/SW
  *    POSTs, so a missing Origin on a remote write is a non-browser or Origin-stripped request — reject
  *    it. A same-origin GET carries no Origin, so a write-level GET (the folder picker) shows it is
@@ -74,9 +74,11 @@ export function checkAccess(
       LOOPBACK_HOST.test(originHost) ||
       cfg.allowedOrigins.includes(origin);
     if (!allowed) return { ok: false, reason: "cross-origin rejected" };
-  } else if (level === "write" && !LOOPBACK_HOST.test(host) && !(req.method === "GET" && req.headers.get(XHR_HEADER) !== null)) {
-    // A write with no Origin header from a non-loopback Host isn't a real browser request — refuse.
-    return { ok: false, reason: "origin required" };
+  } else if (level === "write" && !LOOPBACK_HOST.test(host)) {
+    // A write with no Origin header from a non-loopback Host isn't a real browser request — refuse,
+    // unless it is Nenu's own same-origin GET, which a browser sends without Origin.
+    const ownGet = req.method === "GET" && req.headers.get(XHR_HEADER) !== null;
+    if (!ownGet) return { ok: false, reason: "origin required" };
   }
 
   if (cfg.trustedUser) {
