@@ -643,7 +643,7 @@ describe("the sidebar by project", () => {
   it("lists the projects by default, folded: what needs you first, then what works, then by the last move", () => {
     open();
     expect(screen.getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Group by project" }).querySelector("[data-icon='folder-tree'], svg")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Group by project" }).querySelector(".icon-folder-tree")).not.toBeNull();
     expect(projectRows().map((row) => row.querySelector(".nav-row-text")?.textContent)).toEqual(["scratch", "shop", "notes", "site"]);
     expect(projectRows().every((row) => row.getAttribute("aria-expanded") === "false")).toBe(true);
     const shop = projects().getByRole("button", { name: /^shop, / });
@@ -681,6 +681,7 @@ describe("the sidebar by project", () => {
     const { user, unmount } = open();
     await user.click(screen.getByRole("button", { name: "Group by project" }));
     expect(screen.getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Group by project" }).querySelector(".icon-history")).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Projects" })).toBeNull();
     expect(within(screen.getByRole("region", { name: "Today" })).getAllByRole("link")).toHaveLength(5);
     unmount();

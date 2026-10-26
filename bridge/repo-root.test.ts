@@ -41,7 +41,15 @@ describe("repoRoot", () => {
     expect(repoOf(join(dir, "pool/feature"), "/nowhere").key).toMatch(/^shop~/);
   });
 
-  it("reads only regular files: a folder or a FIFO where a file should be reads as nothing", () => {
+  it("names a bare repo kept under another hidden name by the repo itself, never by the folder holding it", () => {
+    write(".cfg/HEAD", "ref: refs/heads/main\n");
+    worktree("dots", ".cfg", "dots");
+    expect(repoRoot(join(dir, "dots"), "/nowhere")?.root).toBe(join(dir, ".cfg"));
+  });
+
+  it("reads only small regular files: a folder, a FIFO or a huge file where a file should be reads as nothing", () => {
+    writeFileSync(join(dir, "huge"), "x".repeat(65 * 1024));
+    expect(diskFs.read(join(dir, "huge"))).toBeUndefined();
     mkdirSync(join(dir, "config"));
     expect(diskFs.read(join(dir, "config"))).toBeUndefined();
     Bun.spawnSync(["mkfifo", join(dir, "fifo")]);

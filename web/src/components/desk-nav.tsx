@@ -191,8 +191,8 @@ function ProjectFold({ group, open, onToggle, currentPaneId, children }: {
 /**
  * Only the chats in one state, as a tapped count asks, in the bar's order, and a way back to every chat. A
  * chat that leaves the state while the list is on screen stays, drawn in its new state, so no row moves
- * under the pointer; "N updates" or a return to the window lets it go, as they put the bar's chats in
- * order. Keyed by its state, so another tap starts afresh.
+ * under the pointer; "N updates" or a return to the window lets it go. Keyed by its state, so another tap
+ * starts afresh.
  */
 export function OnlyList({ state, chats, row, onClear, className }: {
   state: CountedState;

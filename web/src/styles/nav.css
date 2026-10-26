@@ -252,11 +252,11 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-host-meta, .nav-chat-place { font-size: var(--text-footnote); }
   .nav-chat-row { padding-block: 6px; }
   .nav-chat-row > .nav-lead, .nav-chat-line { height: auto; line-height: var(--text-body--line-height); }
-  /* A heading's text button (N updates, Show all) reaches 44px tall without growing the heading. */
+  /* A heading's text button (N updates, Show all) reaches 44px tall. The heading holding one is that tall
+     and centres it, so the reach never lies over the row below. */
   .nav-label-updates { position: relative; }
   .nav-label-updates::before { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 44px; transform: translateY(-50%); }
-  /* A heading that holds one is as tall as its reach, so the reach never lies over the row below. */
-  .nav-label:has(> .nav-label-updates) { min-height: 44px; }
+  .nav-label:has(> .nav-label-updates) { min-height: 44px; padding-block: 0; }
   /* Three counts share the drawer's width: the footnote size keeps each inside its third. */
   .workbench-navigation[data-variant="drawer"] .nav-status > .nav-row { font-size: var(--text-footnote); }
 }

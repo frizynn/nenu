@@ -35,7 +35,7 @@ Measured on the operator's herd on 2026-10-26 (31 agents, Nenu 2.7.0):
 3. **A toggle switches to the list by time** (ADR 0129's), on a desk beside Search and on a phone at the
    end of the drawer's list heading. By time, the drawer lists what 2.7.0's did.
 4. **A count lists only the chats in its state**, in the bar, pressed until tapped again, Show all or
-   Escape; a chat that leaves the state stays in the list until a return to the window, so no row moves
+   Escape; a chat that leaves the state stays in the list until "N updates" or a return to the window, so no row moves
    under the pointer. The phone's drawer shows the same counts side by side above its foot. Home is the
    brand's.
 

@@ -17,10 +17,12 @@ export const diskFs: RepoFs = {
       return undefined;
     }
   },
-  // Only a regular file is read: a FIFO named by a `.git` file would block the bridge's synchronous read.
+  // Only a small regular file is read: a FIFO named by a `.git` file would block the bridge's synchronous
+  // read, and a git config or pointer file is a few KiB.
   read(path) {
     try {
-      return statSync(path).isFile() ? readFileSync(path, "utf8") : undefined;
+      const stat = statSync(path);
+      return stat.isFile() && stat.size <= 64 * 1024 ? readFileSync(path, "utf8") : undefined;
     } catch {
       return undefined;
     }
@@ -49,7 +51,7 @@ export function repoRoot(cwd: string, home = homedir(), fs: RepoFs = diskFs): { 
       const common = fs.read(join(gitDir, "commondir"))?.trim();
       const marker = gitDir.lastIndexOf("/.git/worktrees/");
       const commonDir = common ? resolve(gitDir, common) : marker > 0 ? gitDir.slice(0, marker + "/.git".length) : gitDir;
-      return found(basename(commonDir).startsWith(".") ? dirname(commonDir) : commonDir, commonDir);
+      return found(/^\.(git|bare)$/.test(basename(commonDir)) ? dirname(commonDir) : commonDir, commonDir);
     }
     const up = dirname(dir);
     if (up === dir) break;
