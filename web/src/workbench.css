@@ -37,9 +37,11 @@
 :root { --page-gutter: 16px; --page-column: clamp(760px, 50vw, 960px); --chat-column: 48rem; }
 @media (min-width: 640px) { :root { --page-gutter: 32px; } }
 .workbench-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
+/* An action this device may not take (New on a read-only device) reads as unavailable, as a row does. */
+.workbench-icon-button:disabled { opacity: 0.5; cursor: default; }
 /* Hover only where a pointer hovers: a touch browser keeps :hover on what a finger tapped, so the
    drawer's Search stayed filled after it opened. */
-@media (hover: hover) { .workbench-icon-button:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
+@media (hover: hover) { .workbench-icon-button:hover:not(:disabled) { color: var(--foreground); background: var(--workbench-row-hover); } }
 
 /* New surfaces live in the components layer so Tailwind utilities on the same element still win. */
 @layer components {

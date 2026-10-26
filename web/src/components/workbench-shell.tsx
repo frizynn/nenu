@@ -147,7 +147,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
     <div className="workbench-shell" data-sidebar-collapsed={collapsed}>
       {deskSeen && <aside id={sidebarId} className="workbench-sidebar" aria-label="Workspace sidebar" style={{ width: sidebarWidth }}>
         <div className="workbench-brand-row">
-          <Link to={homePath(data.session)} className="workbench-brand">
+          <Link to={homePath(data.session)} className="workbench-brand" aria-current={location.pathname === "/" ? "page" : undefined}>
             <img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" />
             <span>Nenu</span>
           </Link>

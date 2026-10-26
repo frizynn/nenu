@@ -500,7 +500,7 @@ describe("Recents and Workspaces", () => {
       expect(recents).toHaveClass("desk-tab");
       expect(recents).not.toHaveClass("project-segment");
       expect(main.getByRole("tablist", { name: "Your work" })).not.toHaveClass("project-segmented");
-      expect(main.getByRole("heading", { level: 1 })).toHaveClass("text-large-title", "lg:text-title");
+      expect(main.getByRole("heading", { level: 1 })).toHaveClass("text-title");
     } finally {
       vi.unstubAllGlobals();
     }
@@ -689,6 +689,22 @@ it("lists every pull request under the PRs tab by repo, ready to merge first, an
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1696");
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("target", "_blank");
   expect(prs.getByRole("link", { name: /^Abandoned carts,/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
+});
+
+// The desk's Pull requests action (the sidebar's foot) opens Home on its PRs, even with Home on screen.
+it("opens on the PRs tab when the link that opened it names that list, and remembers it as a tap would", async () => {
+  const pr: PullRequestView = { repo: "a/b", number: 1, title: "PR 1", url: "https://github.com/a/b/pull/1", branch: "x", draft: false, paneIds: [], inUse: true };
+  const { router, main } = await setup({ ...data, pullRequests: [pr] });
+  expect(main.getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
+  await act(() => router.navigate("/?s=work", { state: { list: "prs" } }));
+  expect(main.getByRole("tab", { name: "PRs" })).toHaveAttribute("aria-selected", "true");
+  expect(localStorage.getItem("nenu:home-list:v2")).toBe("prs");
+  // The ask is spent: a Back onto this entry opens on the list chosen since, not on PRs again.
+  expect(router.state.location.state).not.toHaveProperty("list");
+  await userEvent.setup().click(main.getByRole("tab", { name: "Recents" }));
+  await act(() => router.navigate("/pane/w1%3Ap1"));
+  await act(() => router.navigate(-1));
+  expect(within(document.querySelector("main")!).getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
 });
 
 // The headline counts what the PRs tab lists with the filter kept on this device.

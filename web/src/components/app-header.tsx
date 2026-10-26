@@ -151,6 +151,7 @@ export function AppHeader({
 
 // The Settings gear, shared so the dashboard and space headers don't each hand-roll it. Session-scoped
 // so the navigation stays on the session you're viewing.
+/** The bar's way to Settings on a phone; a desk reaches it from the sidebar's foot or the rail's. */
 export function SettingsGear({ session }: { session?: string }) {
   const navigate = useNavigate();
   return (
@@ -163,7 +164,7 @@ export function SettingsGear({ session }: { session?: string }) {
       // against a 12px gap, so a neighbour steals 12px of this one's hit area) and drags the last
       // one past the header's padding into document overflow. Costs horizontal room, which the
       // breadcrumb absorbs — it already truncates by design.
-      className="grid size-11 place-items-center text-muted-foreground transition-colors hover:text-foreground"
+      className="grid size-11 place-items-center text-muted-foreground transition-colors hover:text-foreground lg:hidden"
     >
       <Settings2 className="size-5" />
     </button>

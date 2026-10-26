@@ -2,11 +2,14 @@ import { memo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronDown } from "@/components/ui/icon";
 
-import { OpeningMark, PaneMark } from "@/components/nav-rows";
+import { OpeningMark, PaneMark, PlaceText } from "@/components/nav-rows";
 import { AGENT_STATE, StateMark } from "@/components/status-badge";
 import { useDayTurn } from "@/hooks/use-day-turn";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { deskChats, type DeskChat } from "@/lib/desk-nav";
+import { displayPlace } from "@/lib/display-name";
+import { TITLE_SEP } from "@/lib/pane-name";
+import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { groupByRecency } from "@/lib/recency";
@@ -78,7 +81,7 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
               : <h3 className="nav-label">{group.label}</h3>}
             {group.items.map((chat) => (
               <Reveal key={chat.paneId} folded={hides(chat)}>
-                <ChatRow chat={chat} session={data.session} current={isCurrent(chat)} />
+                <ChatRow chat={chat} session={data.session} current={isCurrent(chat)} now={now} />
               </Reveal>
             ))}
           </section>
@@ -90,11 +93,13 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
 }
 
 /**
- * A chat: its state as a small still glyph, its one name, and a quiet +1 when it finished or asked for
- * you since you last opened it (the desk's answer to an agent finishing elsewhere, instead of a toast).
- * Drawn again only when its pane changed: the bar re-renders on every revalidation, its rows need not.
+ * A chat: its state as a small still glyph, its name and how long ago it moved, then where it lives in
+ * the quiet ink (as T3 Code's rows say their repo and branch), so two chats of one name still read
+ * apart; and a quiet +1 when it finished or asked for you since you last opened it (the desk's answer to
+ * an agent finishing elsewhere, instead of a toast). Drawn again only when its pane changed or its time
+ * reads another minute: the bar re-renders on every revalidation, its rows need not.
  */
-const ChatRow = memo(function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string; current: boolean }) {
+const ChatRow = memo(function ChatRow({ chat, session, current, now }: { chat: DeskChat; session?: string; current: boolean; now: number }) {
   const { pane } = chat;
   const to = panePath(chat.paneId, session);
   const word = STATUS_LABEL[pane.status];
@@ -103,18 +108,27 @@ const ChatRow = memo(function ChatRow({ chat, session, current }: { chat: DeskCh
   useDayTurn(limit !== undefined);
   // Only what is alive reads in full ink: a chat that waits, works, or finished unseen.
   const live = limit !== undefined || AGENT_STATE[pane.status] !== "idle" || chat.unread;
+  const place = displayPlace(pane);
   return (
-    <Link className="nav-row" to={to} aria-current={current ? "page" : undefined} data-live={live || undefined}>
+    <Link className="nav-row nav-chat-row" to={to} aria-current={current ? "page" : undefined} data-live={live || undefined}>
       <span className="nav-lead">
         <OpeningMark to={to}>{limit ? <StateMark state="limit" /> : <PaneMark pane={pane} />}</OpeningMark>
       </span>
-      <span className="nav-row-text">{chat.title}</span>
-      {limit
-        ? <span className="nav-limit" data-limit title={limitLine(limit)}><span className="sr-only">, usage limit, </span>resets {resetTime(limit.resetsAt)}</span>
-        : <span className="sr-only">, {word}</span>}
-      {chat.unread && !current && <span className="nav-unread" data-unread aria-hidden>+1</span>}
-      {chat.unread && !current && <span className="sr-only">, new</span>}
+      <span className="nav-chat-text">
+        <span className="nav-chat-line">
+          <span className="nav-row-text">{chat.title}</span>
+          {chat.unread && !current && <span className="nav-unread" data-unread aria-hidden>+1</span>}
+          {limit
+            ? <span className="nav-limit" data-limit title={limitLine(limit)}><span className="sr-only">, usage limit, </span>resets {resetTime(limit.resetsAt)}</span>
+            : <span className="sr-only">, {word}</span>}
+          {chat.unread && !current && <span className="sr-only">, new</span>}
+          {!limit && chat.at > 0 && <span className="nav-chat-time" aria-hidden>{timeAgoShort(chat.at, now)}</span>}
+        </span>
+        {/* Where it lives tells two chats of one name apart, by ear too; when it moved is for the eye. */}
+        <span className="nav-chat-place" aria-hidden><PlaceText place={place} /></span>
+        <span className="sr-only">, {place.tab ? `${place.place}${TITLE_SEP}${place.tab}` : place.place}</span>
+      </span>
     </Link>
   );
-}, (a, b) => a.chat.pane === b.chat.pane && a.chat.title === b.chat.title && a.chat.unread === b.chat.unread
-  && a.session === b.session && a.current === b.current);
+}, (a, b) => a.chat.pane === b.chat.pane && a.chat.title === b.chat.title && a.chat.unread === b.chat.unread && a.chat.at === b.chat.at
+  && a.session === b.session && a.current === b.current && timeAgoShort(a.chat.at, a.now) === timeAgoShort(b.chat.at, b.now));

@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { House, Laptop, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
+import { ChevronRight, Gauge, GitPullRequest, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { DeskLists } from "@/components/desk-nav";
 import { SessionSwitcher } from "@/components/session-switcher";
@@ -16,11 +16,11 @@ import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { currentMachine, machineSearch, type MachineSearchGroup } from "@/lib/machines";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
-import { needsYouCount, needYou } from "@/lib/home-stats";
+import { needsYouCount, reviewQueue } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, panePath, settingsPath, workspacePath } from "@/lib/nav";
+import { homePath, panePath, settingsPath, usagePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
-import { STATUS_LABEL } from "@/lib/types";
+import { STATUS_LABEL, type AgentStatus } from "@/lib/types";
 
 export interface SidebarRequest {
   target: "search";
@@ -28,9 +28,9 @@ export interface SidebarRequest {
 }
 
 /**
- * Where the navigation is drawn. The desk's sidebar is Cursor's: New chat, Search, Home (which counts
- * what needs you), then its chats by when they last moved; the tree of workspaces is its Search's,
- * under the box until something is typed (ADR 0080). A phone's Search sheet (the tab bar's) is also
+ * Where the navigation is drawn. The desk's sidebar is T3 Code's: Search with New beside it, its chats by
+ * when they last moved, and at its foot Home's counts and a row of small actions (ADR 0129); the tree of
+ * workspaces is its Search's, under the box until something is typed (ADR 0080). A phone's Search sheet (the tab bar's) is also
  * its browsing: under its box, until something is typed, every workspace folded, the sessions and the
  * host. Its drawer (Home's or a chat's Nenu mark) leaves New and Search to its header and leads with
  * what needs you and the chats that moved last.
@@ -57,7 +57,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   const treeScroll = useRef(0);
   const listId = useId();
   const navigate = useNavigate();
-  const { pathname, key } = useLocation();
+  const { key } = useLocation();
   const attention = needsYouCount(data);
   const phone = variant !== "sidebar";
   const order = answered?.query === query ? answered.order : undefined;
@@ -141,9 +141,6 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
     <nav ref={navigation} className="workbench-navigation" aria-label="Workspaces and chats" data-variant={variant} data-list={query.trim() ? "search" : "browse"}
       onKeyDown={(event) => { if (event.key === "Escape" && searching && !phone) closeSearch(); }}>
       {(!phone || searching) && <div className="nav-top">
-        {!phone && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
-          <SquarePen aria-hidden size={16} /><span className="nav-row-text">New chat</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
-        </button>}
         {searching ? (
           <label className="nav-row nav-search">
             <Search aria-hidden size={16} />
@@ -159,11 +156,11 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
             <Search aria-hidden size={16} /><span className="nav-row-text">Search</span><kbd className="nav-kbd" aria-hidden>⌘K</kbd>
           </button>
         )}
-        {!phone && <Link className="nav-row" to={homePath(data.session)} aria-current={pathname === "/" ? "page" : undefined}
-          aria-label={attention > 0 ? `Home, ${needYou(attention)}` : undefined}>
-          <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
-          {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" />{attention}</span>}
-        </Link>}
+        {/* New sits at the search row's end as a small action, as T3 Code keeps its own beside Search. */}
+        {!phone && <button type="button" className="workbench-icon-button" onClick={onNewChat} disabled={!onNewChat}
+          aria-label="New chat" aria-keyshortcuts="Meta+N" title="New chat (⌘N)">
+          <SquarePen aria-hidden size={16} />
+        </button>}
       </div>}
 
       {/* A link followed from the desk's tree ends its search once the page is on screen, as a result does. */}
@@ -183,8 +180,9 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
 
       {/* The host belongs to browsing: on a phone's Search sheet, until something is typed. */}
       {(!phone || !query.trim()) && <div className="nav-footer">
+        {!phone && <DeskStatus data={data} attention={attention} />}
         <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />
-        <HostRow data={data} desk={!phone} />
+        <HostRow data={data} actions={variant !== "sheet"} />
       </div>}
     </nav>
   );
@@ -291,28 +289,69 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
   );
 }
 
+/** The states the desk's bar counts at its foot, most pressing first. */
+const DESK_STATES = [["blocked", "Needs you"], ["working", "Working"], ["done", "Done"]] as const;
+
 /**
- * The host Nenu reaches Herdr on, whether that link is up, and how much it holds. The desk's footer
- * names the host alone, as Cursor's names its account, behind the machine mark the composer uses and in
- * the column of the rows' icons: the link's dot and "Not connected" show only once Herdr is out of
- * reach. A phone names the host after Herdr; neither counts workspaces or agents, which are Home's to give.
+ * Home, as the desk's bar ends: how many agents need you, work and finished unseen, each a row that opens
+ * Home, where they are answered and listed. Every count shows at zero too, so the rows never move; a
+ * state's glyph shows only while it counts something.
  */
-function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
+function DeskStatus({ data, attention }: { data: HomeData; attention: number }) {
+  const count = (status: AgentStatus) => status === "blocked" ? attention : data.agents.filter((pane) => pane.status === status).length;
+  return (
+    <section aria-label="Home" className="nav-status">
+      {DESK_STATES.map(([status, label]) => {
+        const n = count(status);
+        return (
+          <Link key={status} className="nav-row" to={homePath(data.session)} aria-label={`${label}, ${n}`} data-live={n > 0 || undefined}>
+            <span className="nav-lead">{n > 0 && <StatusDot status={status} />}</span>
+            <span className="nav-row-text">{label}</span>
+            <span className="nav-row-meta" aria-hidden>{n}<ChevronRight size={14} /></span>
+          </Link>
+        );
+      })}
+    </section>
+  );
+}
+
+/**
+ * The host Nenu reaches Herdr on and whether that link is up. The desk's and the drawer's footer name the
+ * host alone, at the end of their actions: the link's dot and "Not connected" show only once Herdr is out
+ * of reach. The Search sheet names the host after Herdr, then Settings; none counts workspaces or agents,
+ * which are Home's.
+ */
+function HostRow({ data, actions }: { data: HomeData; actions: boolean }) {
   const connected = data.bridge === "connected" && !data.error;
   const { hostname } = window.location;
   // With more than one machine, the one on screen by Herdr's name for it; else as the browser names it.
   const host = currentMachine(data)?.label ?? (/^[\d.]+$|:/.test(hostname) ? hostname : hostname.split(".")[0] || "local");
   const meta = !connected ? "Not connected" : undefined;
-  return (
+  const settings = <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings" title="Settings"><Settings2 aria-hidden size={16} /></Link>;
+  // The desk's foot, and the phone drawer's, is a row of small actions, as T3 Code's: Settings, the open
+  // pull requests (Home's PRs, there while GitHub lists one) and Usage, then the host at the end in the
+  // quiet ink.
+  if (actions) return (
     <div className="nav-host">
-      {desk && connected
-        ? <Laptop aria-hidden size={16} className="nav-host-mark" />
-        : <span className={cn("nav-host-dot size-1.5 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />}
-      <span className="nav-host-text">
-        <span className="nav-host-name">{desk ? host : `herdr · ${host}`}</span>
+      {settings}
+      {reviewQueue(data.pullRequests).length > 0 && <Link className="workbench-icon-button" to={homePath(data.session)} state={{ list: "prs" }}
+        aria-label="Pull requests" title="Pull requests"><GitPullRequest aria-hidden size={16} /></Link>}
+      <Link className="workbench-icon-button" to={usagePath(data.session)} aria-label="Usage" title="Usage"><Gauge aria-hidden size={16} /></Link>
+      <span className="nav-host-text nav-host-end">
+        <span className="nav-host-name">{host}</span>
         {meta && <span className="nav-host-meta">{meta}</span>}
       </span>
-      <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings"><Settings2 aria-hidden size={16} /></Link>
+      {!connected && <span className="nav-host-dot size-1.5 shrink-0 rounded-full bg-status-blocked" aria-hidden />}
+    </div>
+  );
+  return (
+    <div className="nav-host">
+      <span className={cn("nav-host-dot size-1.5 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />
+      <span className="nav-host-text">
+        <span className="nav-host-name">herdr · {host}</span>
+        {meta && <span className="nav-host-meta">{meta}</span>}
+      </span>
+      {settings}
     </div>
   );
 }

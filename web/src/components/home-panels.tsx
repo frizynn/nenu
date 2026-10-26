@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigation } from "react-router";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useNavigation } from "react-router";
 import { ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
@@ -130,11 +130,11 @@ export function SessionRow({ chat, session, now, opening, group, inTab = false }
   return (
     <li className={enter}>
       <Link to={to} aria-busy={busy || undefined}
-        className={cn("relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
+        className={cn("relative grid min-h-13 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
           inTab && "max-sm:gap-x-1.5", busy && "bg-[var(--workbench-row-hover)]")}>
         <span className="row-span-2 flex justify-center text-muted-foreground"><PaneMark pane={agent} /></span>
         <span className="col-start-2 flex min-w-0 items-center gap-1.5">
-          <span className={cn("truncate text-body sm:text-subhead", unseen && "font-semibold")}>{title}</span>
+          <span className={cn("truncate text-subhead", unseen && "font-semibold")}>{title}</span>
           {unseen && <>{sr(", ")}<span className="shrink-0 rounded-sm border border-status-done/50 px-1 text-micro text-status-done">New</span></>}
         </span>
         <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
@@ -171,6 +171,12 @@ function readList(): SessionList {
     return "recents";
   }
 }
+/** The list a link asked Home to open on, if it named one. */
+function listAsked(state: unknown): SessionList | undefined {
+  const list = typeof state === "object" && state !== null ? (state as { list?: unknown }).list : undefined;
+  return LISTS.find(([key]) => key === list)?.[0];
+}
+
 function rememberList(list: SessionList): void {
   try {
     localStorage.setItem(LIST_KEY, list);
@@ -231,11 +237,11 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, animate = true, t
   const at = Math.max(0, ...chats.map((chat) => chat.at));
   const listId = `home-${kind}-${id}`;
   const label = `${name}, ${state.word}, ${count}`;
-  const grid = "grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left sm:min-h-12 sm:rounded-lg sm:px-2.5";
+  const grid = "grid min-h-13 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left sm:min-h-12 sm:rounded-lg sm:px-2.5";
   const className = cn(grid, "hover:bg-[var(--workbench-row-hover)]", busy && "bg-[var(--workbench-row-hover)]");
   const body = <>
     <Icon aria-hidden className="row-span-2 size-4 justify-self-center text-muted-foreground" />
-    <span className="col-start-2 truncate text-body sm:text-subhead">{name}</span>
+    <span className="col-start-2 truncate text-subhead">{name}</span>
     <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
       <span className={cn("shrink-0", state.tone)}>{state.word}</span><span aria-hidden>·</span><span className="truncate">{count}</span>
     </span>
@@ -321,7 +327,21 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   now: number;
   opening: string | null;
 }) {
-  const [chosen, setList] = useState<SessionList>(readList);
+  // A link that names a list (the desk's Pull requests) opens Home on it, and it is remembered as a tap
+  // would be. The ask is then taken out of the entry's state, so a Back or a reload onto this entry opens
+  // on the list last chosen, not on the one that link asked for.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const asked = listAsked(location.state);
+  const [chosen, setList] = useState<SessionList>(() => asked ?? readList());
+  // Before paint, so a Home already on screen never shows the list it is leaving.
+  useLayoutEffect(() => {
+    if (!asked) return;
+    setList(asked);
+    rememberList(asked);
+    const rest = Object.fromEntries(Object.entries(location.state as object).filter(([key]) => key !== "list"));
+    void navigate(location.pathname + location.search, { replace: true, state: rest });
+  }, [asked, location, navigate]);
   const lists = LISTS.filter(([key]) => key !== "prs" || reviews.length > 0);
   const list = lists.some(([key]) => key === chosen) ? chosen : lists[0]![0];
   // The workspaces opened in place; none until a tap opens one.

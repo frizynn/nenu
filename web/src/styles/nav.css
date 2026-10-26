@@ -80,10 +80,21 @@
 .nav-host-name, .nav-host-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-host-name { font-size: var(--text-footnote); }
 .nav-host-meta { color: var(--subtle-foreground); font-size: var(--text-caption); }
-/* The desk's footer puts its mark in the 18px column of the rows' icons, so the host lines up with their names. */
-.workbench-navigation[data-variant="sidebar"] .nav-host { padding-left: 18px; }
-.nav-host-mark { flex-shrink: 0; margin-inline: 1px; color: var(--subtle-foreground); }
-.workbench-navigation[data-variant="sidebar"] .nav-host-dot { margin-inline: 5px; }
+/* The desk's foot: small icon actions from the bar's left edge, the host at the far end in the quiet ink. */
+/* Its first action sits in the column of the rows' marks. */
+.workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host { gap: 2px; min-height: 48px; padding: 0 14px 0 11px; }
+.nav-host-end { align-items: flex-end; margin-left: auto; padding-left: 8px; text-align: right; }
+.nav-host-end > .nav-host-name { color: var(--subtle-foreground); font-size: var(--text-caption); }
+.workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host-dot { margin-left: 6px; }
+/* Home's counts above the foot, as T3 Code ends its list: a state's word, its glyph while it counts
+   something, and how many. A count of nothing reads in the muted ink. */
+/* The desk's list fades out where it meets the counts instead of cutting a row in half; its bottom
+   padding is the faded band, so the last row reads in full once scrolled to. */
+.workbench-navigation[data-variant="sidebar"] .nav-scroll { mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent); }
+.nav-status { display: flex; flex-direction: column; gap: 1px; }
+.nav-status > .nav-row { color: var(--muted-foreground); }
+.nav-status > .nav-row[data-live] { color: var(--foreground); }
+.nav-status .nav-row-meta > svg { margin-right: -2px; color: var(--subtle-foreground); }
 
 /* A chat's row in every list (tree, search, Needs you, Recent, the pane switcher): mark, name, where it lives. */
 .nav-pane { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 40px; padding: 5px var(--nav-pad, 10px); border-radius: var(--radius-md); color: var(--foreground); text-decoration: none; }
@@ -116,7 +127,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-place-tab { flex-shrink: 0; max-width: 65%; overflow: hidden; text-overflow: ellipsis; }
 .workbench-sidebar .nav-label:first-child { padding-top: 10px; }
 
-/* What a desk row says at its end: Home's count. */
+/* What a desk row says at its end: Home's counts. */
 .nav-row-meta { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; margin-left: auto; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 /* A resting chat reads in the muted ink, as T3 Code's list does, so the eye lands on what is alive: a
    chat that waits, works, finished unseen or has something to review, the one on screen and the one
@@ -124,6 +135,18 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-chats .nav-row:not([data-live], [aria-current="page"]) { color: var(--muted-foreground); }
 @media (hover: hover) { .nav-chats .nav-row:hover { color: var(--foreground); } }
 .nav-label-text { flex: 1; min-width: 0; font: inherit; }
+/* The desk's search row: Search fills it, New sits at its end as a small action. */
+.workbench-navigation[data-variant="sidebar"] > .nav-top { flex-direction: row; align-items: center; gap: 4px; }
+.workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row { flex: 1; }
+/* A chat in the desk's bar: its name and when it moved, then where it lives one step quieter. The mark sits
+   on the name's line. */
+.nav-chat-row { align-items: flex-start; }
+.nav-chat-row > .nav-lead { height: var(--text-footnote--line-height); }
+.nav-chat-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 1px; }
+.nav-chat-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; line-height: var(--text-footnote--line-height); }
+.nav-chat-place { display: flex; min-width: 0; color: var(--subtle-foreground); font-size: var(--text-caption); line-height: var(--text-caption--line-height); white-space: pre; }
+/* The tertiary tone measured 4.43:1 on the light selected fill; the muted one clears 4.5:1 there. */
+.nav-chat-row[aria-current="page"] :is(.nav-chat-place, .nav-chat-time) { color: var(--muted-foreground); }
 .nav-more { color: var(--subtle-foreground); }
 @media (hover: hover) { .nav-more:hover { color: var(--muted-foreground); } }
 .nav-more-chevron { transition: transform var(--motion-panel) var(--motion-ease); }
@@ -149,21 +172,30 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .workbench-navigation[data-variant="sheet"] :is(.nav-top, .nav-footer) { padding-inline: 0; }
 .workbench-navigation[data-variant="sheet"] .nav-host { margin-inline: 0; padding-inline: 0; }
 .workbench-navigation[data-variant="drawer"] .nav-scroll { padding-inline: calc(16px - var(--nav-pad, 10px)); }
-.workbench-navigation[data-variant="drawer"] .nav-host { padding-left: 16px; }
+.workbench-navigation[data-variant="drawer"] .nav-host { padding-inline: 4px 16px; }
 }
 
 /* The desk's bar, drawn as Cursor's where a mouse drives it: small type, airy groups, faint
    icons and a soft grey for the row on screen, 32px rows as T3 Code's. A touch screen keeps the 44px rows below. */
 @media (min-width: 1024px) and (pointer: fine) {
-  .workbench-navigation[data-variant="sidebar"] > .nav-top { gap: 1px; padding: 2px 8px 0; }
-  .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row, .nav-desk .nav-row { min-height: 32px; padding-block: 0; }
+  .workbench-navigation[data-variant="sidebar"] > .nav-top { gap: 4px; padding: 2px 8px 0; }
+  .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row, .nav-desk .nav-row, .nav-status > .nav-row { min-height: 32px; padding-block: 0; }
+  .nav-desk .nav-chat-row { padding-block: 7px; }
+  .nav-status > .nav-row { min-height: 30px; }
   .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row > svg { color: var(--subtle-foreground); }
   .nav-desk.nav-group { padding-top: 18px; }
   .nav-desk .nav-group { padding-top: 10px; }
   .nav-chats > .nav-reveal:first-child .nav-group { padding-top: 18px; }
   .nav-desk .nav-label { min-height: 26px; padding: 0 10px; color: var(--subtle-foreground); font-size: var(--text-caption); font-weight: 400; }
   .workbench-navigation[data-variant="sidebar"] .nav-host { border-top: 0; }
+  /* Small actions where a mouse drives them; a touch screen keeps their 44px. */
+  .workbench-navigation[data-variant="sidebar"] :is(.nav-host, .nav-top) > .workbench-icon-button { width: 32px; height: 32px; }
+  .workbench-navigation[data-variant="sidebar"] .nav-status { padding-top: 8px; }
 }
+
+/* The foot's actions in the quiet ink. Outside the components layer, as .workbench-icon-button's own
+   colour is (workbench.css), or that unlayered rule would win whatever this one's specificity. */
+.workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host > .workbench-icon-button:not(:hover) { color: var(--subtle-foreground); }
 
 /* The tree Search opens fades down into place. More's rows open and close (above) on a press, and also when a
    poll lets go of a row it held in view past the fold, such as a chat that stopped asking. */
@@ -195,5 +227,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .nav-pane { min-height: 52px; padding-block: 6px; }
   .nav-ws-body .nav-pane { min-height: 44px; }
   .nav-pane-title { font-size: var(--text-body); }
-  .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-host-meta { font-size: var(--text-footnote); }
+  .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-host-meta, .nav-chat-place { font-size: var(--text-footnote); }
+  .nav-chat-row { padding-block: 6px; }
+  .nav-chat-row > .nav-lead, .nav-chat-line { height: auto; line-height: var(--text-body--line-height); }
 }
