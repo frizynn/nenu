@@ -6,7 +6,7 @@ import { ColumnPage } from "@/components/column-page";
 import { DeskHome } from "@/components/desk-home";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MachinesSlot } from "@/components/machines-slot";
-import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, useOpeningPath, type SessionList } from "@/components/home-panels";
+import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, SessionLists, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
@@ -15,7 +15,7 @@ import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useInteractions } from "@/hooks/use-interactions";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { isConnecting } from "@/lib/connection";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats, type ReviewEntry } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { filterReviews, usePrFilter } from "@/lib/pr-filter";
 import { openNewAgent } from "@/lib/spawn";
@@ -74,11 +74,10 @@ export function HomeRoute() {
   // The headline counts the PRs the PRs tab lists with the filter kept on this device; a search is not kept.
   const counts = { needs: needs.length, review: filterReviews(reviews, prFilter).kept.length, working: data.agents.filter((a) => a.status === "working").length };
   const { title, detail } = homeHeadline(counts, data.agents.length, calm);
-  const sessions = (list?: SessionList) => (
-    <HomeSessions list={list} recent={recent} workspaces={workspaceChats(data, reviews)} reviews={reviews}
-      pullRequests={(entries) => <PullRequestList entries={entries} session={data.session} opening={opening} />}
-      session={data.session} now={now} opening={opening} />
-  );
+  const lists = {
+    recent, workspaces: workspaceChats(data, reviews), reviews, session: data.session, now, opening,
+    pullRequests: (entries: readonly ReviewEntry[]) => <PullRequestList entries={entries} session={data.session} opening={opening} />,
+  };
   const background = running.length > 0 && (
     <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
       <HomeHeading id="home-running" label="Running in background" count={running.length} />
@@ -90,8 +89,8 @@ export function HomeRoute() {
 
   if (desk) {
     return <DeskHome data={data} stale={stale} now={now} opening={opening} needs={needs} receipts={receipts} interactions={interactions} lock={lock}
-      recent={recent} prs={{ listed: reviews.length, kept: counts.review }} list={sessions}
-      more={<><MachinesSlot data={data} place="home" />{background}</>} />;
+      recent={recent} prs={{ listed: reviews.length, kept: counts.review }} list={(list) => <SessionLists {...lists} list={list} />}
+      extras={<><MachinesSlot data={data} place="home" />{background}</>} />;
   }
 
   // A phone leaves the date out and starts on the headline, so the first screen holds more of the list.
@@ -110,7 +109,7 @@ export function HomeRoute() {
       <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
         <NeedsYouList agents={data.agents} session={data.session} items={needs} receipts={receipts}
           interactions={interactions} lockReason={lock} opening={opening} />
-        {sessions()}
+        <HomeSessions {...lists} />
         <MachinesSlot data={data} place="home" />
         {background}
       </div>

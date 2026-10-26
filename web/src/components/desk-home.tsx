@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ArrowUp, Check, ChevronDown, Folder, GitPullRequest, Lock, Sparkle, SquareTerminal, TriangleAlert, type IconComponent } from "@/components/ui/icon";
 
@@ -7,7 +7,7 @@ import { AppHeader } from "@/components/app-header";
 import { PageBody } from "@/components/column-page";
 import { DiffStat } from "@/components/diff-stat";
 import { Fold } from "@/components/fold";
-import { isOpening, OpeningSpinner, type SessionList } from "@/components/home-panels";
+import { isOpening, OpeningSpinner } from "@/components/home-panels";
 import { liveDirsOf, openNewDialog, useSpawnInto } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { PaneMark } from "@/components/nav-rows";
@@ -20,16 +20,19 @@ import { BottomSheet } from "@/components/ui/sheet";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
 import { fetchHomeDirs } from "@/lib/api";
 import { projectName } from "@/lib/desk-projects";
-import { baseName, tildePath } from "@/lib/dir-picker";
+import { tildePath } from "@/lib/dir-picker";
 import { EnterScope, useEnter } from "@/lib/enter";
 import { timeAgo, timeAgoShort } from "@/lib/format";
-import { boardColumns, HOME_VIEWS, lastFolder, pickUp, startTarget, useHomeView, viewAsked, type HomeView, type StartFolder } from "@/lib/home-board";
+import {
+  boardColumns, defaultFolder, folderOf, HOME_VIEWS, pickUp, startTarget, useHomeView, viewAsked, withoutAsk,
+  type BoardColumns, type HomeView, type SessionList, type StartFolder,
+} from "@/lib/home-board";
 import { needYou, type NeedsYouItem, type RecentChat } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { useHoldReload } from "@/lib/reload-guard";
-import { agentLabel, loadAgent, loadDirs, loadPermission, PERMISSIONS, SPAWN_AGENTS, suggestDirs, type SpawnAgent } from "@/lib/spawn";
-import { canCreate, isReadOnly, type AgentStatus, type AgentView, type Interaction } from "@/lib/types";
+import { agentLabel, loadAgent, loadDirs, loadPermission, PERMISSIONS, SPAWN_AGENTS, suggestDirs } from "@/lib/spawn";
+import { canCreate, isReadOnly, type AgentStatus, type Interaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // Only someone choosing another folder needs the picker; it stays out of the bundle Home loads.
@@ -50,11 +53,36 @@ export interface DeskHomeProps {
   recent: RecentChat[];
   /** The open PRs GitHub lists (none hides the PRs view), and those this device's filter keeps (the header's count). */
   prs: { listed: number; kept: number };
-  /** Recents, Workspaces and PRs, as a phone's Home draws them under its tabs. */
+  /** Recents, Workspaces or PRs, as a phone's Home draws them under its tabs. */
   list: (list: SessionList) => ReactNode;
   /** Other machines and workflows running in the background, under Start. */
-  more: ReactNode;
+  extras: ReactNode;
 }
+
+type StartAgent = "claude" | "codex";
+const START_AGENTS = SPAWN_AGENTS.filter((a): a is { id: StartAgent; label: string } => a.id !== "shell");
+
+/**
+ * What Start's composer holds. DeskHome keeps it, so a look at another view loses none of it and a
+ * start still in flight lands, clears the message, and is never sent twice.
+ */
+interface StartState {
+  draft: string;
+  /** Fixed once shown: the herd moving never moves where a chat being written starts. */
+  folder: StartFolder | null;
+  agent: StartAgent;
+  permissions: Record<StartAgent, string>;
+  busy: boolean;
+  error: string | null;
+}
+
+function freshStart(): StartState {
+  const last = loadAgent();
+  return { draft: "", folder: null, agent: last === "shell" ? "claude" : last, permissions: { claude: loadPermission("claude"), codex: loadPermission("codex") }, busy: false, error: null };
+}
+
+/** How many asks Start shows before leaving the rest to the Board. */
+const START_ASKS = 3;
 
 /**
  * Home on a desk: a header whose views are Start, the Board and the three lists a phone keeps under
@@ -63,34 +91,52 @@ export interface DeskHomeProps {
  * that names a list (the bar's Pull requests) opens on it (ADR 0131).
  */
 export function DeskHome(props: DeskHomeProps) {
-  const { data, stale, needs, receipts, prs, list } = props;
+  const { data, stale, needs, receipts, recent, prs, list } = props;
   const [stored, setStored] = useHomeView();
   const location = useLocation();
   const navigate = useNavigate();
   const asked = viewAsked(location.state);
-  // The ask is taken out of the entry's state once kept, so a Back or a reload opens on the view last chosen.
   useLayoutEffect(() => {
     if (!asked) return;
     setStored(asked);
-    const rest = Object.fromEntries(Object.entries(location.state as object).filter(([key]) => key !== "list"));
-    void navigate(location.pathname + location.search, { replace: true, state: rest });
+    void navigate(location.pathname + location.search, { replace: true, state: withoutAsk(location.state) });
   }, [asked, location, navigate, setStored]);
   const views = HOME_VIEWS.filter(([key]) => key !== "prs" || prs.listed > 0);
   const chosen = asked ?? stored;
   const view = views.some(([key]) => key === chosen) ? chosen : "start";
-  const show = (next: HomeView) => setStored(next);
-  // The first message outlives a look at another view, and a self-update reload waits for it.
-  const [draft, setDraft] = useState("");
-  useHoldReload("home-start", draft.trim() !== "");
 
-  const working = data.agents.filter((agent) => agent.status === "working").length;
-  const review = data.agents.filter((agent) => agent.status === "done").length;
-  const asking = needs.length + receipts.length;
-  const counts: Array<{ key: string; n: number; words: string; status?: AgentStatus; to: HomeView }> = [
-    { key: "needs", n: needs.length, words: needYou(needs.length), status: "blocked", to: "board" },
-    { key: "working", n: working, words: `${working} working`, status: "working", to: "board" },
-    { key: "review", n: review, words: `${review} to review`, status: "done", to: "board" },
-    { key: "prs", n: prs.kept, words: `${prs.kept} ${prs.kept === 1 ? "PR" : "PRs"}`, to: "prs" },
+  // Each view opens at its top: the page keeps one scroller, so the offset is reset on a switch.
+  const body = useRef<HTMLElement>(null);
+  const shownView = useRef(view);
+  useLayoutEffect(() => {
+    if (shownView.current === view) return;
+    shownView.current = view;
+    if (body.current) body.current.scrollTop = 0;
+  }, [view]);
+
+  const [start, setStart] = useState(freshStart);
+  useHoldReload("home-start", start.draft.trim() !== "");
+  const panes = [...data.agents, ...data.shellPanes];
+  if (!start.folder) {
+    const folder = defaultFolder(loadDirs(), data.agents, data.shellPanes);
+    if (folder) setStart({ ...start, folder });
+  }
+  const spawnInto = useSpawnInto(() => undefined);
+  const begin = async () => {
+    if (start.busy || !canCreate(data)) return;
+    const cwd = start.folder?.cwd ?? "";
+    const permission = start.permissions[start.agent];
+    setStart((s) => ({ ...s, busy: true, error: null }));
+    const failure = await spawnInto(startTarget(cwd, panes), { agent: start.agent, cwd, name: "", message: start.draft, permission });
+    setStart((s) => ({ ...s, busy: false, error: failure, draft: failure === null ? "" : s.draft }));
+  };
+
+  const columns = boardColumns(recent);
+  const counts: Array<{ key: string; n: number; noun: string; status?: AgentStatus; to: HomeView }> = [
+    { key: "needs", n: needs.length, noun: needYou(needs.length).replace(/^\d+ /, ""), status: "blocked", to: "board" },
+    { key: "working", n: columns.working.length, noun: "working", status: "working", to: "board" },
+    { key: "review", n: columns.review.length, noun: "to review", status: "done", to: "board" },
+    { key: "prs", n: prs.kept, noun: prs.kept === 1 ? "PR" : "PRs", to: "prs" },
   ];
 
   return (
@@ -98,25 +144,31 @@ export function DeskHome(props: DeskHomeProps) {
       <AppHeader bridge={data.bridge} error={data.error}
         rightLead={<div className="flex items-center gap-0.5">
           {counts.filter((count) => count.n > 0).map((count) => (
-            <button key={count.key} type="button" onClick={() => show(count.to)} className="quiet-action tabular-nums">
+            <button key={count.key} type="button" onClick={() => setStored(count.to)} className="quiet-action tabular-nums">
               {count.status ? <StatusDot status={count.status} /> : <GitPullRequest aria-hidden className="size-3.5" />}
-              {count.words}
+              {/* A narrow desk keeps the mark and the number; the words stay for a screen reader. */}
+              <span>{count.n}{" "}<span className="max-xl:sr-only">{count.noun}</span></span>
             </button>
           ))}
         </div>}>
-        <h1 className="mr-6 text-subhead font-semibold">Home</h1>
-        <div role="tablist" aria-label="Home" className="home-views flex gap-5 self-stretch">
+        <h1 className="text-subhead font-semibold">Home</h1>
+        <span aria-hidden className="mx-5 h-4 w-px shrink-0 bg-border" />
+        <div role="tablist" aria-label="Home" className="home-views flex shrink-0 gap-5 self-stretch">
           {views.map(([key, label]) => (
             <button key={key} id={`home-view-${key}`} type="button" role="tab" aria-selected={view === key} aria-controls="home-view"
-              onClick={() => show(key)} className="desk-tab">{label}</button>
+              onClick={() => setStored(key)} className="desk-tab">{label}</button>
           ))}
         </div>
       </AppHeader>
       <ReadOnlyBanner device={data.device} />
-      <PageBody key={view} className={cn(view === "board" && "pt-6 sm:pt-6")} columnClassName={cn(view === "board" ? "flex min-h-full max-w-none flex-col" : view === "start" && "max-w-180")}>
+      <PageBody ref={body} className={cn(view === "board" && "pt-6 sm:pt-6")}
+        columnClassName={cn(view === "board" ? "flex min-h-full max-w-none flex-col" : view === "start" && "max-w-180")}>
         <div id="home-view" role="tabpanel" aria-labelledby={`home-view-${view}`} className={cn("flex flex-col", view === "board" && "flex-1", stale && "text-muted-foreground grayscale")}>
-          {view === "start" && <StartView {...props} onView={show} more={asking > 3 ? asking - 3 : 0} extras={props.more} draft={draft} onDraft={setDraft} />}
-          {view === "board" && <BoardView {...props} />}
+          {view === "start" && (
+            <StartView {...props} start={start} onStart={(next) => setStart((s) => ({ ...s, ...next }))} onBegin={() => void begin()}
+              onView={setStored} moreAsks={Math.max(0, needs.length + receipts.length - START_ASKS)} />
+          )}
+          {view === "board" && <BoardView {...props} columns={columns} />}
           {(view === "recents" || view === "workspaces" || view === "prs") && list(view)}
         </div>
       </PageBody>
@@ -124,40 +176,27 @@ export function DeskHome(props: DeskHomeProps) {
   );
 }
 
-/** The first message being written in Start's composer, kept by DeskHome. */
-interface Draft {
-  draft: string;
-  onDraft: (draft: string) => void;
-}
-
 /** Start: what to start, in which folder, then what needs you and the chats to pick up. */
-function StartView({ data, now, opening, needs, receipts, interactions, lock, recent, onView, more, extras, draft, onDraft }: DeskHomeProps & Draft & {
+function StartView({ data, now, opening, needs, receipts, interactions, lock, recent, extras, start, onStart, onBegin, onView, moreAsks }: DeskHomeProps & {
+  start: StartState;
+  onStart: (next: Partial<StartState>) => void;
+  onBegin: () => void;
   onView: (view: HomeView) => void;
   /** How many asks Start leaves to the Board. */
-  more: number;
-  extras: ReactNode;
+  moreAsks: number;
 }) {
-  const [picked, setPicked] = useState<StartFolder | null>(null);
-  const herdFolder = lastFolder(data.agents, data.shellPanes);
-  const folder = picked ?? herdFolder ?? { cwd: loadDirs()[0] ?? "", project: "" };
   const rows = pickUp(recent);
-  const panes = [...data.agents, ...data.shellPanes];
-  const choose = (cwd: string) => {
-    const pane = panes.find((p) => p.cwd === cwd);
-    setPicked({ cwd, project: pane ? projectName(pane) : baseName(cwd) });
-  };
+  const project = start.folder?.project;
   return (
     <div className="flex flex-col pt-[clamp(0px,calc(18vh-36px),132px)]">
       <h2 className="text-center text-large-title font-normal text-balance text-muted-foreground">
-        {folder.project
-          ? <>What should we start in <span className="font-semibold text-foreground">{folder.project}</span>?</>
-          : "What should we start?"}
+        {project ? <>What should we start in <span className="font-semibold text-foreground">{project}</span>?</> : "What should we start?"}
       </h2>
-      <StartComposer data={data} folder={folder} panes={panes} onFolder={choose} draft={draft} onDraft={onDraft} />
+      <StartComposer data={data} start={start} onStart={onStart} onBegin={onBegin} />
       <div className="mt-12 flex flex-col gap-2">
-        <NeedsYouList agents={data.agents} session={data.session} items={needs.slice(0, 3)} receipts={receipts.slice(0, Math.max(0, 3 - needs.length))}
+        <NeedsYouList agents={data.agents} session={data.session} items={needs.slice(0, START_ASKS)} receipts={receipts.slice(0, Math.max(0, START_ASKS - needs.length))}
           interactions={interactions} lockReason={lock} opening={opening} />
-        {more > 0 && <button type="button" onClick={() => onView("board")} className="quiet-action self-start">{more} more on the Board</button>}
+        {moreAsks > 0 && <button type="button" onClick={() => onView("board")} className="quiet-action self-start">{moreAsks} more on the Board</button>}
         {rows.length > 0 && (
           <section aria-label="Pick up" className="flex flex-col">
             <EnterScope><ul className="flex flex-col">{rows.map((chat) => <PickUpRow key={chat.agent.paneId} chat={chat} session={data.session} now={now} opening={opening} />)}</ul></EnterScope>
@@ -172,6 +211,9 @@ function StartView({ data, now, opening, needs, receipts, interactions, lock, re
   );
 }
 
+/** The mark a finished turn not yet opened wears beside its name, as Recents' rows do. */
+const NEW_MARK = <span className="shrink-0 self-center rounded-sm border border-status-done/50 px-1 text-micro text-status-done">New</span>;
+
 /** A chat to pick up, on one line: its mark, name and project, then its size and when it last moved. */
 function PickUpRow({ chat, session, now, opening }: { chat: RecentChat; session?: string; now: number; opening: string | null }) {
   const to = panePath(chat.agent.paneId, session);
@@ -183,6 +225,7 @@ function PickUpRow({ chat, session, now, opening }: { chat: RecentChat; session?
         <span className="flex justify-center text-muted-foreground"><PaneMark pane={chat.agent} /></span>
         <span className="flex min-w-0 items-baseline gap-2">
           <span className={cn("truncate text-subhead", chat.unseen && "font-semibold")}>{chat.title}</span>
+          {chat.unseen && <><span className="sr-only">, </span>{NEW_MARK}</>}
           <span className="sr-only">, </span>
           <span className="shrink-[2] truncate text-footnote text-muted-foreground">{projectName(chat.agent)}</span>
         </span>
@@ -198,35 +241,28 @@ function PickUpRow({ chat, session, now, opening }: { chat: RecentChat; session?
 /** When a chat last moved; `since` says how long it has been working instead ("for 12m"). */
 function Ago({ at, now, since = false }: { at: number; now: number; since?: boolean }) {
   const short = timeAgoShort(at, now);
-  const shown = since && short !== "now" ? `for ${short}` : short;
+  const shown = !since ? short : short === "now" ? "just started" : `for ${short}`;
   return <span className="min-w-8 text-right tabular-nums"><span aria-hidden>{shown}</span><span className="sr-only">, {timeAgo(at, now)}</span></span>;
 }
 
 // The agent menu's mark, one component per agent: a component made during a render would be a new type
 // on every poll, and React would swap its DOM each time.
-const AGENT_MARKS: Record<"claude" | "codex", IconComponent> = {
+const AGENT_MARKS: Record<StartAgent, IconComponent> = {
   claude: ({ className }) => <AgentIcon agent="claude" className={cn(className, "size-4")} />,
   codex: ({ className }) => <AgentIcon agent="codex" className={cn(className, "size-4")} />,
 };
 
 /**
  * A new chat's composer: the first message, the agent and how much it may do, Start, and under the
- * box the folder it starts in. It starts through the New flow's own create (useSpawnInto): a tab of
- * the workspace already working in that folder, else a workspace of its own, then the agent and the
- * first message once it is ready.
+ * box the folder it starts in. Start goes through the New flow's own create (DeskHome's `begin`): a
+ * tab of the workspace already working in that folder, else a workspace of its own, then the agent
+ * and the first message once it is ready.
  */
-function StartComposer({ data, folder, panes, onFolder, draft: message, onDraft: setMessage }: Draft & { data: HomeData; folder: StartFolder; panes: AgentView[]; onFolder: (cwd: string) => void }) {
-  const [agent, setAgent] = useState<Exclude<SpawnAgent, "shell">>(() => {
-    const last = loadAgent();
-    return last === "shell" ? "claude" : last;
-  });
-  const [permissions, setPermissions] = useState(() => ({ claude: loadPermission("claude"), codex: loadPermission("codex") }));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function StartComposer({ data, start, onStart, onBegin }: { data: HomeData; start: StartState; onStart: (next: Partial<StartState>) => void; onBegin: () => void }) {
   const [home, setHome] = useState("");
   const [picking, setPicking] = useState(false);
-  const spawnInto = useSpawnInto(() => setMessage(""));
   const allowed = canCreate(data);
+  const { agent, draft, busy, error } = start;
 
   // The host's home, so the folder reads as ~/… before the picker is ever opened.
   useEffect(() => {
@@ -236,35 +272,27 @@ function StartComposer({ data, folder, panes, onFolder, draft: message, onDraft:
     return () => abort.abort();
   }, [home, allowed, data.session]);
 
-  const permission = PERMISSIONS[agent].find((p) => p.id === permissions[agent]) ?? PERMISSIONS[agent][0]!;
-  async function submit() {
-    if (busy || !allowed) return;
-    setBusy(true);
-    setError(null);
-    const failure = await spawnInto(startTarget(folder.cwd, panes), { agent, cwd: folder.cwd, name: "", message, permission: permission.id });
-    setBusy(false);
-    if (failure !== null) setError(failure);
-  }
+  const permission = PERMISSIONS[agent].find((p) => p.id === start.permissions[agent]) ?? PERMISSIONS[agent][0]!;
   const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     // A stray Enter in an empty box starts nothing; Start itself still opens an agent with no first message.
-    if (!message.trim()) return;
-    void submit();
+    if (draft.trim()) onBegin();
   };
-  const where = folder.cwd ? tildePath(folder.cwd, home) : "~";
+  const cwd = start.folder?.cwd ?? "";
+  const where = cwd ? tildePath(cwd, home) : "~";
 
   return (
-    <form className="mt-8 flex flex-col" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+    <form className="mt-8 flex flex-col" onSubmit={(event) => { event.preventDefault(); onBegin(); }}>
       <div className="composer-box relative z-10">
-        <textarea aria-label="First message" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={onKey}
+        <textarea aria-label="First message" value={draft} onChange={(event) => onStart({ draft: event.target.value })} onKeyDown={onKey}
           rows={2} disabled={!allowed} placeholder={`Ask ${agentLabel(agent)} anything, or describe the task`}
           className="composer-input min-h-16 w-full resize-none bg-transparent px-4 pt-3.5 text-body outline-none disabled:cursor-not-allowed" />
         <div className="flex items-center gap-1 px-2 pb-2">
           <QuietMenu icon={AGENT_MARKS[agent]} label={agentLabel(agent)} ariaLabel={`Agent: ${agentLabel(agent)}`} menuLabel="Agent">
-            {(close) => SPAWN_AGENTS.filter((a) => a.id !== "shell").map((a) => (
+            {(close) => START_AGENTS.map((a) => (
               <button key={a.id} type="button" role="menuitemradio" aria-checked={a.id === agent}
-                onClick={() => { setAgent(a.id as typeof agent); close(); }} className={quietMenuItem}>
+                onClick={() => { onStart({ agent: a.id }); close(); }} className={quietMenuItem}>
                 <Check aria-hidden className={cn("size-4 shrink-0", a.id !== agent && "invisible")} />
                 <AgentIcon agent={a.id} className="size-4" />
                 <span className="min-w-0 flex-1 truncate">{a.label}</span>
@@ -275,7 +303,7 @@ function StartComposer({ data, folder, panes, onFolder, draft: message, onDraft:
             menuLabel="Permissions" menuClassName="w-80" className={cn(permission.danger && "text-status-working")}>
             {(close) => PERMISSIONS[agent].map((p) => (
               <button key={p.id} type="button" role="menuitemradio" aria-checked={p.id === permission.id}
-                onClick={() => { setPermissions((all) => ({ ...all, [agent]: p.id })); close(); }} className={cn(quietMenuItem, "items-start py-2")}>
+                onClick={() => { onStart({ permissions: { ...start.permissions, [agent]: p.id } }); close(); }} className={cn(quietMenuItem, "items-start py-2")}>
                 <Check aria-hidden className={cn("mt-0.5 size-4 shrink-0", p.id !== permission.id && "invisible")} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className={cn(p.danger && "text-status-working")}>{p.label}</span>
@@ -307,8 +335,8 @@ function StartComposer({ data, folder, panes, onFolder, draft: message, onDraft:
       <BottomSheet open={picking} onClose={() => setPicking(false)} title="Choose a folder" desktop="dialog" className="sm:h-[min(40rem,85dvh)]">
         {picking && (
           <Suspense fallback={<p className="px-2 py-3 text-subhead text-muted-foreground">Loading…</p>}>
-            <DirPicker home={home} shortcuts={suggestDirs([folder.cwd], liveDirsOf(data), loadDirs())} onHome={setHome} session={data.session}
-              onPick={(path) => { onFolder(path); setPicking(false); }} />
+            <DirPicker home={home} shortcuts={suggestDirs([cwd], liveDirsOf(data), loadDirs())} onHome={setHome} session={data.session}
+              onPick={(path) => { onStart({ folder: folderOf(path, [...data.agents, ...data.shellPanes]) }); setPicking(false); }} />
           </Suspense>
         )}
       </BottomSheet>
@@ -321,20 +349,20 @@ function StartComposer({ data, folder, panes, onFolder, draft: message, onDraft:
  * snapshot says of it, and the chats at rest folded at its foot. Nothing here reads a pane's screen:
  * a working card's line is the terminal title its process sets (ADR 0058).
  */
-function BoardView({ data, now, opening, needs, receipts, interactions, lock, recent }: DeskHomeProps) {
-  const { working, review, resting } = boardColumns(recent);
+function BoardView({ data, now, opening, needs, receipts, interactions, lock, columns }: DeskHomeProps & { columns: BoardColumns }) {
+  const { working, review, resting } = columns;
   const card = (chat: RecentChat) => <BoardCard key={chat.agent.paneId} chat={chat} session={data.session} now={now} opening={opening} />;
   return (
     <>
       <div className="grid flex-1 grid-cols-3 items-start gap-5">
-        <BoardColumn label="Needs you" status="blocked" count={needs.length} empty="Nothing needs you.">
+        <BoardColumn id="needs" label="Needs you" status="blocked" count={needs.length} empty="Nothing needs you.">
           {needs.length + receipts.length > 0 && <NeedsYouList agents={data.agents} session={data.session} items={needs} receipts={receipts}
             interactions={interactions} lockReason={lock} opening={opening} />}
         </BoardColumn>
-        <BoardColumn label="Working" status="working" count={working.length} empty="Nothing is working.">
+        <BoardColumn id="working" label="Working" status="working" count={working.length} empty="Nothing is working.">
           {working.length > 0 && <ul className="flex flex-col gap-2">{working.map(card)}</ul>}
         </BoardColumn>
-        <BoardColumn label="Ready to review" status="done" count={review.length} empty="No finished turn to look at.">
+        <BoardColumn id="review" label="Ready to review" status="done" count={review.length} empty="No finished turn to look at.">
           {review.length > 0 && <ul className="flex flex-col gap-2">{review.map(card)}</ul>}
         </BoardColumn>
       </div>
@@ -343,19 +371,20 @@ function BoardView({ data, now, opening, needs, receipts, interactions, lock, re
   );
 }
 
-function BoardColumn({ label, status, count, empty, children }: { label: string; status: AgentStatus; count: number; empty: string; children: ReactNode }) {
+/** A Board column: its state's mark while it holds something (colour only for what asks, ADR 0113), its name and count. */
+function BoardColumn({ id, label, status, count, empty, children }: { id: string; label: string; status: AgentStatus; count: number; empty: string; children: ReactNode }) {
   return (
-    <section aria-label={count > 0 ? `${label}, ${count}` : label} className="flex min-w-0 flex-col gap-3">
-      <h2 aria-hidden className="flex items-center gap-2 px-1 text-footnote font-medium">
-        <StatusDot status={status} />{label}
-        {count > 0 && <span className="tabular-nums text-muted-foreground">{count}</span>}
+    <section aria-labelledby={`board-${id}`} className="flex min-w-0 flex-col gap-3">
+      <h2 id={`board-${id}`} className="flex items-center gap-2 px-1 text-footnote font-medium">
+        <StatusDot status={count > 0 ? status : "idle"} />{label}
+        {count > 0 && <><span className="sr-only">,</span>{" "}<span className="tabular-nums text-muted-foreground">{count}</span></>}
       </h2>
       {children || <p className="px-1 text-footnote text-muted-foreground">{empty}</p>}
     </section>
   );
 }
 
-/** A chat on the Board: its name and agent, where it lives and since when, then what it is doing or how big its PR is. */
+/** A chat on the Board: its name and agent, where it lives, its PR's size and since when, then what its process says it is doing. */
 function BoardCard({ chat, session, now, opening }: { chat: RecentChat; session?: string; now: number; opening: string | null }) {
   const { agent, title, diff, at, unseen } = chat;
   const to = panePath(agent.paneId, session);
@@ -370,17 +399,17 @@ function BoardCard({ chat, session, now, opening }: { chat: RecentChat; session?
         className={cn("flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-card px-3.5 py-3 transition-colors duration-120 hover:bg-hover", busy && "bg-hover")}>
         <span className="flex min-w-0 items-center gap-2">
           <span className={cn("min-w-0 flex-1 truncate text-subhead", unseen ? "font-semibold" : "font-medium")}>{title}</span>
-          {unseen && <span className="shrink-0 rounded-sm border border-status-done/50 px-1 text-micro text-status-done">New</span>}
+          {unseen && <><span className="sr-only">, </span>{NEW_MARK}</>}
           {busy ? <OpeningSpinner /> : <AgentIcon agent={agent.agent} className="size-4 shrink-0" />}
         </span>
         <span className="flex min-w-0 items-baseline gap-2 text-footnote text-muted-foreground">
           <span className="min-w-0 flex-1 truncate">{place}</span>
+          {diff && <DiffStat diff={diff} className="text-caption" />}
           {at > 0 && <Ago at={at} now={now} since={working} />}
         </span>
-        {(doing || diff) && (
+        {doing && (
           <span className="mt-1 flex min-w-0 items-center gap-1.5 text-footnote">
-            {doing && <><SquareTerminal aria-hidden className="size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{doing}</span></>}
-            {diff && <DiffStat diff={diff} className={cn("text-caption", !doing && "ml-auto")} />}
+            <SquareTerminal aria-hidden className="size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{doing}</span>
           </span>
         )}
       </Link>

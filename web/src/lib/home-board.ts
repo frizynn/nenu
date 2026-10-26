@@ -8,8 +8,12 @@ import { byRecency } from "./recency";
 import type { SpawnTarget } from "./spawn";
 import type { AgentView } from "./types";
 
-/** A desk's Home views: Start (the composer), the Board by state, and the three lists a phone keeps under tabs. */
-export const HOME_VIEWS = [["start", "Start"], ["board", "Board"], ["recents", "Recents"], ["workspaces", "Workspaces"], ["prs", "PRs"]] as const;
+/** Home's lists: tabs on a phone, views of the header on a desk. */
+export const SESSION_LISTS = [["recents", "Recents"], ["workspaces", "Workspaces"], ["prs", "PRs"]] as const;
+export type SessionList = typeof SESSION_LISTS[number][0];
+
+/** A desk's Home views: Start (the composer), the Board by state, then the lists. */
+export const HOME_VIEWS = [["start", "Start"], ["board", "Board"], ...SESSION_LISTS] as const;
 export type HomeView = typeof HOME_VIEWS[number][0];
 
 const isView = (value: unknown): value is HomeView => HOME_VIEWS.some(([key]) => key === value);
@@ -29,6 +33,16 @@ export function viewAsked(state: unknown): HomeView | undefined {
   const asked = typeof state === "object" && state !== null ? (state as { list?: unknown }).list : undefined;
   return isView(asked) ? asked : undefined;
 }
+
+/** The list a link asked a phone's Home to open on, if it named one. */
+export function listAsked(state: unknown): SessionList | undefined {
+  const asked = viewAsked(state);
+  return SESSION_LISTS.find(([key]) => key === asked)?.[0];
+}
+
+/** The ask taken out of a history entry's state, once kept, so a Back or a reload opens on the view last chosen. */
+export const withoutAsk = (state: unknown): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(typeof state === "object" && state !== null ? state : {}).filter(([key]) => key !== "list"));
 
 /** The Board's columns: what works, what finished a turn to look at, and what rests. Needs you is its own. */
 export interface BoardColumns {
@@ -63,10 +77,22 @@ export interface StartFolder {
   project: string;
 }
 
-/** The folder the herd last moved in, agents before shells; none for an empty herd. */
-export function lastFolder(agents: readonly AgentView[], shells: readonly AgentView[]): StartFolder | null {
+/** `cwd` as a project: the name its panes go by, else the folder's own. */
+export function folderOf(cwd: string, panes: readonly AgentView[]): StartFolder {
+  const pane = panes.find((p) => p.cwd === cwd);
+  return { cwd, project: pane ? projectName(pane) : cwd.split("/").filter(Boolean).pop() ?? "" };
+}
+
+/**
+ * Where Start's composer starts until another folder is picked: the one this device last chose in the
+ * New flow, else the folder the herd last moved in (agents before shells); none for an empty herd. The
+ * device's own choice comes first because the herd's last folder may be another agent's worktree.
+ */
+export function defaultFolder(picked: readonly string[], agents: readonly AgentView[], shells: readonly AgentView[]): StartFolder | null {
+  const panes = [...agents, ...shells];
+  if (picked[0]) return folderOf(picked[0], panes);
   const pane = byRecency(agents).find((p) => p.cwd) ?? byRecency(shells).find((p) => p.cwd);
-  return pane ? { cwd: pane.cwd, project: projectName(pane) } : null;
+  return pane ? folderOf(pane.cwd, panes) : null;
 }
 
 /**

@@ -881,24 +881,74 @@ describe("on a desk", () => {
     expect(screen.getByRole("button", { name: "1 PR" })).toBeInTheDocument();
   });
 
-  it("starts a chat from its composer in a new tab of the workspace already in that folder", async () => {
+  /**
+   * Records each create the composer sends; `hold` keeps the tab's create pending until released. Each
+   * call opens its own pane: lib/spawn tracks a launch per pane id for the whole run.
+   */
+  let started = 0;
+  function recordStarts({ hold = false } = {}) {
+    const pane = `w1:s${++started}`;
     const posts: Record<string, unknown[]> = {};
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
     const record = (path: string, reply: Record<string, unknown>) => http.post(path, async ({ request }) => {
       (posts[path] ??= []).push(await request.json());
+      if (hold && path === "/api/tab") await held;
       return HttpResponse.json(reply);
     });
     server.use(
       http.get("/api/dirs", () => HttpResponse.json({ path: "/home/you", home: "/home/you", entries: [], truncated: false })),
-      record("/api/tab", { ok: true, pane: { paneId: "w1:p9", workspaceId: "w1", workspaceLabel: "Nenu", tabId: "t9", cwd: "/dev/collie" } }),
+      record("/api/tab", { ok: true, pane: { paneId: pane, workspaceId: "w1", workspaceLabel: "Nenu", tabId: "t9", cwd: "/dev/collie" } }),
       record("/api/workspace", { ok: true, pane: { paneId: "w9:p1", workspaceId: "w9", workspaceLabel: "new", tabId: "t9", cwd: "/dev/collie" } }),
       record("/api/pane/:paneId/start", { ok: true }),
     );
+    return { posts, release, path: `/pane/${encodeURIComponent(pane)}` };
+  }
+
+  it("starts a chat from its composer in a new tab of the workspace already in that folder", async () => {
+    const { posts, path } = recordStarts();
     const { user, router, main } = await setup();
     await user.type(main.getByRole("textbox", { name: "First message" }), "Fix the coupon field{Enter}");
-    await waitFor(() => expect(router.state.location.pathname).toBe("/pane/w1%3Ap9"));
+    await waitFor(() => expect(router.state.location.pathname).toBe(path));
     expect(posts["/api/tab"]).toEqual([{ workspaceId: "w1", cwd: "/dev/collie" }]);
     expect(posts["/api/workspace"]).toBeUndefined();
     await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "ask" }]));
+  });
+
+  it("keeps the folder it showed while the herd moves elsewhere", async () => {
+    const { posts } = recordStarts();
+    const { user, update } = await setup();
+    expect(page().getByRole("heading", { level: 2, name: "What should we start in collie?" })).toBeInTheDocument();
+    await update({ ...twoWorkspaces, agents: [...data.agents, { ...data.agents[0]!, paneId: "w2:p9", workspaceId: "w2", cwd: "/dev/shop", lastActiveAt: Date.now() }] });
+    expect(page().getByRole("heading", { level: 2, name: "What should we start in collie?" })).toBeInTheDocument();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/tab"]).toEqual([{ workspaceId: "w1", cwd: "/dev/collie" }]));
+  });
+
+  it("keeps the agent's permission across a look at another view", async () => {
+    const { posts } = recordStarts();
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: "Permissions: Ask" }));
+    await user.click(page().getByRole("menuitemradio", { name: /^Auto/ }));
+    await user.click(within(views()).getByRole("tab", { name: "Board" }));
+    await user.click(within(views()).getByRole("tab", { name: "Start" }));
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/tab"]).toHaveLength(1));
+    await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "auto" }]));
+  });
+
+  it("clears a message whose start lands while another view is on screen, so it is never sent twice", async () => {
+    const { posts, release, path } = recordStarts({ hold: true });
+    const { user, router } = await setup();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Once{Enter}");
+    await waitFor(() => expect(posts["/api/tab"]).toHaveLength(1));
+    await user.click(within(views()).getByRole("tab", { name: "Board" }));
+    release();
+    await waitFor(() => expect(router.state.location.pathname).toBe(path));
+    await act(() => router.navigate("/?s=work"));
+    await user.click(within(views()).getByRole("tab", { name: "Start" }));
+    expect(page().getByRole("textbox", { name: "First message" })).toHaveValue("");
+    expect(posts["/api/tab"]).toHaveLength(1);
   });
 
   it("keeps the first message being written while another view is looked at", async () => {
