@@ -1,6 +1,6 @@
 id = "herdr.nenu"
 name = "Nenu"
-version = "2.9.0"
+version = "2.10.0"
 min_herdr_version = "0.7.0"
 description = "Self-hosted phone and web workbench for Herdr agents, over Tailscale"
 platforms = ["linux", "macos"]
