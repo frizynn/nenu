@@ -136,7 +136,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 @media (hover: hover) { .nav-chats .nav-row:hover { color: var(--foreground); } }
 .nav-label-text { flex: 1; min-width: 0; font: inherit; }
 /* The desk's search row: Search fills it, New sits at its end as a small action. */
-.workbench-navigation[data-variant="sidebar"] > .nav-top { flex-direction: row; align-items: center; }
+.workbench-navigation[data-variant="sidebar"] > .nav-top { flex-direction: row; align-items: center; gap: 4px; }
 .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row { flex: 1; }
 /* A chat in the desk's bar: its name and when it moved, then where it lives one step quieter. The mark sits
    on the name's line. */

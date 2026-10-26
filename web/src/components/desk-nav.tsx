@@ -125,8 +125,8 @@ const ChatRow = memo(function ChatRow({ chat, session, current, now }: { chat: D
           {!limit && chat.at > 0 && <span className="nav-chat-time" aria-hidden>{timeAgoShort(chat.at, now)}</span>}
         </span>
         {/* Where it lives tells two chats of one name apart, by ear too; when it moved is for the eye. */}
-        <span className="nav-chat-place"><span aria-hidden className="contents"><PlaceText place={place} /></span>
-          <span className="sr-only">, {place.tab ? `${place.place}${TITLE_SEP}${place.tab}` : place.place}</span></span>
+        <span className="nav-chat-place" aria-hidden><PlaceText place={place} /></span>
+        <span className="sr-only">, {place.tab ? `${place.place}${TITLE_SEP}${place.tab}` : place.place}</span>
       </span>
     </Link>
   );

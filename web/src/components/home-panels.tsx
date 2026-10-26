@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useNavigation } from "react-router";
 import { ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
@@ -334,7 +334,8 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   const navigate = useNavigate();
   const asked = listAsked(location.state);
   const [chosen, setList] = useState<SessionList>(() => asked ?? readList());
-  useEffect(() => {
+  // Before paint, so a Home already on screen never shows the list it is leaving.
+  useLayoutEffect(() => {
     if (!asked) return;
     setList(asked);
     rememberList(asked);
