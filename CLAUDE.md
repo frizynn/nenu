@@ -171,8 +171,11 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0094](./.adr/0094-a-finished-agent-is-a-mark-on-its-row-on-a-phone-too.md)). The bar's chats and
   Home's Recents keep their order while on screen (`hooks/use-held-time.ts`). By time, the bar's
   chats sit only under periods that hold one on screen, and More folds them with motion, mounted.
-- **Home lists Recents, Workspaces and PRs** (`web/src/components/home-panels.tsx`), Recents first; PRs
-  only while GitHub lists one.
+- **On a phone, Home lists Recents, Workspaces and PRs** (`web/src/components/home-panels.tsx`), Recents
+  first; PRs only while GitHub lists one. **On a desk, Home's header holds views** (`desk-home.tsx`):
+  Start, a new chat's composer through the New flow's own create over what needs you and three chats to
+  pick up; the Board by state, drawn from the snapshot alone; and those three lists, whole
+  ([ADR 0131](./.adr/0131-a-desks-home-starts-a-chat-and-lays-the-herd-out-by-state.md)).
 - **Nothing sits between a chat's thread and its box** (`composer-chips.tsx`): the live chips (Needs you,
   Background) are in the row under the box beside the model, finished work is a row of the ⋯ menu,
   and `bun scripts/e2e/run.ts chip-line` must pass; only a usage limit's line sits above the box while

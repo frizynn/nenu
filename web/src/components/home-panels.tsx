@@ -10,7 +10,6 @@ import { PaneMark } from "@/components/nav-rows";
 import { useListReorder, type ListReorder } from "@/components/ui/list-reorder";
 import { WorkspaceOrderMenu } from "@/components/workspace-order-menu";
 import { useHeldTime } from "@/hooks/use-held-time";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { EnterScope, useEnter } from "@/lib/enter";
 import { timeAgo, timeAgoShort } from "@/lib/format";
@@ -94,8 +93,6 @@ export function FoldedList<T>({ items, rows, name, children }: { items: readonly
     )}
   </EnterScope>;
 }
-
-const DESK = "(min-width: 1024px)";
 
 /** How many sessions Recents lists before "Show N more". */
 export const RECENT_ROWS = 6;
@@ -318,7 +315,7 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, tabTouched, onTab, 
  * device: Herdr's, by name, or the operator's, dragged by each row's handle after Reorder
  * (lib/workspace-order.ts).
  */
-export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullRequests, session, now, opening }: {
+export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullRequests, session, now, opening, list: shownList }: {
   recent: readonly RecentChat[];
   workspaces: readonly WorkspaceChats[];
   reviews: readonly ReviewEntry[];
@@ -326,13 +323,15 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   session?: string;
   now: number;
   opening: string | null;
+  /** The list a desk's Home header chose (DeskHome); the tabs then are the header's, not this list's. */
+  list?: SessionList;
 }) {
   // A link that names a list (the desk's Pull requests) opens Home on it, and it is remembered as a tap
   // would be. The ask is then taken out of the entry's state, so a Back or a reload onto this entry opens
   // on the list last chosen, not on the one that link asked for.
   const location = useLocation();
   const navigate = useNavigate();
-  const asked = listAsked(location.state);
+  const asked = shownList ? undefined : listAsked(location.state);
   const [chosen, setList] = useState<SessionList>(() => asked ?? readList());
   // Before paint, so a Home already on screen never shows the list it is leaving.
   useLayoutEffect(() => {
@@ -343,13 +342,11 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
     void navigate(location.pathname + location.search, { replace: true, state: rest });
   }, [asked, location, navigate]);
   const lists = LISTS.filter(([key]) => key !== "prs" || reviews.length > 0);
-  const list = lists.some(([key]) => key === chosen) ? chosen : lists[0]![0];
+  const list = shownList ?? (lists.some(([key]) => key === chosen) ? chosen : lists[0]![0]);
   // The workspaces opened in place; none until a tap opens one.
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   // Each tab's fold as a tap left it; an untouched tab follows tabStartsOpen.
   const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
-  // A desk draws the switcher as a page's underlined tabs (DeskTabs); a phone keeps the segmented track.
-  const desk = useMediaQuery(DESK);
   // Recents keeps the order it came on screen with, so a row never moves under the finger: one that
   // finishes says New where it is. "N updates" puts them in order, as coming back to the page does.
   const held = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at);
@@ -412,17 +409,18 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   const row = (chat: RecentChat, group?: string, inTab?: boolean) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} inTab={inTab} />;
   return (
     <section aria-label="Your work" className="flex flex-col gap-2">
-      <div className={cn("relative flex items-center gap-2.5", desk && "border-b border-border")}>
-        <div role="tablist" aria-label="Your work"
-          className={desk ? "flex items-center gap-5" : cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
+      {/* Under a desk's header only Recents keeps this row, for its updates. */}
+      <div className={cn("relative flex items-center gap-2.5", shownList && list !== "recents" && "hidden")}>
+        {!shownList && <div role="tablist" aria-label="Your work"
+          className={cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
           {/* The phone's thumb slides under the chosen list, as Segmented's does; the list itself swaps at once. */}
-          {!desk && <span aria-hidden className="project-segment-thumb"
-            style={{ width: `calc((100% - 6px) / ${lists.length})`, transform: `translateX(${lists.findIndex(([key]) => key === list) * 100}%)` }} />}
+          <span aria-hidden className="project-segment-thumb"
+            style={{ width: `calc((100% - 6px) / ${lists.length})`, transform: `translateX(${lists.findIndex(([key]) => key === list) * 100}%)` }} />
           {lists.map(([key, label]) => (
             <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
-              onClick={() => { setList(key); rememberList(key); setArranging(false); }} className={desk ? "desk-tab" : "project-segment"}>{label}</button>
+              onClick={() => { setList(key); rememberList(key); setArranging(false); }} className="project-segment">{label}</button>
           ))}
-        </div>
+        </div>}
         {/* Always laid out beside the tabs, so its arrival moves neither them nor the rows; a phone gives the
             tabs the row's width and floats it over the list's top instead. */}
         <button type="button" onClick={held.reorder} aria-hidden={updates === 0 || undefined} tabIndex={updates === 0 ? -1 : undefined}
@@ -445,7 +443,7 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
               className={cn("quiet-action -mr-2", settling && RETURN_FADE)}>Reorder</button>}
         </div>
       )}
-      <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
+      <div id="home-list" role={shownList ? undefined : "tabpanel"} aria-labelledby={shownList ? undefined : `home-list-${list}`} className="sm:-mx-2.5">
         {list === "prs"
           ? pullRequests(reviews)
           : list === "recents"
