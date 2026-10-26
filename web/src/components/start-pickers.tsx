@@ -27,13 +27,13 @@ const matches = (query: string, ...words: string[]) => {
   return !q || words.some((word) => word.toLowerCase().includes(q));
 };
 
-/** The search field at the top of a picker; Enter takes the first row a search leaves, and with nothing typed keeps the choice. */
-function MenuSearch({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+/** The search field at the top of a picker; Enter takes the first row a search leaves, and with nothing typed only closes. */
+function MenuSearch({ value, onChange, placeholder, onClose }: { value: string; onChange: (value: string) => void; placeholder: string; onClose: () => void }) {
   const onKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    const row = value.trim() ? '[role="menuitemradio"]' : '[role="menuitemradio"][aria-checked="true"]';
-    event.currentTarget.closest('[role="menu"]')?.querySelector<HTMLElement>(row)?.click();
+    if (!value.trim()) return onClose();
+    event.currentTarget.closest('[role="menu"]')?.querySelector<HTMLElement>('[role="menuitemradio"]')?.click();
   };
   return (
     <div className="sticky top-0 z-10 -mx-1 -mt-1 mb-1 flex items-center gap-2 border-b border-border bg-popover px-3">
@@ -92,17 +92,24 @@ export function ModelMenu({ models, agent, model, onPick, agents = AGENTS, disab
   return (
     <QuietMenu icon={AGENT_MARKS[agent]} label={label} ariaLabel={`Model: ${agentLabel(agent)}, ${chosen?.label ?? "Default"}`} menuLabel="Model"
       disabled={disabled} menuClassName="w-80 max-w-[calc(100vw-2rem)] max-h-[min(26rem,60dvh)] overflow-y-auto">
-      {(close) => <ModelRows models={models} agent={agent} model={model} agents={agents} onPick={(a, m) => { onPick(a, m); close(); }} />}
+      {(close) => <ModelRows models={models} agent={agent} model={model} agents={agents} onPick={(a, m) => { onPick(a, m); close(); }} onClose={close} />}
     </QuietMenu>
   );
 }
 
-function ModelRows({ models, agent, model, agents, onPick }: { models: StartModels; agent: StartAgent; model: string; agents: readonly StartAgent[]; onPick: (agent: StartAgent, model: string) => void }) {
+function ModelRows({ models, agent, model, agents, onPick, onClose }: {
+  models: StartModels;
+  agent: StartAgent;
+  model: string;
+  agents: readonly StartAgent[];
+  onPick: (agent: StartAgent, model: string) => void;
+  onClose: () => void;
+}) {
   const [query, setQuery] = useState("");
   const shown = agents.map((a) => [a, models[a].filter((m) => matches(query, m.label, m.id, m.hint, agentLabel(a)))] as const);
   return (
     <>
-      <MenuSearch value={query} onChange={setQuery} placeholder="Search models" />
+      <MenuSearch value={query} onChange={setQuery} placeholder="Search models" onClose={onClose} />
       {shown.map(([a, rows]) => (
         <Group key={a} label={agentLabel(a)} icon={<AgentIcon agent={a} className="size-3.5" />}>
           {rows.map((m) => <Row key={m.id} checked={a === agent && m.id === model} label={m.label} hint={m.hint} onPick={() => onPick(a, m.id)} />)}
@@ -136,12 +143,17 @@ export function DestinationMenu({ places, destination, onPick, disabled }: {
     <QuietMenu icon={DESTINATION_ICONS[destination.kind]} label={<span className="block max-w-56 truncate">{label}</span>} ariaLabel={`Opens: ${label}`}
       menuLabel="Where it opens" className="min-w-0" disabled={disabled}
       menuClassName="w-80 max-w-[calc(100vw-2rem)] max-h-[min(26rem,60dvh)] overflow-y-auto">
-      {(close) => <DestinationRows places={places} destination={destination} onPick={(next) => { onPick(next); close(); }} />}
+      {(close) => <DestinationRows places={places} destination={destination} onPick={(next) => { onPick(next); close(); }} onClose={close} />}
     </QuietMenu>
   );
 }
 
-function DestinationRows({ places, destination, onPick }: { places: Places; destination: StartDestination; onPick: (destination: StartDestination) => void }) {
+function DestinationRows({ places, destination, onPick, onClose }: {
+  places: Places;
+  destination: StartDestination;
+  onPick: (destination: StartDestination) => void;
+  onClose: () => void;
+}) {
   const [query, setQuery] = useState("");
   const row = (next: StartDestination, label: string, hint: string, key: string = next.kind) => {
     const Icon = DESTINATION_ICONS[next.kind];
@@ -159,7 +171,7 @@ function DestinationRows({ places, destination, onPick }: { places: Places; dest
   const tabs = places.tabs.flatMap((t) => row({ kind: "pane", tabId: t.tabId }, tabPlace(t, places), "A new pane beside this tab's", `t:${t.tabId}`));
   return (
     <>
-      <MenuSearch value={query} onChange={setQuery} placeholder="Search workspaces and tabs" />
+      <MenuSearch value={query} onChange={setQuery} placeholder="Search workspaces and tabs" onClose={onClose} />
       <Group label="Start">{start}</Group>
       <Group label="In a workspace">{workspaces}</Group>
       <Group label="In a tab">{tabs}</Group>

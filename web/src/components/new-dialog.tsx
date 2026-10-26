@@ -197,7 +197,7 @@ function AgentPane({ target, data, readOnly, message, browsing, onBrowsing, onDo
   const [session, setSession] = useState(data?.session);
   const picked = machines.find((m) => m.session === session);
   const form = (
-    <NewAgentForm key={session ?? ""} machine={machines.length > 1 ? { session } : undefined} session={data?.session}
+    <NewAgentForm key={session ?? ""} machine={machines.length > 1 ? { session } : undefined} session={data?.session} place={JSON.stringify(target)}
       defaultCwd={picked && session !== data?.session ? "" : target.kind === "pane" && data ? destinationFolder(target, data) ?? "" : defaultCwdFor(target, data)} defaultMessage={message}
       liveDirs={picked?.herd ? liveDirsOf(picked.herd) : liveDirsOf(data)} readOnly={readOnly}
       browsing={browsing} onBrowsing={onBrowsing} onSubmit={(values) => spawnInto(target, values)} />

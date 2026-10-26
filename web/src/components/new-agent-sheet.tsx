@@ -88,11 +88,13 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
  * The agent form of the New flow. Mounting it starts a fresh form. The folder picker takes the form's
  * place while `browsing`, and the host owns that switch, so its header can title the step and step back.
  */
-export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing, machine, session }: {
+export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing, machine, session, place = "" }: {
   /** The machine picked for it, when there is more than one: its folders, and where it starts. */
   machine?: { session: string | undefined };
   /** The session on screen, whose models it offers when no machine was picked. */
   session?: string;
+  /** Names where it opens; a new one takes {@link defaultCwd} as the folder again. */
+  place?: string;
   defaultCwd: string;
   defaultMessage?: string;
   liveDirs: string[];
@@ -108,10 +110,11 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
   // The models of the machine it starts on: the one picked, else the one on screen.
   const listed = useStartModels(machine ? machine.session : session, !readOnly);
   const [cwd, setCwd] = useState(defaultCwd);
-  // A new place for it (the New flow's Opens in) brings its folder and keeps the rest of the form.
-  const [placeCwd, setPlaceCwd] = useState(defaultCwd);
-  if (placeCwd !== defaultCwd) {
-    setPlaceCwd(defaultCwd);
+  // Another place for it (the New flow's Opens in) brings its folder and keeps the rest of the form;
+  // the herd moving under the same place never moves a folder already shown or picked.
+  const [shownPlace, setShownPlace] = useState(place);
+  if (shownPlace !== place) {
+    setShownPlace(place);
     setCwd(defaultCwd);
   }
   const [name, setName] = useState("");

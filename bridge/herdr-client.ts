@@ -554,8 +554,8 @@ export class HerdrClient {
     // A Herdr that stopped knowing `target_pane_id` would split the focused pane, anywhere: undo
     // that rather than start an agent in a tab nobody chose.
     if (p.tab_id !== layout.tab_id) {
-      await this.closePane(p.pane_id).catch(() => undefined);
-      throw new Error("Herdr opened the pane in another tab; it was closed again.");
+      const closed = await this.closePane(p.pane_id).then(() => true, () => false);
+      throw new Error(`Herdr opened the pane in another tab${closed ? "; it was closed again" : ` (${p.pane_id}), and it could not be closed`}.`);
     }
     return { paneId: p.pane_id, workspaceId: p.workspace_id, tabId: p.tab_id, cwd: p.cwd };
   }
