@@ -8,6 +8,7 @@ import { useDayTurn } from "@/hooks/use-day-turn";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { deskChats, type DeskChat } from "@/lib/desk-nav";
 import { displayPlace } from "@/lib/display-name";
+import { TITLE_SEP } from "@/lib/pane-name";
 import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
@@ -107,6 +108,7 @@ const ChatRow = memo(function ChatRow({ chat, session, current, now }: { chat: D
   useDayTurn(limit !== undefined);
   // Only what is alive reads in full ink: a chat that waits, works, or finished unseen.
   const live = limit !== undefined || AGENT_STATE[pane.status] !== "idle" || chat.unread;
+  const place = displayPlace(pane);
   return (
     <Link className="nav-row nav-chat-row" to={to} aria-current={current ? "page" : undefined} data-live={live || undefined}>
       <span className="nav-lead">
@@ -122,8 +124,9 @@ const ChatRow = memo(function ChatRow({ chat, session, current, now }: { chat: D
           {chat.unread && !current && <span className="sr-only">, new</span>}
           {!limit && chat.at > 0 && <span className="nav-chat-time" aria-hidden>{timeAgoShort(chat.at, now)}</span>}
         </span>
-        {/* The name says the chat and its state to a screen reader; when and where are for the eye. */}
-        <span className="nav-chat-place" aria-hidden><PlaceText place={displayPlace(pane)} /></span>
+        {/* Where it lives tells two chats of one name apart, by ear too; when it moved is for the eye. */}
+        <span className="nav-chat-place"><span aria-hidden className="contents"><PlaceText place={place} /></span>
+          <span className="sr-only">, {place.tab ? `${place.place}${TITLE_SEP}${place.tab}` : place.place}</span></span>
       </span>
     </Link>
   );

@@ -699,6 +699,12 @@ it("opens on the PRs tab when the link that opened it names that list, and remem
   await act(() => router.navigate("/?s=work", { state: { list: "prs" } }));
   expect(main.getByRole("tab", { name: "PRs" })).toHaveAttribute("aria-selected", "true");
   expect(localStorage.getItem("nenu:home-list:v2")).toBe("prs");
+  // The ask is spent: a Back onto this entry opens on the list chosen since, not on PRs again.
+  expect(router.state.location.state).not.toHaveProperty("list");
+  await userEvent.setup().click(main.getByRole("tab", { name: "Recents" }));
+  await act(() => router.navigate("/pane/w1%3Ap1"));
+  await act(() => router.navigate(-1));
+  expect(within(document.querySelector("main")!).getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
 });
 
 // The headline counts what the PRs tab lists with the filter kept on this device.

@@ -31,8 +31,8 @@ small icon buttons (settings, PRs, stats).
 1. **Search leads the bar, New is a small action at its end.** ⌘K and ⌘N are unchanged; the
    collapsed rail keeps its own New, Search and Home icons.
 2. **A chat in the bar is two lines:** its glyph and name with when it last moved, then where it lives
-   (workspace · tab) one step quieter. When and where are for the eye; a screen reader still hears
-   the name, the state and "new".
+   (workspace · tab) one step quieter. A screen reader hears the name, the state, "new" and where it
+   lives, so chats of one name read apart by ear too; when it moved is for the eye.
 3. **The bar ends in Home's counts:** Needs you, Working and Done, each with its count (zero included,
    so the rows never move) and its glyph only while it counts something, each opening Home. The brand
    at the top carries Home's "page on screen".

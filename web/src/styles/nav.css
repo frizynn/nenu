@@ -83,7 +83,6 @@
 /* The desk's foot: small icon actions from the bar's left edge, the host at the far end in the quiet ink. */
 /* Its first action sits in the column of the rows' marks. */
 .workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host { gap: 2px; min-height: 48px; padding: 0 14px 0 11px; }
-.workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host > .workbench-icon-button { color: var(--subtle-foreground); }
 .nav-host-end { align-items: flex-end; margin-left: auto; padding-left: 8px; text-align: right; }
 .nav-host-end > .nav-host-name { color: var(--subtle-foreground); font-size: var(--text-caption); }
 .workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host-dot { margin-left: 6px; }
@@ -137,7 +136,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 @media (hover: hover) { .nav-chats .nav-row:hover { color: var(--foreground); } }
 .nav-label-text { flex: 1; min-width: 0; font: inherit; }
 /* The desk's search row: Search fills it, New sits at its end as a small action. */
-.workbench-navigation[data-variant="sidebar"] > .nav-top { flex-direction: row; align-items: center; gap: 4px; }
+.workbench-navigation[data-variant="sidebar"] > .nav-top { flex-direction: row; align-items: center; }
 .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row { flex: 1; }
 /* A chat in the desk's bar: its name and when it moved, then where it lives one step quieter. The mark sits
    on the name's line. */
@@ -179,7 +178,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 /* The desk's bar, drawn as Cursor's where a mouse drives it: small type, airy groups, faint
    icons and a soft grey for the row on screen, 32px rows as T3 Code's. A touch screen keeps the 44px rows below. */
 @media (min-width: 1024px) and (pointer: fine) {
-  .workbench-navigation[data-variant="sidebar"] > .nav-top { gap: 1px; padding: 2px 8px 0; }
+  .workbench-navigation[data-variant="sidebar"] > .nav-top { gap: 4px; padding: 2px 8px 0; }
   .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row, .nav-desk .nav-row, .nav-status > .nav-row { min-height: 32px; padding-block: 0; }
   .nav-desk .nav-chat-row { padding-block: 7px; }
   .nav-status > .nav-row { min-height: 30px; }
@@ -193,6 +192,10 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .workbench-navigation[data-variant="sidebar"] :is(.nav-host, .nav-top) > .workbench-icon-button { width: 32px; height: 32px; }
   .workbench-navigation[data-variant="sidebar"] .nav-status { padding-top: 8px; }
 }
+
+/* The foot's actions in the quiet ink. Outside the components layer, as .workbench-icon-button's own
+   colour is (workbench.css), or that unlayered rule would win whatever this one's specificity. */
+.workbench-navigation:is([data-variant="sidebar"], [data-variant="drawer"]) .nav-host > .workbench-icon-button:not(:hover) { color: var(--subtle-foreground); }
 
 /* The tree Search opens fades down into place. More's rows open and close (above) on a press, and also when a
    poll lets go of a row it held in view past the fold, such as a chat that stopped asking. */

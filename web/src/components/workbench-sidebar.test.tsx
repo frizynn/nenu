@@ -466,13 +466,12 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(top).toEqual(["Search", "New chat"]);
   });
 
-  it("says under each chat where it lives and beside its name when it last moved, for the eye only", () => {
+  it("says under each chat where it lives, by ear too, and beside its name when it last moved, for the eye", () => {
     open();
     const flow = section("Today").getByRole("link", { name: /^Checkout flow/ });
     expect(flow.querySelector(".nav-chat-place")).toHaveTextContent("w1");
-    expect(flow.querySelector(".nav-chat-place")).toHaveAttribute("aria-hidden");
     expect(flow.querySelector(".nav-chat-time")).toHaveAttribute("aria-hidden");
-    expect(flow).toHaveAccessibleName("Checkout flow, working");
+    expect(flow).toHaveAccessibleName("Checkout flow, working, w1");
   });
 
   it("groups the chats by their last real activity, under periods named for what they hold", () => {
@@ -490,7 +489,7 @@ describe("the desk sidebar, drawn as Cursor's", () => {
   it("marks the chat on screen and says its state", () => {
     open("/pane/hook");
     expect(section("Today").getByRole("link", { name: /^Payments webhook/ })).toHaveAttribute("aria-current", "page");
-    expect(section("Today").getByRole("link", { name: /^Payments webhook/ })).toHaveAccessibleName("Payments webhook, needs you");
+    expect(section("Today").getByRole("link", { name: /^Payments webhook/ })).toHaveAccessibleName(/^Payments webhook, needs you, /);
   });
 
   it("keeps the workspace tree out of the bar until Search opens, then browses it under the box", async () => {
@@ -566,7 +565,7 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     open("/pane/hook", finished);
     const flow = section("Today").getByRole("link", { name: /^Checkout flow/ });
     expect(flow.querySelector("[data-unread]")).toHaveTextContent("+1");
-    expect(flow).toHaveAccessibleName(/, new$/);
+    expect(flow).toHaveAccessibleName(/, new, w1$/);
     expect(section("Today").getByRole("link", { name: /^Payments webhook/ }).querySelector("[data-unread]")).toBeNull();
   });
 });

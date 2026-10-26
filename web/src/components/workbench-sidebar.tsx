@@ -157,7 +157,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
           </button>
         )}
         {/* New sits at the search row's end as a small action, as T3 Code keeps its own beside Search. */}
-        {!phone && <button type="button" className="workbench-icon-button nav-top-action" onClick={onNewChat} disabled={!onNewChat}
+        {!phone && <button type="button" className="workbench-icon-button" onClick={onNewChat} disabled={!onNewChat}
           aria-label="New chat" aria-keyshortcuts="Meta+N" title="New chat (⌘N)">
           <SquarePen aria-hidden size={16} />
         </button>}

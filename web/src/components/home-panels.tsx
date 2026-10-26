@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigation } from "react-router";
+import { Link, useLocation, useNavigate, useNavigation } from "react-router";
 import { ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
@@ -171,6 +171,12 @@ function readList(): SessionList {
     return "recents";
   }
 }
+/** The list a link asked Home to open on, if it named one. */
+function listAsked(state: unknown): SessionList | undefined {
+  const list = typeof state === "object" && state !== null ? (state as { list?: unknown }).list : undefined;
+  return LISTS.find(([key]) => key === list)?.[0];
+}
+
 function rememberList(list: SessionList): void {
   try {
     localStorage.setItem(LIST_KEY, list);
@@ -321,15 +327,20 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   now: number;
   opening: string | null;
 }) {
-  const [chosen, setList] = useState<SessionList>(readList);
-  // A link that names a list (the desk's Pull requests) opens Home on it, and it is remembered as a tap would.
-  const { state: asked, key: arrival } = useLocation();
+  // A link that names a list (the desk's Pull requests) opens Home on it, and it is remembered as a tap
+  // would be. The ask is then taken out of the entry's state, so a Back or a reload onto this entry opens
+  // on the list last chosen, not on the one that link asked for.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const asked = listAsked(location.state);
+  const [chosen, setList] = useState<SessionList>(() => asked ?? readList());
   useEffect(() => {
-    const wanted = (asked as { list?: unknown } | null)?.list;
-    if (!LISTS.some(([key]) => key === wanted)) return;
-    setList(wanted as SessionList);
-    rememberList(wanted as SessionList);
-  }, [asked, arrival]);
+    if (!asked) return;
+    setList(asked);
+    rememberList(asked);
+    const rest = Object.fromEntries(Object.entries(location.state as object).filter(([key]) => key !== "list"));
+    void navigate(location.pathname + location.search, { replace: true, state: rest });
+  }, [asked, location, navigate]);
   const lists = LISTS.filter(([key]) => key !== "prs" || reviews.length > 0);
   const list = lists.some(([key]) => key === chosen) ? chosen : lists[0]![0];
   // The workspaces opened in place; none until a tap opens one.
