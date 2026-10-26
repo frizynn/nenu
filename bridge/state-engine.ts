@@ -1,5 +1,6 @@
 import { meaningfulTabLabel, meaningfulTerminalTitle } from "./activity.ts";
 import type { HerdrClient } from "./herdr-client.ts";
+import { ProjectCache } from "./pane-project.ts";
 import {
   type AgentStatus,
   type AgentView,
@@ -111,6 +112,8 @@ export class StateEngine {
   // when a pane momentarily hides its input box (a dialog / working spinner) — only cleared when the
   // pane or its session changes. Optional reads never delay metadata publication.
   private readonly sessionNames = new Map<string, SessionName>();
+  // Each folder's project, read off disk once a minute rather than on every poll.
+  private readonly projects = new ProjectCache();
   private enrichingNames = false;
   private queuedNames = false;
   private nameEpoch = 0;
@@ -286,6 +289,7 @@ export class StateEngine {
           workspaceLabel,
         );
         const counters = agentById.get(p.pane_id);
+        const project = this.projects.get(p.cwd);
         return {
           paneId: p.pane_id,
           workspaceId: p.workspace_id,
@@ -295,6 +299,7 @@ export class StateEngine {
           agent,
           status: p.agent_status,
           cwd: p.cwd,
+          ...(project ? { project } : {}),
           focused: p.focused,
           kind,
           // A user-set pane label (herdr pane.rename); omitted when unset so "absent stays absent".
@@ -388,6 +393,7 @@ export class StateEngine {
         }
         this.prevStatus.set(a.paneId, a.status);
       }
+      this.projects.keep(new Set(panes.map((p) => p.cwd)));
       const live = new Set(agents.map((a) => a.paneId));
       for (const id of [...this.prevStatus.keys()]) {
         if (live.has(id)) continue;
