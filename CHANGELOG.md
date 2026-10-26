@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-10-26
+
+### Fixed
+
+- On a desk with projects open, the sidebar no longer scrolls the whole app off screen and leaves an empty page (471bf431, 6d69b013).
+
 ## [2.8.0] - 2026-10-26
 
 ### Added
