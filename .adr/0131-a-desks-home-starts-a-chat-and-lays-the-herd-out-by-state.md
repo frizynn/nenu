@@ -27,11 +27,12 @@ Measured on Nenu 2.8.0 and 2.8.1 at 1440×900 (the e2e bench's herd and the oper
    to review, PRs), each opening the view that lists it. The view is remembered per device; a link that
    names a list (the bar's Pull requests) opens on it.
 2. **Start asks what to start, and in which folder**, over a new chat's composer: the agent, how much
-   it may do, the folder and More ways to start. The folder is the one this device last chose in the
-   New flow, else the one the herd last moved in, and it stays put once shown: the herd's last folder
-   is often another agent's worktree, and a chat being written must not move with the herd. It starts through the New flow's own create, never a parallel path: a tab of the workspace
-   already in that folder, else a workspace on it, then the agent and the first message. Under it,
-   what needs you (answered in place, as before) and three chats to pick up, finished turns first.
+   it may do, the folder and More ways to start. The folder is the one this device last started a chat
+   in, else the one the herd last moved in, and it stays put once shown: the herd's last folder is
+   often another agent's worktree, and a chat being written must not move with the herd. It starts
+   through the New flow's own create, never a parallel path: a tab of the workspace already in that
+   folder, else a workspace on it, then the agent and the first message. Under it, what needs you
+   (answered in place, as before) and three chats to pick up, finished turns first.
 3. **The Board lays the herd out by state**: Needs you, Working and Ready to review side by side, the
    chats at rest folded at its foot. A card shows only what the snapshot carries (name, agent, project
    and tab, how long, the terminal title its process sets, its PR's size); it never reads a pane's

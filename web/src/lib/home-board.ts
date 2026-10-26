@@ -84,9 +84,10 @@ export function folderOf(cwd: string, panes: readonly AgentView[]): StartFolder 
 }
 
 /**
- * Where Start's composer starts until another folder is picked: the one this device last chose in the
- * New flow, else the folder the herd last moved in (agents before shells); none for an empty herd. The
- * device's own choice comes first because the herd's last folder may be another agent's worktree.
+ * Where Start's composer starts until another folder is picked: the folder this device last started a
+ * chat in (lib/spawn's remembered folders), else the folder the herd last moved in (agents before
+ * shells); none for an empty herd. A start from this device comes first because the herd's last folder
+ * is often another agent's worktree.
  */
 export function defaultFolder(picked: readonly string[], agents: readonly AgentView[], shells: readonly AgentView[]): StartFolder | null {
   const panes = [...agents, ...shells];

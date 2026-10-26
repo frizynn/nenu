@@ -355,7 +355,7 @@ function BoardView({ data, now, opening, needs, receipts, interactions, lock, co
   return (
     <>
       <div className="grid flex-1 grid-cols-3 items-start gap-5">
-        <BoardColumn id="needs" label="Needs you" status="blocked" count={needs.length} empty="Nothing needs you.">
+        <BoardColumn id="needs" label="Needs you" status="blocked" count={needs.length + receipts.length} empty="Nothing needs you.">
           {needs.length + receipts.length > 0 && <NeedsYouList agents={data.agents} session={data.session} items={needs} receipts={receipts}
             interactions={interactions} lockReason={lock} opening={opening} />}
         </BoardColumn>

@@ -862,7 +862,7 @@ describe("on a desk", () => {
   afterEach(() => vi.unstubAllGlobals());
   const pr: PullRequestView = { repo: "a/b", number: 1, title: "PR 1", url: "https://github.com/a/b/pull/1", branch: "x", draft: false, paneIds: [], inUse: true };
   const views = () => screen.getByRole("tablist", { name: "Home" });
-  /** The page's scroller: each view gets its own, so it opens at its top. */
+  /** The page's scroller, read again after each step. */
   const page = () => within(document.querySelector("main")!);
 
   it("opens on Start: what to start in the folder the herd last moved in, what needs you and the chats to pick up", async () => {
@@ -937,17 +937,17 @@ describe("on a desk", () => {
     await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "auto" }]));
   });
 
-  it("clears a message whose start lands while another view is on screen, so it is never sent twice", async () => {
+  it("never sends a start twice, even when another view was looked at while it ran", async () => {
     const { posts, release, path } = recordStarts({ hold: true });
     const { user, router } = await setup();
     await user.type(page().getByRole("textbox", { name: "First message" }), "Once{Enter}");
     await waitFor(() => expect(posts["/api/tab"]).toHaveLength(1));
     await user.click(within(views()).getByRole("tab", { name: "Board" }));
+    await user.click(within(views()).getByRole("tab", { name: "Start" }));
+    expect(page().getByRole("button", { name: "Start Claude Code" })).toBeDisabled();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "{Enter}");
     release();
     await waitFor(() => expect(router.state.location.pathname).toBe(path));
-    await act(() => router.navigate("/?s=work"));
-    await user.click(within(views()).getByRole("tab", { name: "Start" }));
-    expect(page().getByRole("textbox", { name: "First message" })).toHaveValue("");
     expect(posts["/api/tab"]).toHaveLength(1);
   });
 
