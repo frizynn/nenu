@@ -10,7 +10,8 @@ import { seedDemoHerd } from "./scenario.ts";
 // row ends inside the bar, a long name ends in an ellipsis, a resting chat reads muted until the pointer
 // rests on it, and the chats' "N updates" sits at the bar's
 // own edge. A chat with a name wider than the bar stands in for the one that pushed the list sideways
-// (21/10: the rows read "M" and "r Org" and "8 updates" floated past the rows). Captures each width
+// (21/10: the rows read "M" and "r Org" and "8 updates" floated past the rows), and nothing in the list
+// reaches past the app's frame, so bringing a row into view never scrolls the page away (26/10). Captures each width
 // and the drawer in dark and light, with Home at the default width. Exits 1 on any failure.
 //
 //   bun scripts/e2e/sidebar.ts [--port 8877] [--out DIR] [--tag before|after]
@@ -50,6 +51,27 @@ function measure(desk: boolean) {
     else if (long.scrollWidth <= long.clientWidth) broken.push("the long name shows whole, so nothing cut it to the bar");
   }
   if (!scrollers.length) broken.push("no list on screen");
+  // The list ends with its last shown row: a folded row's labels must not leave empty room to scroll into.
+  for (const scroller of scrollers) {
+    const top = scroller.getBoundingClientRect().top - scroller.scrollTop;
+    const shown = Array.from(scroller.querySelectorAll<HTMLElement>(".nav-row, .nav-label")).filter((el) => el.getClientRects().length && !el.closest("[data-folded]"));
+    const end = Math.max(0, ...shown.map((el) => el.getBoundingClientRect().bottom - top)) + parseFloat(getComputedStyle(scroller).paddingBottom);
+    if (scroller.scrollHeight > Math.max(end, scroller.clientHeight) + 2) broken.push(`the list scrolls ${Math.round(scroller.scrollHeight - end)}px past its last row`);
+  }
+  // Nothing in the list may reach past the frame: the frame clips it, but bringing a hidden label into view
+  // (a focus, a find, a click) scrolls the frame itself and leaves an empty page under the bar.
+  const frame = document.querySelector<HTMLElement>(".app-viewport");
+  if (frame) {
+    if (frame.scrollHeight > frame.clientHeight) broken.push(`the frame holds ${frame.scrollHeight}px in ${frame.clientHeight}px`);
+    for (const scroller of scrollers) {
+      const label = Array.from(scroller.querySelectorAll<HTMLElement>(".sr-only")).at(-1);
+      if (!label) broken.push("the list has no hidden label to bring into view");
+      label?.scrollIntoView({ block: "end" });
+      if (frame.scrollTop) broken.push(`bringing the list's last label into view scrolls the frame ${frame.scrollTop}px`);
+      frame.scrollTop = 0;
+      scroller.scrollTop = 0;
+    }
+  }
   return broken;
 }
 
@@ -63,6 +85,11 @@ async function main(): Promise<void> {
       const herd = await seedDemoHerd(fake, ctx);
       fake.addWorkspace("w9", "fisgon").addTab("w9:t1", "charla");
       fake.addPane({ paneId: "w9:p1", workspaceId: "w9", tabId: "w9:t1", agent: "claude", label: LONG, cwd: ctx.cwd, lines: ["❯ Demo task", "", "● On it."] });
+      // Enough chats that the open list runs past the screen, where its hidden labels could stretch the frame.
+      for (let n = 0; n < 30; n++) {
+        fake.addWorkspace(`x${n}`, `extra ${n}`).addTab(`x${n}:t1`, "tab");
+        fake.addPane({ paneId: `x${n}:p1`, workspaceId: `x${n}`, tabId: `x${n}:t1`, agent: "claude", label: `Extra chat ${n}`, cwd: ctx.cwd, lines: ["❯ Demo task"] });
+      }
       return herd;
     },
   });
@@ -77,8 +104,12 @@ async function main(): Promise<void> {
         await page.addInitScript((w) => localStorage.setItem("nenu:sidebar-width:v1", String(w)), width);
         await page.goto(bridge.url + "/");
         await page.locator(".workbench-sidebar .nav-chats .nav-row >> visible=true").first().waitFor({ timeout: 30_000 });
+        await page.waitForTimeout(600);
+        for (const line of await page.evaluate(measure, true)) failures.push(`desk ${width}px ${scheme} folded: ${line}`);
         await openProjects(page);
         await page.waitForTimeout(600);
+        // The checks below only mean something on a list longer than the screen.
+        if (!await page.locator(".workbench-sidebar .nav-scroll").evaluate((el) => el.scrollHeight > el.clientHeight)) failures.push(`desk ${width}px ${scheme}: the open list fits the screen, so nothing tests the overflow`);
         for (const line of await page.evaluate(measure, true)) failures.push(`desk ${width}px ${scheme}: ${line}`);
         // A resting chat steps back to the muted ink, and the pointer brings the full ink back.
         const ink = (selector: string) => page.locator(selector).first().evaluate((el) => getComputedStyle(el).color);
@@ -105,6 +136,10 @@ async function main(): Promise<void> {
           await page.screenshot({ path: join(outDir, full), animations: "disabled" });
           shots.push(full);
         }
+        // The same list by time.
+        await page.locator(".workbench-sidebar .nav-view-toggle").click();
+        await page.waitForTimeout(600);
+        for (const line of await page.evaluate(measure, true)) failures.push(`desk ${width}px ${scheme} by time: ${line}`);
         await context.close();
       }
       const context = await browser.newContext({ ...PHONE, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
