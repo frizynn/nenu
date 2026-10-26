@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigation } from "react-router";
+import { Link, useLocation, useNavigation } from "react-router";
 import { ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
@@ -130,11 +130,11 @@ export function SessionRow({ chat, session, now, opening, group, inTab = false }
   return (
     <li className={enter}>
       <Link to={to} aria-busy={busy || undefined}
-        className={cn("relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
+        className={cn("relative grid min-h-13 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
           inTab && "max-sm:gap-x-1.5", busy && "bg-[var(--workbench-row-hover)]")}>
         <span className="row-span-2 flex justify-center text-muted-foreground"><PaneMark pane={agent} /></span>
         <span className="col-start-2 flex min-w-0 items-center gap-1.5">
-          <span className={cn("truncate text-body sm:text-subhead", unseen && "font-semibold")}>{title}</span>
+          <span className={cn("truncate text-subhead", unseen && "font-semibold")}>{title}</span>
           {unseen && <>{sr(", ")}<span className="shrink-0 rounded-sm border border-status-done/50 px-1 text-micro text-status-done">New</span></>}
         </span>
         <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
@@ -231,11 +231,11 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, animate = true, t
   const at = Math.max(0, ...chats.map((chat) => chat.at));
   const listId = `home-${kind}-${id}`;
   const label = `${name}, ${state.word}, ${count}`;
-  const grid = "grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left sm:min-h-12 sm:rounded-lg sm:px-2.5";
+  const grid = "grid min-h-13 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left sm:min-h-12 sm:rounded-lg sm:px-2.5";
   const className = cn(grid, "hover:bg-[var(--workbench-row-hover)]", busy && "bg-[var(--workbench-row-hover)]");
   const body = <>
     <Icon aria-hidden className="row-span-2 size-4 justify-self-center text-muted-foreground" />
-    <span className="col-start-2 truncate text-body sm:text-subhead">{name}</span>
+    <span className="col-start-2 truncate text-subhead">{name}</span>
     <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
       <span className={cn("shrink-0", state.tone)}>{state.word}</span><span aria-hidden>·</span><span className="truncate">{count}</span>
     </span>
@@ -322,6 +322,14 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   opening: string | null;
 }) {
   const [chosen, setList] = useState<SessionList>(readList);
+  // A link that names a list (the desk's Pull requests) opens Home on it, and it is remembered as a tap would.
+  const { state: asked, key: arrival } = useLocation();
+  useEffect(() => {
+    const wanted = (asked as { list?: unknown } | null)?.list;
+    if (!LISTS.some(([key]) => key === wanted)) return;
+    setList(wanted as SessionList);
+    rememberList(wanted as SessionList);
+  }, [asked, arrival]);
   const lists = LISTS.filter(([key]) => key !== "prs" || reviews.length > 0);
   const list = lists.some(([key]) => key === chosen) ? chosen : lists[0]![0];
   // The workspaces opened in place; none until a tap opens one.

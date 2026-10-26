@@ -303,9 +303,11 @@ describe("the sidebar", () => {
     return userEvent.setup();
   }
 
-  it("counts what needs you on Home, and keeps no Needs you list of its own", () => {
+  it("counts what needs you, works and finished at its foot, each opening Home, and keeps no Needs you list of its own", () => {
     open();
-    expect(screen.getByRole("link", { name: "Home, 1 needs you" })).toBeInTheDocument();
+    const counts = within(screen.getByRole("region", { name: "Home" }));
+    expect(counts.getAllByRole("link").map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]))
+      .toEqual([["Needs you, 1", "/"], ["Working, 2", "/"], ["Done, 0", "/"]]);
     expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
   });
 
@@ -332,14 +334,16 @@ describe("the sidebar", () => {
     expect(chat.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
   });
 
-  it("marks Home as the page on screen only on Home", () => {
+  it("marks none of Home's counts as the page on screen: the bar's brand says Home", () => {
     open("/");
-    expect(screen.getByRole("link", { name: /^Home\b/ })).toHaveAttribute("aria-current", "page");
+    for (const link of within(screen.getByRole("region", { name: "Home" })).getAllByRole("link")) expect(link).not.toHaveAttribute("aria-current");
   });
 
-  it("leaves Home unmarked in a chat", () => {
-    open("/pane/depo");
-    expect(screen.getByRole("link", { name: /^Home\b/ })).not.toHaveAttribute("aria-current");
+  it("draws a count's glyph only while it counts something", () => {
+    open();
+    const counts = within(screen.getByRole("region", { name: "Home" }));
+    expect(counts.getByRole("link", { name: "Needs you, 1" }).querySelector(".nav-lead svg")).not.toBeNull();
+    expect(counts.getByRole("link", { name: "Done, 0" }).querySelector(".nav-lead")).toBeEmptyDOMElement();
   });
 
   describe("in the phone's sheets", () => {
@@ -456,10 +460,19 @@ describe("the desk sidebar, drawn as Cursor's", () => {
   const section = (name: string) => within(screen.getByRole("region", { name }));
   const rowNames = (name: string) => section(name).queryAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent);
 
-  it("leads with New chat, Search and Home", () => {
+  it("leads with Search, and New chat beside it as a small action", () => {
     open("/", herd, vi.fn());
-    const top = [...document.querySelectorAll(".nav-top > .nav-row")].map((row) => row.querySelector(".nav-row-text")?.textContent);
-    expect(top).toEqual(["New chat", "Search", "Home"]);
+    const top = [...document.querySelectorAll(".nav-top > *")].map((row) => row.querySelector(".nav-row-text")?.textContent ?? row.getAttribute("aria-label"));
+    expect(top).toEqual(["Search", "New chat"]);
+  });
+
+  it("says under each chat where it lives and beside its name when it last moved, for the eye only", () => {
+    open();
+    const flow = section("Today").getByRole("link", { name: /^Checkout flow/ });
+    expect(flow.querySelector(".nav-chat-place")).toHaveTextContent("w1");
+    expect(flow.querySelector(".nav-chat-place")).toHaveAttribute("aria-hidden");
+    expect(flow.querySelector(".nav-chat-time")).toHaveAttribute("aria-hidden");
+    expect(flow).toHaveAccessibleName("Checkout flow, working");
   });
 
   it("groups the chats by their last real activity, under periods named for what they hold", () => {
@@ -494,11 +507,11 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(screen.getByRole("region", { name: "Chats" })).toBeInTheDocument();
   });
 
-  it("says what needs you on Home as a quiet count beside a small dot, never a red pill", () => {
+  it("says what needs you as a quiet count beside a small glyph, never a red pill", () => {
     open("/pane/flow");
-    const home = screen.getByRole("link", { name: "Home, 1 needs you" });
-    expect(home.querySelector(".nav-badge")).toBeNull();
-    expect(home.querySelector(".nav-row-meta")).toHaveTextContent("1");
+    const needs = screen.getByRole("link", { name: "Needs you, 1" });
+    expect(needs.querySelector(".nav-badge")).toBeNull();
+    expect(needs.querySelector(".nav-row-meta")).toHaveTextContent("1");
   });
 
   it("keeps each chat where it was while its agent works, puts a new one where it belongs, and reorders on a return", () => {

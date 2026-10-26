@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider, useMatch } from "react-router";
 import { onTestFinished } from "vitest";
@@ -58,8 +58,18 @@ it("keeps chat and settings links scoped to the active session", () => {
   desktop();
   const { sidebar } = setup();
   expect(sidebar.getByRole("link", { name: /Improve interface/ })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
-  expect(sidebar.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/?s=work");
+  expect(sidebar.getByRole("link", { name: /^Needs you, / })).toHaveAttribute("href", "/?s=work");
   expect(sidebar.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
+  expect(sidebar.getByRole("link", { name: "Usage" })).toHaveAttribute("href", "/settings/usage?s=work");
+});
+
+it("marks the brand as the page on screen only on Home", () => {
+  desktop();
+  const { sidebar } = setup(data, "/?s=work");
+  expect(sidebar.getByRole("link", { name: "Nenu" })).toHaveAttribute("aria-current", "page");
+  cleanup();
+  const chat = setup(data, "/pane/w%3A1%3Ap2?s=work");
+  expect(chat.sidebar.getByRole("link", { name: "Nenu" })).not.toHaveAttribute("aria-current");
 });
 
 it("filters without disturbing a mounted composer draft", async () => {
@@ -159,7 +169,7 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   // Home carries what needs you; there is no second place for it.
   expect(rail.getByRole("link", { name: "Home, 1 needs you" })).toHaveAttribute("href", "/?s=work");
   expect(rail.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
-  expect(sidebar.getByRole("link", { name: "Home, 1 needs you" })).toBeInTheDocument();
+  expect(sidebar.getByRole("link", { name: "Needs you, 1" })).toHaveAttribute("href", "/?s=work");
   expect(sidebar.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
   await user.keyboard("{Meta>}k{/Meta}");
   expect(sidebar.getByRole("searchbox")).toHaveFocus();

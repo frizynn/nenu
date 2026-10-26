@@ -97,7 +97,7 @@ const REVIEW_WORDS: Record<NonNullable<ReviewEntry["review"]>, { word: string; t
   review_required: { word: "needs review" },
 };
 
-const rowClass = "relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5";
+const rowClass = "relative grid min-h-13 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5";
 
 /**
  * A pull request as one row and one tap: its title, then its number and what its checks and review
@@ -120,7 +120,7 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
   const body = <>
     <GitPullRequest aria-hidden className={cn("row-span-2 size-4 shrink-0 justify-self-center",
       readyToMerge(entry) ? "text-status-done" : blocked ? "text-muted-foreground lg:text-destructive" : "text-muted-foreground")} />
-    <span className="col-start-2 truncate text-body sm:text-subhead">{entry.title}</span>
+    <span className="col-start-2 truncate text-subhead">{entry.title}</span>
     <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 truncate text-footnote text-muted-foreground">
       {facts.map((fact, index) => <span key={fact.word} className={cn("shrink-0", fact.tone)}>{index > 0 && <span aria-hidden className="text-muted-foreground">· </span>}{fact.word}</span>)}
     </span>
