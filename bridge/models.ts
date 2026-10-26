@@ -5,6 +5,7 @@ import { containedRealpath } from "./journal/files.ts";
 import { codexJournal } from "./journal/codex.ts";
 import { claudeJournal } from "./journal/claude.ts";
 import type { JournalRoots } from "./journal/registry.ts";
+import { startModels, type StartModels } from "./agent-start.ts";
 import type { AgentView } from "./types.ts";
 
 export interface ModelCatalog { available: boolean; models: Array<{ name: string; description: string }>; source?: string }
@@ -93,4 +94,13 @@ export async function discoverPaneModels(pane: Pick<AgentView, "agent" | "agentS
     return claudeModels(realProfile !== null && realProfile === standardProfile ? await metadata(join(home, ".claude.json"), home) : {});
   }
   return pane.agent === "claude" ? claudeModels() : unavailable();
+}
+
+/** What a new chat may start on: Claude's aliases and the models the bridge user's Codex lists. The
+ * route that starts an agent checks its choice against this same answer (agent-start.ts). */
+export async function startCatalog(roots: Pick<JournalRoots, "codex">): Promise<StartModels> {
+  const root = roots.codex[0];
+  const profile = root ? dirname(root) : null;
+  const codex = profile ? codexModels(await metadata(join(profile, "models_cache.json"), profile)) : unavailable();
+  return startModels(codex.models);
 }

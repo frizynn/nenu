@@ -2,15 +2,16 @@ import { homedir } from "node:os";
 import type { AuditLog } from "../audit.ts";
 import type { HerdrClient } from "../herdr-client.ts";
 import { listHomeDirs } from "../home-dirs.ts";
+import { startCatalog } from "../models.ts";
 import type { StateEngine } from "../state-engine.ts";
 import type { ActionResponse, CreateResponse } from "../types.ts";
 import { deviceAuth } from "./access.ts";
 import type { PaneAction, Route } from "./context.ts";
 import { json, jsonError, text } from "./http.ts";
 
-// A tab supports rename, close and move — an action group like the pane route. The `/api/tab` POST
+// A tab supports rename, close, move and split (a new shell pane in it) — an action group like the pane route. The `/api/tab` POST
 // below (create) is an exact match on `/api/tab`, so it never collides with this `/api/tab/<id>/<action>`.
-const TAB_ACTION_ROUTE = /^\/api\/tab\/([^/]+)\/(rename|close|move)$/;
+const TAB_ACTION_ROUTE = /^\/api\/tab\/([^/]+)\/(rename|close|move|split)$/;
 
 export const structureRoutes: Route[] = [
   // Folder names under home for the new-chat picker. Write-level: only a device that can start a
@@ -28,6 +29,18 @@ export const structureRoutes: Route[] = [
       } catch {
         return jsonError("Directory unavailable.", 404, null);
       }
+    },
+  },
+  // What a new chat may start on (agent-start.ts): the same list the start route checks a choice against.
+  // Write-level like the folders: only a device that can start a chat reads it.
+  {
+    method: "GET",
+    path: "/api/start/models",
+    access: "write",
+    session: false,
+    machine: true,
+    async handle({ cfg }) {
+      return json(await startCatalog(cfg.journalRoots), null);
     },
   },
   // ── Structural creates: new tab / new space (each opens a fresh shell pane) ──
@@ -61,6 +74,7 @@ export const structureRoutes: Route[] = [
       const device = deviceAuth(req, cfg).device;
       if (action === "close") return closeTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
       if (action === "move") return moveTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
+      if (action === "split") return splitTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
       return renameTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
     },
   },
@@ -304,6 +318,37 @@ async function createTab(
       ok: true,
       pane: { ...created, workspaceLabel: label },
     } satisfies CreateResponse, ae);
+  } catch (err) {
+    return json({ ok: false, error: (err as Error).message } satisfies CreateResponse, ae);
+  }
+}
+
+// Open a fresh shell pane in an existing tab, beside its largest pane (tab-split.ts). `cwd` omitted =
+// the pane it splits from's folder. Same structural-only threat model as createTab.
+async function splitTab(
+  herdr: HerdrClient,
+  engine: StateEngine,
+  tabId: string,
+  req: Request,
+  audit: AuditLog,
+  device: string | null,
+  session: string,
+): Promise<Response> {
+  let body: { cwd?: string };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return text("bad body", 400);
+  }
+  const ae = req.headers.get("accept-encoding");
+  const snapshot = engine.current();
+  const inTab = [...snapshot.agents, ...snapshot.shellPanes].find((p) => p.tabId === tabId);
+  if (!inTab) return json({ ok: false, error: "That tab is gone." } satisfies CreateResponse, ae);
+  const cwd = typeof body.cwd === "string" && body.cwd.trim() ? body.cwd.trim() : undefined;
+  try {
+    const created = await herdr.splitTab(inTab.paneId, { cwd });
+    audit.record({ action: "pane.split", paneId: created.paneId, session, device, detail: { tabId, cwd } });
+    return json({ ok: true, pane: { ...created, workspaceLabel: inTab.workspaceLabel } } satisfies CreateResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies CreateResponse, ae);
   }

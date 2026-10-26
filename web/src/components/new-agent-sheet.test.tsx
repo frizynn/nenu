@@ -69,7 +69,7 @@ describe("NewAgentForm", () => {
     await user.type(screen.getByLabelText("Name (optional)"), "web");
     await user.type(screen.getByLabelText("First message (optional)"), "hello");
     await user.click(screen.getByRole("button", { name: "Start Codex" }));
-    expect(onSubmit).toHaveBeenCalledWith({ agent: "codex", cwd: "/old/project", name: "web", message: "hello", permission: "full" });
+    expect(onSubmit).toHaveBeenCalledWith({ agent: "codex", cwd: "/old/project", name: "web", message: "hello", permission: "full", model: "default" });
   });
 
   it("offers each CLI its own permissions and warns about the dangerous ones", async () => {

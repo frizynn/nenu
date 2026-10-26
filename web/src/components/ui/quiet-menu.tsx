@@ -12,8 +12,8 @@ const ITEMS = '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbo
 /**
  * A quiet button that names what is chosen and opens a short menu under it. The menu grows from its
  * button and fades back to it (180 ms in, 120 ms out); it closes on Escape, a press outside, the focus
- * leaving it, or a row that calls `close`. Opening moves the focus to the chosen row, else the first;
- * the arrows, Home and End walk the rows.
+ * leaving it, or a row that calls `close`. Opening moves the focus to the menu's search field when it
+ * has one (`data-autofocus`), else the chosen row, else the first; the arrows, Home and End walk the rows.
  */
 export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "start", className, menuClassName, children }: {
   icon: IconComponent;
@@ -36,7 +36,8 @@ export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "st
     if (!open) return;
     // Into the menu, as a menu button does; a finger's tap draws no ring for it.
     const rows = items();
-    (rows.find((row) => row.getAttribute("aria-checked") === "true") ?? rows[0])?.focus({ preventScroll: true });
+    const search = layer.current?.querySelector<HTMLElement>("[data-autofocus]");
+    (search ?? rows.find((row) => row.getAttribute("aria-checked") === "true") ?? rows[0])?.focus({ preventScroll: true });
     const outside = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && (layer.current?.contains(target) || trigger.current?.contains(target))) return;
@@ -61,10 +62,12 @@ export function QuietMenu({ icon: Icon, label, ariaLabel, menuLabel, align = "st
     const rows = items();
     const index = rows.findIndex((row) => row === document.activeElement);
     const focus = (at: number) => rows[(at + rows.length) % rows.length]?.focus({ preventScroll: true });
+    // Home and End move the caret while the search field has the focus.
+    const typing = event.target instanceof HTMLInputElement;
     if (event.key === "ArrowDown") focus(index + 1);
     else if (event.key === "ArrowUp") focus(index - 1);
-    else if (event.key === "Home") focus(0);
-    else if (event.key === "End") focus(rows.length - 1);
+    else if (event.key === "Home" && !typing) focus(0);
+    else if (event.key === "End" && !typing) focus(rows.length - 1);
     else if (event.key === "Escape") close();
     else return;
     event.preventDefault();

@@ -18,8 +18,11 @@ export const SPAWN_AGENTS: ReadonlyArray<{ id: SpawnAgent; label: string }> = [
 /** How an agent is named to the person; one Nenu cannot start keeps the name Herdr gave it. */
 export const agentLabel = (agent: string) => SPAWN_AGENTS.find((a) => a.id === agent)?.label ?? agent;
 
-/** `message` prefills the first message, e.g. from the prompt on Home. */
-export type SpawnTarget = { kind: "tab"; workspaceId: string; message?: string } | { kind: "workspace"; message?: string };
+/** `message` prefills the first message, e.g. from the prompt on Home. A `pane` opens beside the panes of an existing tab. */
+export type SpawnTarget =
+  | { kind: "tab"; workspaceId: string; message?: string }
+  | { kind: "workspace"; message?: string }
+  | { kind: "pane"; tabId: string; message?: string };
 
 /** How much a new agent may do without asking. Ids are the bridge's allowlist (bridge/agent-start.ts). */
 export interface PermissionChoice {
@@ -51,6 +54,8 @@ export interface SpawnInput {
   message: string;
   /** A {@link PERMISSIONS} id for the chosen agent; ignored for a shell. */
   permission: string;
+  /** A model id the bridge lists for the chosen agent (api.fetchStartModels); absent = its default. */
+  model?: string;
   session?: string;
 }
 
@@ -58,6 +63,7 @@ export interface SpawnInput {
 const AGENT_KEY = "collie.spawn.agent";
 const DIRS_KEY = "collie.spawn.dirs";
 const PERMISSION_KEY = "collie.spawn.permission";
+const MODEL_KEY = "collie.spawn.model";
 const MAX_DIRS = 6;
 
 function readJson(key: string): unknown {
@@ -93,6 +99,19 @@ export function loadPermission(agent: Exclude<SpawnAgent, "shell">): string {
 }
 export const savePermission = (agent: Exclude<SpawnAgent, "shell">, id: string) => write(PERMISSION_KEY, { ...savedPermissions(), [agent]: id });
 
+const savedModels = (): Record<string, unknown> => {
+  const value = readJson(MODEL_KEY);
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+};
+/** The last model picked for this agent; whoever shows it checks it is still on the bridge's list. */
+export function loadModel(agent: Exclude<SpawnAgent, "shell">): string {
+  const value = savedModels()[agent];
+  return typeof value === "string" && value ? value : DEFAULT_MODEL;
+}
+export const saveModel = (agent: Exclude<SpawnAgent, "shell">, id: string) => write(MODEL_KEY, { ...savedModels(), [agent]: id });
+/** The model id that adds no flag: the agent starts on its own default. */
+export const DEFAULT_MODEL = "default";
+
 export function loadDirs(): string[] {
   const value = readJson(DIRS_KEY);
   return Array.isArray(value) ? value.filter((d): d is string => typeof d === "string" && !!d).slice(0, MAX_DIRS) : [];
@@ -114,6 +133,7 @@ export type SpawnStage = "start" | "queue";
 export interface SpawnState {
   agent: Exclude<SpawnAgent, "shell">;
   permission: string;
+  model?: string;
   stage: SpawnStage;
   phase: "working" | "done" | "error";
   error?: string;
@@ -161,7 +181,7 @@ async function startStage(paneId: string, s: SpawnState, deps: SpawnDeps): Promi
   for (let attempt = 0; attempt < START_ATTEMPTS; attempt++) {
     const began = deps.now();
     try {
-      const result = await deps.startAgent(paneId, s.agent, s.session, s.permission);
+      const result = await deps.startAgent(paneId, s.agent, s.session, s.permission, s.model);
       if (result.ok) return null;
       error = result.error;
     } catch (cause) {
@@ -218,23 +238,26 @@ async function advance(paneId: string, s: SpawnState, deps: SpawnDeps): Promise<
 // ── Submit ────────────────────────────────────────────────────────────────────────────────────
 export type SpawnResult = Extract<CreateResponse, { ok: true }> | { ok: false; error: string };
 
-/** Create the tab or workspace. On success the launch continues in the background for the pane. */
+/** Create the tab, workspace or pane. On success the launch continues in the background for the pane. */
 export async function spawn(input: SpawnInput, deps: SpawnDeps = liveDeps): Promise<SpawnResult> {
   const label = input.name.trim() || undefined;
   const cwd = input.cwd.trim() || undefined;
+  const { target } = input;
   const created =
-    input.target.kind === "tab"
-      ? await api.createTab(input.target.workspaceId, { label, cwd }, input.session)
-      : await api.createWorkspace({ label, cwd }, input.session);
+    target.kind === "tab" ? await api.createTab(target.workspaceId, { label, cwd }, input.session)
+    : target.kind === "pane" ? await api.splitTab(target.tabId, { cwd }, input.session)
+    : await api.createWorkspace({ label, cwd }, input.session);
   if (!created.ok) return created;
-  // The name labels the tab or workspace; it also names the chat itself, which is what the sidebar
+  // The name labels the tab or workspace (a pane has only its own); it also names the chat itself, which is what the sidebar
   // and the chat header show. A failed rename only leaves the default name.
   if (label) void api.renamePane(created.pane.paneId, label, input.session).catch(() => undefined);
   saveAgent(input.agent);
   if (cwd) rememberDir(cwd);
   if (input.agent !== "shell") {
     savePermission(input.agent, input.permission);
-    set(created.pane.paneId, { agent: input.agent, permission: input.permission, stage: "start", phase: "working", message: input.message.trim(), session: input.session });
+    saveModel(input.agent, input.model ?? DEFAULT_MODEL);
+    const model = input.model && input.model !== DEFAULT_MODEL ? input.model : undefined;
+    set(created.pane.paneId, { agent: input.agent, permission: input.permission, model, stage: "start", phase: "working", message: input.message.trim(), session: input.session });
     void runSpawn(created.pane.paneId, deps);
   }
   return created;
@@ -243,13 +266,15 @@ export async function spawn(input: SpawnInput, deps: SpawnDeps = liveDeps): Prom
 // ── Sheet request ─────────────────────────────────────────────────────────────────────────────
 // Which create sheet is open (if any). A tiny store so the tab "+" in any pane or space can open
 // the one sheet mounted at the app root, without threading state through every parent.
-let request: SpawnTarget | null = null;
+/** What the New flow can be opened on: a tab or a workspace (a pane is chosen inside it). */
+type NewAgentRequest = Extract<SpawnTarget, { kind: "tab" | "workspace" }>;
+let request: NewAgentRequest | null = null;
 const requestListeners = new Set<() => void>();
-export function openNewAgent(target: SpawnTarget | null): void {
+export function openNewAgent(target: NewAgentRequest | null): void {
   request = target;
   for (const fn of requestListeners) fn();
 }
-export function useNewAgentRequest(): SpawnTarget | null {
+export function useNewAgentRequest(): NewAgentRequest | null {
   return useSyncExternalStore(
     (fn) => (requestListeners.add(fn), () => void requestListeners.delete(fn)),
     () => request,

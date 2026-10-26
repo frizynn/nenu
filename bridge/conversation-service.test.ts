@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { realpath } from "node:fs/promises";
 import { ConversationService, explicitSession } from "./conversation-service.ts";
 import { matchClaudeSession } from "./claude-sessions.ts";
-import { launchAgent, startPaneAgent } from "./agent-start.ts";
+import { launchAgent, startModels, startPaneAgent } from "./agent-start.ts";
 import { CodexHistory, codexItemEntry } from "./codex-history.ts";
 import type { AgentView } from "./types.ts";
 
@@ -16,16 +16,16 @@ describe("native launch", () => {
   test("only supported choices launch in empty shells", async () => {
     let calls = 0;
     const client = { startAgent: async () => { calls++; } };
-    expect(launchAgent({ agent: "codex; touch /tmp/x" })).toBeNull();
-    await expect(startPaneAgent(pane, { kind: "codex", permission: "ask" }, client)).rejects.toThrow("empty terminal");
-    await expect(startPaneAgent(undefined, { kind: "claude", permission: "ask" }, client)).rejects.toThrow("empty terminal");
+    expect(launchAgent({ agent: "codex; touch /tmp/x" }, startModels([]))).toBeNull();
+    await expect(startPaneAgent(pane, { kind: "codex", permission: "ask", model: "default" }, startModels([]), client)).rejects.toThrow("empty terminal");
+    await expect(startPaneAgent(undefined, { kind: "claude", permission: "ask", model: "default" }, startModels([]), client)).rejects.toThrow("empty terminal");
     expect(calls).toBe(0);
   });
   test("keeps Codex hooks in the native process and gives Claude a recoverable id", async () => {
     const calls: string[][] = [];
     const client = { startAgent: async (_pane: string, _kind: string, args: string[] = []) => { calls.push(args); } };
-    await startPaneAgent({ ...pane, kind: "shell" }, { kind: "codex", permission: "ask" }, client);
-    await startPaneAgent({ ...pane, kind: "shell" }, { kind: "claude", permission: "ask" }, client);
+    await startPaneAgent({ ...pane, kind: "shell" }, { kind: "codex", permission: "ask", model: "default" }, startModels([]), client);
+    await startPaneAgent({ ...pane, kind: "shell" }, { kind: "claude", permission: "ask", model: "default" }, startModels([]), client);
     expect(calls[0]).toEqual(["--no-daemon"]);
     expect(calls[1]?.[0]).toBe("--session-id");
     expect(calls[1]?.[1]).toMatch(/^[0-9a-f-]{36}$/);

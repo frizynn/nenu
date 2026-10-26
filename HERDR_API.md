@@ -281,6 +281,24 @@ Three sibling RPCs set a display label on a workspace, tab, or pane. Live-verifi
   (renames an agent session, not a pane/tab/workspace) — **unverified and unwired by Nenu**. Listed
   only so it isn't mistaken for the label renames above.
 
+## Split — a new pane in an existing tab (verified)
+
+Live-probed 2026-10-27 on Herdr 0.9.5 in an isolated lab session (`bridge/herdr-client.ts` `splitTab`).
+
+| Method | Params | Returns (`result.type`) |
+|---|---|---|
+| `pane.layout` | `{pane_id}` | `pane_layout` → `layout{workspace_id, tab_id, area, focused_pane_id, panes[{pane_id, focused, rect{x,y,width,height}}], splits[]}` |
+| `pane.split` | `{target_pane_id, direction, cwd?, focus?, ratio?, env?}` | `pane_info` → `pane{…}` (the new shell pane) |
+
+- **The pane to split is `target_pane_id`.** `pane_id` and `target` are silently ignored, and Herdr
+  then splits the focused pane: three probes naming another pane by those fields all split the
+  focused one. Only `direction` is required (`right` | `down`; anything else is
+  ``invalid_request: unknown variant``).
+- `focus` defaults to `false`; `cwd` omitted starts the new shell in the split pane's folder.
+- `rect` is in terminal cells, so a pane twice as wide as tall is about square on screen.
+- **`agent.start` types its command into the shell, quoting each argument**: `args: ["--model",
+  "opus[1m]"]` arrived as `claude --model 'opus[1m]'`, and the reply echoes the `argv` it used.
+
 ## Close methods — kill a pane or a whole tab (verified)
 
 Two sibling structural ops remove panes. `tab.close` live-verified 2026-07-19 on the sandbox session.

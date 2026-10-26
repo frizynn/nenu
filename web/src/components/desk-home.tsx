@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ArrowUp, Check, ChevronDown, Folder, GitPullRequest, Lock, Sparkle, SquareTerminal, TriangleAlert, type IconComponent } from "@/components/ui/icon";
+import { ArrowUp, Check, ChevronDown, Folder, GitPullRequest, Lock, Sparkle, SquareTerminal, TriangleAlert } from "@/components/ui/icon";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { AppHeader } from "@/components/app-header";
@@ -13,25 +13,28 @@ import { NeedsYouList } from "@/components/needs-you-list";
 import { PaneMark } from "@/components/nav-rows";
 import type { LockReason } from "@/components/question-card";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
+import { DestinationMenu, ModelMenu, type StartAgent } from "@/components/start-pickers";
 import { StatusDot } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { QuietMenu, quietMenuItem } from "@/components/ui/quiet-menu";
 import { BottomSheet } from "@/components/ui/sheet";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
-import { fetchHomeDirs } from "@/lib/api";
+import { listedModel, useStartModels } from "@/hooks/use-start-models";
+import { fetchHomeDirs, type StartModels } from "@/lib/api";
 import { projectName } from "@/lib/desk-projects";
 import { tildePath } from "@/lib/dir-picker";
 import { EnterScope, useEnter } from "@/lib/enter";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import {
-  boardColumns, defaultFolder, folderOf, HOME_VIEWS, pickUp, startTarget, useHomeView, viewAsked, withoutAsk,
+  boardColumns, defaultFolder, folderOf, HOME_VIEWS, pickUp, useHomeView, viewAsked, withoutAsk,
   type BoardColumns, type HomeView, type SessionList, type StartFolder,
 } from "@/lib/home-board";
 import { needYou, type NeedsYouItem, type RecentChat } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { useHoldReload } from "@/lib/reload-guard";
-import { agentLabel, loadAgent, loadDirs, loadPermission, PERMISSIONS, SPAWN_AGENTS, suggestDirs } from "@/lib/spawn";
+import { agentLabel, loadAgent, loadDirs, loadModel, loadPermission, PERMISSIONS, suggestDirs } from "@/lib/spawn";
+import { BY_FOLDER, destinationFolder, destinationTarget, liveDestination, takesFolder, type StartDestination } from "@/lib/start-destination";
 import { canCreate, isReadOnly, type AgentStatus, type Interaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -59,9 +62,6 @@ export interface DeskHomeProps {
   extras: ReactNode;
 }
 
-type StartAgent = "claude" | "codex";
-const START_AGENTS = SPAWN_AGENTS.filter((a): a is { id: StartAgent; label: string } => a.id !== "shell");
-
 /**
  * What Start's composer holds. DeskHome keeps it, so a look at another view loses none of it and a
  * start still in flight lands, clears the message, and is never sent twice.
@@ -72,13 +72,22 @@ interface StartState {
   folder: StartFolder | null;
   agent: StartAgent;
   permissions: Record<StartAgent, string>;
+  /** The model each agent starts on; one the bridge no longer lists starts on the default. */
+  models: Record<StartAgent, string>;
+  /** Where it opens (lib/start-destination); one closed since it was chosen opens by folder. */
+  destination: StartDestination;
   busy: boolean;
   error: string | null;
 }
 
 function freshStart(): StartState {
   const last = loadAgent();
-  return { draft: "", folder: null, agent: last === "shell" ? "claude" : last, permissions: { claude: loadPermission("claude"), codex: loadPermission("codex") }, busy: false, error: null };
+  return {
+    draft: "", folder: null, agent: last === "shell" ? "claude" : last,
+    permissions: { claude: loadPermission("claude"), codex: loadPermission("codex") },
+    models: { claude: loadModel("claude"), codex: loadModel("codex") },
+    destination: BY_FOLDER, busy: false, error: null,
+  };
 }
 
 /** How many asks Start shows before leaving the rest to the Board. */
@@ -116,18 +125,19 @@ export function DeskHome(props: DeskHomeProps) {
 
   const [start, setStart] = useState(freshStart);
   useHoldReload("home-start", start.draft.trim() !== "");
-  const panes = [...data.agents, ...data.shellPanes];
   if (!start.folder) {
     const folder = defaultFolder(loadDirs(), data.agents, data.shellPanes);
     if (folder) setStart({ ...start, folder });
   }
   const spawnInto = useSpawnInto(() => undefined);
+  const models = useStartModels(data.session, canCreate(data));
   const begin = async () => {
     if (start.busy || !canCreate(data)) return;
-    const cwd = start.folder?.cwd ?? "";
+    const { target, cwd, name } = destinationTarget(liveDestination(start.destination, data), start.folder?.cwd ?? "", data);
     const permission = start.permissions[start.agent];
+    const model = listedModel(models, start.agent, start.models[start.agent]);
     setStart((s) => ({ ...s, busy: true, error: null }));
-    const failure = await spawnInto(startTarget(cwd, panes), { agent: start.agent, cwd, name: "", message: start.draft, permission });
+    const failure = await spawnInto(target, { agent: start.agent, cwd, name, message: start.draft, permission, model });
     setStart((s) => ({ ...s, busy: false, error: failure, draft: failure === null ? "" : s.draft }));
   };
 
@@ -165,7 +175,7 @@ export function DeskHome(props: DeskHomeProps) {
         columnClassName={cn(view === "board" ? "flex min-h-full max-w-none flex-col" : view === "start" && "max-w-180")}>
         <div id="home-view" role="tabpanel" aria-labelledby={`home-view-${view}`} className={cn("flex flex-col", view === "board" && "flex-1", stale && "text-muted-foreground grayscale")}>
           {view === "start" && (
-            <StartView {...props} start={start} onStart={(next) => setStart((s) => ({ ...s, ...next }))} onBegin={() => void begin()}
+            <StartView {...props} start={start} models={models} onStart={(next) => setStart((s) => ({ ...s, ...next }))} onBegin={() => void begin()}
               onView={setStored} moreAsks={Math.max(0, needs.length + receipts.length - START_ASKS)} />
           )}
           {view === "board" && <BoardView {...props} columns={columns} />}
@@ -177,8 +187,9 @@ export function DeskHome(props: DeskHomeProps) {
 }
 
 /** Start: what to start, in which folder, then what needs you and the chats to pick up. */
-function StartView({ data, now, opening, needs, receipts, interactions, lock, recent, extras, start, onStart, onBegin, onView, moreAsks }: DeskHomeProps & {
+function StartView({ data, now, opening, needs, receipts, interactions, lock, recent, extras, start, models, onStart, onBegin, onView, moreAsks }: DeskHomeProps & {
   start: StartState;
+  models: StartModels;
   onStart: (next: Partial<StartState>) => void;
   onBegin: () => void;
   onView: (view: HomeView) => void;
@@ -186,13 +197,13 @@ function StartView({ data, now, opening, needs, receipts, interactions, lock, re
   moreAsks: number;
 }) {
   const rows = pickUp(recent);
-  const project = start.folder?.project;
+  const project = takesFolder(start.destination) ? start.folder?.project : undefined;
   return (
     <div className="flex flex-col pt-[clamp(0px,calc(18vh-36px),132px)]">
       <h2 className="text-center text-large-title font-normal text-balance text-muted-foreground">
         {project ? <>What should we start in <span className="font-semibold text-foreground">{project}</span>?</> : "What should we start?"}
       </h2>
-      <StartComposer data={data} start={start} onStart={onStart} onBegin={onBegin} />
+      <StartComposer data={data} start={start} models={models} onStart={onStart} onBegin={onBegin} />
       <div className="mt-12 flex flex-col gap-2">
         <NeedsYouList agents={data.agents} session={data.session} items={needs.slice(0, START_ASKS)} receipts={receipts.slice(0, Math.max(0, START_ASKS - needs.length))}
           interactions={interactions} lockReason={lock} opening={opening} />
@@ -245,20 +256,13 @@ function Ago({ at, now, since = false }: { at: number; now: number; since?: bool
   return <span className="min-w-8 text-right tabular-nums"><span aria-hidden>{shown}</span><span className="sr-only">, {timeAgo(at, now)}</span></span>;
 }
 
-// The agent menu's mark, one component per agent: a component made during a render would be a new type
-// on every poll, and React would swap its DOM each time.
-const AGENT_MARKS: Record<StartAgent, IconComponent> = {
-  claude: ({ className }) => <AgentIcon agent="claude" className={cn(className, "size-4")} />,
-  codex: ({ className }) => <AgentIcon agent="codex" className={cn(className, "size-4")} />,
-};
-
 /**
- * A new chat's composer: the first message, the agent and how much it may do, Start, and under the
- * box the folder it starts in. Start goes through the New flow's own create (DeskHome's `begin`): a
- * tab of the workspace already working in that folder, else a workspace of its own, then the agent
- * and the first message once it is ready.
+ * A new chat's composer: the first message, the agent and model, how much it may do, Start, and under
+ * the box where it opens and the folder it starts in. Start goes through the New flow's own create
+ * (DeskHome's `begin`): by folder, a tab of the workspace already working there, else a workspace of
+ * its own; or the destination chosen. Then the agent and the first message once it is ready.
  */
-function StartComposer({ data, start, onStart, onBegin }: { data: HomeData; start: StartState; onStart: (next: Partial<StartState>) => void; onBegin: () => void }) {
+function StartComposer({ data, start, models, onStart, onBegin }: { data: HomeData; start: StartState; models: StartModels; onStart: (next: Partial<StartState>) => void; onBegin: () => void }) {
   const [home, setHome] = useState("");
   const [picking, setPicking] = useState(false);
   const allowed = canCreate(data);
@@ -279,8 +283,16 @@ function StartComposer({ data, start, onStart, onBegin }: { data: HomeData; star
     // A stray Enter in an empty box starts nothing; Start itself still opens an agent with no first message.
     if (draft.trim()) onBegin();
   };
-  const cwd = start.folder?.cwd ?? "";
+  const destination = liveDestination(start.destination, data);
+  const folder = takesFolder(destination);
+  const cwd = folder ? start.folder?.cwd ?? "" : "";
   const where = cwd ? tildePath(cwd, home) : "~";
+  const model = listedModel(models, agent, start.models[agent]);
+  // A workspace or tab brings its own folder along; another can still be picked after it.
+  const toDestination = (next: StartDestination) => {
+    const there = destinationFolder(next, data);
+    onStart({ destination: next, ...(there ? { folder: folderOf(there, [...data.agents, ...data.shellPanes]) } : {}) });
+  };
 
   return (
     <form className="mt-8 flex flex-col" onSubmit={(event) => { event.preventDefault(); onBegin(); }}>
@@ -289,16 +301,8 @@ function StartComposer({ data, start, onStart, onBegin }: { data: HomeData; star
           rows={2} disabled={!allowed} placeholder={`Ask ${agentLabel(agent)} anything, or describe the task`}
           className="composer-input min-h-16 w-full resize-none bg-transparent px-4 pt-3.5 text-body outline-none disabled:cursor-not-allowed" />
         <div className="flex items-center gap-1 px-2 pb-2">
-          <QuietMenu icon={AGENT_MARKS[agent]} label={agentLabel(agent)} ariaLabel={`Agent: ${agentLabel(agent)}`} menuLabel="Agent">
-            {(close) => START_AGENTS.map((a) => (
-              <button key={a.id} type="button" role="menuitemradio" aria-checked={a.id === agent}
-                onClick={() => { onStart({ agent: a.id }); close(); }} className={quietMenuItem}>
-                <Check aria-hidden className={cn("size-4 shrink-0", a.id !== agent && "invisible")} />
-                <AgentIcon agent={a.id} className="size-4" />
-                <span className="min-w-0 flex-1 truncate">{a.label}</span>
-              </button>
-            ))}
-          </QuietMenu>
+          <ModelMenu models={models} agent={agent} model={model}
+            onPick={(a, m) => onStart({ agent: a, models: { ...start.models, [a]: m } })} />
           <QuietMenu icon={permission.danger ? TriangleAlert : Lock} label={permission.label} ariaLabel={`Permissions: ${permission.label}`}
             menuLabel="Permissions" menuClassName="w-80" className={cn(permission.danger && "text-status-working")}>
             {(close) => PERMISSIONS[agent].map((p) => (
@@ -318,14 +322,17 @@ function StartComposer({ data, start, onStart, onBegin }: { data: HomeData; star
           </Button>
         </div>
       </div>
-      {/* The folder it starts in, on a lip under the box. */}
-      <div className="mx-3 flex min-h-10 items-center gap-2 rounded-b-xl border border-t-0 border-border bg-muted px-1.5">
-        <button type="button" onClick={() => setPicking(true)} disabled={!allowed} aria-label={`Folder: ${where}`}
-          className="quiet-action min-w-0 disabled:pointer-events-none">
-          <Folder aria-hidden className="size-3.5 shrink-0" />
-          <span className="truncate">{where}</span>
-          <ChevronDown aria-hidden className="-ml-0.5 size-3 shrink-0" />
-        </button>
+      {/* Where it opens and the folder it starts in, on a lip under the box. */}
+      <div className="mx-3 flex min-h-10 min-w-0 items-center gap-1 rounded-b-xl border border-t-0 border-border bg-muted px-1.5">
+        <DestinationMenu places={data} destination={destination} onPick={toDestination} disabled={!allowed} />
+        {folder && (
+          <button type="button" onClick={() => setPicking(true)} disabled={!allowed} aria-label={`Folder: ${where}`}
+            className="quiet-action min-w-0 disabled:pointer-events-none">
+            <Folder aria-hidden className="size-3.5 shrink-0" />
+            <span className="truncate">{where}</span>
+            <ChevronDown aria-hidden className="-ml-0.5 size-3 shrink-0" />
+          </button>
+        )}
         <button type="button" onClick={() => openNewDialog()} disabled={!allowed} className="quiet-action ml-auto shrink-0 disabled:pointer-events-none">
           <Sparkle aria-hidden className="size-3.5" />More ways to start
         </button>

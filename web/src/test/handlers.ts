@@ -142,10 +142,24 @@ export function paneTextWithDraft(base = "hello from the pane"): string {
 }
 
 // Default happy-path handlers; individual tests can override via server.use(...).
+/** What the bridge lets a new chat start on (bridge/agent-start.ts), trimmed. */
+export const fixtureStartModels = {
+  claude: [
+    { id: "default", label: "Default", hint: "The agent's own default for your account" },
+    { id: "opus", label: "Opus", hint: "The latest Opus, for complex reasoning" },
+    { id: "opus[1m]", label: "Opus 1M", hint: "Opus with a 1 million token context window" },
+  ],
+  codex: [
+    { id: "default", label: "Default", hint: "The agent's own default for your account" },
+    { id: "gpt-6.1-sol", label: "gpt-6.1-sol", hint: "" },
+  ],
+};
+
 export const handlers = [
   // A send that does not end in "sent" reports itself; tests that care override this.
   http.post(/\/api\/pane\/[^/]+\/send-report$/, () => HttpResponse.json({ ok: true })),
   http.get(/\/api\/pane\/[^/]+\/models$/, () => HttpResponse.json({ available: false, models: [] })),
+  http.get("/api/start/models", () => HttpResponse.json(fixtureStartModels)),
   http.get("/api/snapshot", () => HttpResponse.json(fixtureSnapshot)),
   http.get(/\/api\/pane\/[^/]+$/, () =>
     HttpResponse.json({ paneId: "w1:p1", text: paneTextWithDraft(), truncated: false, revision: 1 }),

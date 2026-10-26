@@ -3,6 +3,7 @@ import { ChevronRight, Folder, TriangleAlert } from "@/components/ui/icon";
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 
 import type { NewPreset } from "@/components/new-dialog";
+import { ModelMenu } from "@/components/start-pickers";
 import { Button } from "@/components/ui/button";
 import { inputField, textField } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
@@ -11,12 +12,14 @@ import { baseName, tildePath } from "@/lib/dir-picker";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { useHoldReload } from "@/lib/reload-guard";
+import { listedModel, useStartModels } from "@/hooks/use-start-models";
 import {
   PERMISSIONS,
   SPAWN_AGENTS,
   agentLabel,
   loadAgent,
   loadDirs,
+  loadModel,
   loadPermission,
   openNewAgent,
   spawn,
@@ -36,6 +39,8 @@ export interface NewAgentValues {
   name: string;
   message: string;
   permission: string;
+  /** A model id the bridge lists for the agent; absent = its own default. */
+  model?: string;
   /** Where it starts when the person picked a machine: that machine's session (undefined = this one). */
   session?: string;
 }
@@ -96,6 +101,8 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
 }) {
   const [agent, setAgent] = useState<SpawnAgent>(loadAgent);
   const [permissions, setPermissions] = useState(() => ({ claude: loadPermission("claude"), codex: loadPermission("codex") }));
+  const [models, setModels] = useState(() => ({ claude: loadModel("claude"), codex: loadModel("codex") }));
+  const listed = useStartModels(machine?.session, !readOnly);
   const [cwd, setCwd] = useState(defaultCwd);
   const [name, setName] = useState("");
   const [message, setMessage] = useState(defaultMessage);
@@ -120,7 +127,8 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
     setBusy(true);
     setError(null);
     const permission = agent === "shell" ? "ask" : permissions[agent];
-    const failure = await onSubmit({ agent, cwd, name, message, permission, ...(machine ? { session: machine.session } : {}) });
+    const model = agent === "shell" ? undefined : listedModel(listed, agent, models[agent]);
+    const failure = await onSubmit({ agent, cwd, name, message, permission, model, ...(machine ? { session: machine.session } : {}) });
     if (failure !== null) {
       setError(failure);
       setBusy(false);
@@ -155,6 +163,13 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
       }}
     >
       <Segmented label="Agent" options={SPAWN_AGENTS} value={agent} onChange={setAgent} />
+
+      {!shell && (
+        <div className="-mt-1 flex items-center gap-1 text-footnote text-muted-foreground">
+          <ModelMenu models={listed} agent={agent} agents={[agent]} model={listedModel(listed, agent, models[agent])}
+            onPick={(a, m) => setModels((current) => ({ ...current, [a]: m }))} />
+        </div>
+      )}
 
       <FolderButton shown={shown} parent={parent} onClick={() => onBrowsing(true)} />
 

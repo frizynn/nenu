@@ -1,5 +1,6 @@
 import type { AgentStatus } from "./types.ts";
 import { dialHerdr, type DialMode, type SockHandle } from "./dial.ts";
+import { splitTarget, type LayoutPane } from "./tab-split.ts";
 import { decodeReplyLine, decodeStreamLine } from "./wire.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -535,6 +536,22 @@ export class HerdrClient {
       tabId: p.tab_id,
       cwd: p.cwd,
     };
+  }
+
+  /**
+   * Open a fresh shell pane in the tab `paneId` sits in, beside the pane Nenu chooses there
+   * (tab-split.ts). `focus:false` leaves the desktop TUI's focus where it was. `pane.split` names
+   * its pane `target_pane_id`; an unknown field is ignored and splits the focused pane instead
+   * (live-probed on Herdr 0.9.5).
+   */
+  async splitTab(paneId: string, opts: { cwd?: string } = {}): Promise<CreatedShell> {
+    const { layout } = await this.request<{ layout: { panes: LayoutPane[] } }>("pane.layout", { pane_id: paneId });
+    const target = splitTarget(layout.panes);
+    if (!target) throw new Error("That tab has no pane to open beside.");
+    const params: Record<string, unknown> = { target_pane_id: target.paneId, direction: target.direction, focus: false };
+    if (opts.cwd) params.cwd = opts.cwd;
+    const { pane: p } = await this.request<{ pane: WirePane }>("pane.split", params);
+    return { paneId: p.pane_id, workspaceId: p.workspace_id, tabId: p.tab_id, cwd: p.cwd };
   }
 
   async readPane(
