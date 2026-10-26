@@ -160,10 +160,12 @@ the unit name; the Herdr action runs from anywhere.
   coordinators, threads, asks or routines. The bridge never runs `herdr-organizations` or reads
   `~/.herdr-projects`, and copies no pane token; an organizer drawn again comes through a new ADR
   that reads its published contract.
-- **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): Search with New
-  beside it, chats by when they last moved (name and time, where it lives under them), then Home's
-  counts and a foot of small actions, Settings, PRs and Usage
-  ([ADR 0129](./.adr/0129-the-desks-bar-ends-in-homes-counts-and-small-actions.md)); the workspace tree is Search's. An agent finishing elsewhere
+- **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): Search with the
+  view toggle and New beside it, chats under the project their folder works in, folded (or, as the device
+  chooses, by when they last moved; name and time, where it lives under them), then Home's counts, each
+  listing only its state's chats, and a foot of small actions, Settings, PRs and Usage
+  ([ADR 0129](./.adr/0129-the-desks-bar-ends-in-homes-counts-and-small-actions.md),
+  [ADR 0130](./.adr/0130-the-bar-lists-chats-by-project-and-a-count-lists-its-state.md)); the workspace tree is Search's. An agent finishing elsewhere
   is a +1 on its row there, never a toast on a desk ([ADR 0080](./.adr/0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md)); on a phone it
   is New on its Home row, and only an agent that asks raises a toast
   ([ADR 0094](./.adr/0094-a-finished-agent-is-a-mark-on-its-row-on-a-phone-too.md)). The bar's chats and

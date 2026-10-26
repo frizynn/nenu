@@ -197,7 +197,10 @@ async function run(): Promise<void> {
       const deskPage = await desk.newPage();
       await deskPage.addInitScript(LAYOUT_SHIFTS, null);
       await deskPage.goto(bridge.url + `/pane/${encodeURIComponent(herd.codex)}`);
-      await deskPage.locator(".nav-desk a.nav-row").first().waitFor({ timeout: 15_000 });
+      await deskPage.locator(".nav-desk .nav-row").first().waitFor({ timeout: 15_000 });
+      // The bar lists its chats under folded projects: open them, so the chats are on screen.
+      const folded = deskPage.locator('.nav-project-row[aria-expanded="false"]');
+      for (let n = await folded.count(); n > 0; n--) await folded.first().click();
       await deskPage.waitForTimeout(1500);
       out.deskSidebarQuiet = await quiet(deskPage, ".nav-chats a.nav-row", quietMs);
       // A click on a fleet chat's row: does that row stay under the pointer once its chat opens?

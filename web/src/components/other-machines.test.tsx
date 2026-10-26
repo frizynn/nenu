@@ -44,6 +44,7 @@ describe("more than one machine", () => {
   });
 
   it("a machine SSH cannot reach is listed with ssh's reason, and this machine's chats stay", async () => {
+    localStorage.setItem("nenu:sidebar-view:v1", JSON.stringify({ view: "time" }));
     sidebar(data(MACHINES), "drawer");
     const lab = within(await screen.findByRole("region", { name: "lab" }));
     expect(lab.getByText("ssh: connect to host lab port 22: Connection refused")).toBeTruthy();

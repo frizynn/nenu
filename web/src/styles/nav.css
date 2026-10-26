@@ -95,6 +95,21 @@
 .nav-status > .nav-row { color: var(--muted-foreground); }
 .nav-status > .nav-row[data-live] { color: var(--foreground); }
 .nav-status .nav-row-meta > svg { margin-right: -2px; color: var(--subtle-foreground); }
+/* A count tapped lists only its chats: it stays filled, as a row on screen is, until tapped again. */
+.nav-status > .nav-row[aria-pressed="true"] { color: var(--foreground); }
+
+/* A project in the bar: its chevron where a chat's mark sits, its name, then the most pressing state among
+   its chats and how many it holds. Its chats sit one step in. Folded over the chat on screen, it takes the
+   hover fill, as a folded workspace does. */
+.nav-project-fold { color: var(--subtle-foreground); transition: transform var(--motion-control) var(--motion-ease); }
+.nav-project-row[aria-expanded="true"] .nav-project-fold { transform: rotate(90deg); }
+.nav-project-row[aria-current="true"] { background: var(--workbench-row-hover); }
+.nav-project-body > :is(.nav-row, .nav-pane) { padding-left: calc(var(--nav-pad, 10px) + var(--nav-indent, 16px)); }
+.nav-projects > .nav-label { padding-top: 14px; }
+/* The view toggle: filled while the chats are under their projects. In a list's heading its 44px target
+   overhangs the heading rather than pushing the rows down. */
+.nav-view-toggle[aria-pressed="true"] { color: var(--foreground); background: var(--workbench-row-selected); }
+.nav-label > .nav-view-toggle { margin-block: -10px; margin-right: -8px; padding: 6px; background-clip: content-box; }
 
 /* A chat's row in every list (tree, search, Needs you, Recent, the pane switcher): mark, name, where it lives. */
 .nav-pane { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 40px; padding: 5px var(--nav-pad, 10px); border-radius: var(--radius-md); color: var(--foreground); text-decoration: none; }
@@ -173,6 +188,12 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .workbench-navigation[data-variant="sheet"] .nav-host { margin-inline: 0; padding-inline: 0; }
 .workbench-navigation[data-variant="drawer"] .nav-scroll { padding-inline: calc(16px - var(--nav-pad, 10px)); }
 .workbench-navigation[data-variant="drawer"] .nav-host { padding-inline: 4px 16px; }
+/* The drawer's counts sit side by side above its foot, each a 44px target, so the list keeps the height. */
+.workbench-navigation[data-variant="drawer"] .nav-status { flex-direction: row; gap: 4px; padding-inline: 8px; }
+.workbench-navigation[data-variant="drawer"] .nav-status > .nav-row { flex: 1 1 0; justify-content: center; gap: 6px; padding-inline: 4px; }
+.workbench-navigation[data-variant="drawer"] .nav-status > .nav-row > :is(.nav-row-text, .nav-lead) { flex: none; width: auto; }
+.workbench-navigation[data-variant="drawer"] .nav-status .nav-row-meta { margin-left: 0; font-size: inherit; }
+.workbench-navigation[data-variant="drawer"] .nav-status .nav-row-meta > svg { display: none; }
 }
 
 /* The desk's bar, drawn as Cursor's where a mouse drives it: small type, airy groups, faint
@@ -203,7 +224,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-enter { animation: nav-enter var(--motion-control) var(--motion-ease); }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-disclosure > svg, .nav-tab-fold, .nav-more-chevron, .nav-reveal, .nav-row, .nav-pane { transition: none; }
+  .nav-disclosure > svg, .nav-tab-fold, .nav-project-fold, .nav-more-chevron, .nav-reveal, .nav-row, .nav-pane { transition: none; }
   .nav-enter { animation: none; }
   .nav-kbd { transition: none; }
 }
@@ -230,4 +251,6 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-host-meta, .nav-chat-place { font-size: var(--text-footnote); }
   .nav-chat-row { padding-block: 6px; }
   .nav-chat-row > .nav-lead, .nav-chat-line { height: auto; line-height: var(--text-body--line-height); }
+  /* Three counts share the drawer's width: the footnote size keeps each inside its third. */
+  .workbench-navigation[data-variant="drawer"] .nav-status > .nav-row { font-size: var(--text-footnote); }
 }

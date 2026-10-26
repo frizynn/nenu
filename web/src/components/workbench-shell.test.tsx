@@ -54,11 +54,11 @@ it("uses one shared mobile header without the old brand or session row", () => {
   expect(within(main as HTMLElement).queryByRole("button", { name: /Session:/ })).toBeNull();
 });
 
-it("keeps chat and settings links scoped to the active session", () => {
+it("keeps chat and settings links scoped to the active session", async () => {
   desktop();
-  const { sidebar } = setup();
+  const { sidebar, user } = setup();
+  await user.click(sidebar.getByRole("button", { name: /^collie, / }));
   expect(sidebar.getByRole("link", { name: /Improve interface/ })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
-  expect(sidebar.getByRole("link", { name: /^Needs you, / })).toHaveAttribute("href", "/?s=work");
   expect(sidebar.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
   expect(sidebar.getByRole("link", { name: "Usage" })).toHaveAttribute("href", "/settings/usage?s=work");
 });
@@ -169,8 +169,8 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   // Home carries what needs you; there is no second place for it.
   expect(rail.getByRole("link", { name: "Home, 1 needs you" })).toHaveAttribute("href", "/?s=work");
   expect(rail.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
-  expect(sidebar.getByRole("link", { name: "Needs you, 1" })).toHaveAttribute("href", "/?s=work");
-  expect(sidebar.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
+  // The bar's count lists those chats in place; Home stays the rail's.
+  expect(sidebar.getByRole("button", { name: "Needs you, 1" })).toHaveAttribute("aria-pressed", "false");
   await user.keyboard("{Meta>}k{/Meta}");
   expect(sidebar.getByRole("searchbox")).toHaveFocus();
 });
@@ -299,6 +299,7 @@ it("resizes the sidebar from its edge by keys and a double-click, and remembers 
 });
 
 it("can reopen the mobile workspace drawer from the chat title after navigation and Escape", async () => {
+  localStorage.setItem("nenu:sidebar-view:v1", JSON.stringify({ view: "time" }));
   const { router, user } = setup(herd, "/pane/dev%3Amobile?s=work");
   const trigger = screen.getByRole("button", { name: "Chat title" });
   await user.click(trigger);
@@ -384,7 +385,29 @@ const herd: HomeData = {
   ],
 };
 
-it("opens the chat title's drawer from the top: what needs you, the chats that moved last, then folded workspaces", async () => {
+it("opens the chat title's drawer from the top: what needs you, its projects, then folded workspaces", async () => {
+  const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
+  await user.click(screen.getByRole("button", { name: "Chat title" }));
+  const nav = within(screen.getByRole("dialog", { name: "Navigation" }));
+  const sections = nav.getAllByRole("region").filter((region) => region.parentElement?.classList.contains("nav-scroll"));
+  expect(sections.map((region) => region.getAttribute("aria-label"))).toEqual(["Needs you", "Projects", "Workspaces"]);
+  // No folder names these chats, so each project is its workspace; the one asking for you leads.
+  const projects = within(nav.getByRole("region", { name: "Projects" }));
+  expect(projects.getAllByRole("button", { expanded: false }).map((row) => row.querySelector(".nav-row-text")?.textContent))
+    .toEqual(["Developer", "Acme producto", "docs"]);
+  await user.click(projects.getByRole("button", { name: /^Developer, 3 chats, 1 needs you, 1 working, 1 done/ }));
+  expect(within(projects.getByRole("region", { name: "Developer" })).getAllByRole("link").map((link) => link.querySelector(".nav-pane-title")?.textContent))
+    .toEqual(["Rediseño de Nenu", "Brief de nenu-mobile", "Brief nenu-send"]);
+  // The counts sit above the foot, side by side, and list their chats in place.
+  await user.click(nav.getByRole("button", { name: "Working, 2" }));
+  expect(within(nav.getByRole("region", { name: "Working" })).getAllByRole("link").map((link) => link.querySelector(".nav-pane-title")?.textContent))
+    .toEqual(["Afirmaciones marcadas", "Brief de nenu-mobile"]);
+  await user.click(nav.getByRole("button", { name: "Show all" }));
+  expect(nav.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+});
+
+it("opens the chat title's drawer by time on a device that chose it: what needs you, folded workspaces, the chats that moved last", async () => {
+  localStorage.setItem("nenu:sidebar-view:v1", JSON.stringify({ view: "time" }));
   const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
   await user.click(screen.getByRole("button", { name: "Chat title" }));
   const drawer = screen.getByRole("dialog", { name: "Navigation" });
