@@ -8,6 +8,21 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-26
+
+### Added
+
+- The desk's sidebar ends in Home's counts (Needs you, Working, Done) above a foot of Settings, Pull requests and Usage; the phone's drawer ends in the same foot (aa5b20dd).
+
+### Changed
+
+- Home on a desk reads like T3 Code's sidebar: Search with New beside it, and each chat as its name and time over where it lives (aa5b20dd, 6cedd443, 15e216cc).
+- Home on a phone steps down to a 22/15/13 type scale; the page header's Settings is a phone's only (aa5b20dd).
+
+### Fixed
+
+- A link that opens Home on PRs no longer reopens it there on Back or reload, and a chat row says where it lives to a screen reader (6cedd443, 15e216cc).
+
 ## [2.6.0] - 2026-10-25
 
 ### Added
