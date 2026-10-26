@@ -492,20 +492,6 @@ describe("Recents and Workspaces", () => {
     });
   });
 
-  it("draws the sessions' control on a desk as a page's underlined tabs", async () => {
-    desk();
-    try {
-      const { main } = await setup(recentData);
-      const recents = main.getByRole("tab", { name: "Recents" });
-      expect(recents).toHaveClass("desk-tab");
-      expect(recents).not.toHaveClass("project-segment");
-      expect(main.getByRole("tablist", { name: "Your work" })).not.toHaveClass("project-segmented");
-      expect(main.getByRole("heading", { level: 1 })).toHaveClass("text-title");
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it("keeps a phone's sessions control the segmented one, on its track", async () => {
     const { main } = await setup(recentData);
     expect(main.getByRole("tab", { name: "Recents" })).toHaveClass("project-segment");
@@ -868,4 +854,154 @@ it("keeps existing threads navigable while answering and creating are read-only"
   expect(needs.getByRole("link", { name: "Answer" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
   const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
   expect(recent.getByRole("link", { name: /^Earlier thread/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
+});
+
+// A desk's Home: Start (a new chat's composer), the Board by state, and the lists as views of its header (ADR 0131).
+describe("on a desk", () => {
+  beforeEach(desk);
+  afterEach(() => vi.unstubAllGlobals());
+  const pr: PullRequestView = { repo: "a/b", number: 1, title: "PR 1", url: "https://github.com/a/b/pull/1", branch: "x", draft: false, paneIds: [], inUse: true };
+  const views = () => screen.getByRole("tablist", { name: "Home" });
+  /** The page's scroller, read again after each step. */
+  const page = () => within(document.querySelector("main")!);
+
+  it("opens on Start: what to start in the folder the herd last moved in, what needs you and the chats to pick up", async () => {
+    const { main } = await setup({ ...twoWorkspaces, pullRequests: [pr] });
+    expect(within(views()).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Start", "Board", "Recents", "Workspaces", "PRs"]);
+    expect(within(views()).getByRole("tab", { name: "Start" })).toHaveAttribute("aria-selected", "true");
+    expect(main.getByRole("heading", { level: 2, name: "What should we start in collie?" })).toBeInTheDocument();
+    expect(main.getByRole("region", { name: /^Needs you/ })).toBeInTheDocument();
+    // The finished turn leads what to pick up; the list Recents keeps its tabs to the header.
+    const pickUp = within(main.getByRole("region", { name: "Pick up" }));
+    expect(pickUp.getAllByRole("link")[0]).toHaveAccessibleName(/^Mobile panel/);
+    expect(main.queryByRole("tablist", { name: "Your work" })).not.toBeInTheDocument();
+    // The header counts the herd, each count opening the view that lists it.
+    expect(screen.getByRole("button", { name: "1 needs you" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "1 to review" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "1 PR" })).toBeInTheDocument();
+  });
+
+  /**
+   * Records each create the composer sends; `hold` keeps the tab's create pending until released. Each
+   * call opens its own pane: lib/spawn tracks a launch per pane id for the whole run.
+   */
+  let started = 0;
+  function recordStarts({ hold = false } = {}) {
+    const pane = `w1:s${++started}`;
+    const posts: Record<string, unknown[]> = {};
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const record = (path: string, reply: Record<string, unknown>) => http.post(path, async ({ request }) => {
+      (posts[path] ??= []).push(await request.json());
+      if (hold && path === "/api/tab") await held;
+      return HttpResponse.json(reply);
+    });
+    server.use(
+      http.get("/api/dirs", () => HttpResponse.json({ path: "/home/you", home: "/home/you", entries: [], truncated: false })),
+      record("/api/tab", { ok: true, pane: { paneId: pane, workspaceId: "w1", workspaceLabel: "Nenu", tabId: "t9", cwd: "/dev/collie" } }),
+      record("/api/workspace", { ok: true, pane: { paneId: "w9:p1", workspaceId: "w9", workspaceLabel: "new", tabId: "t9", cwd: "/dev/collie" } }),
+      record("/api/pane/:paneId/start", { ok: true }),
+    );
+    return { posts, release, path: `/pane/${encodeURIComponent(pane)}` };
+  }
+
+  it("starts a chat from its composer in a new tab of the workspace already in that folder", async () => {
+    const { posts, path } = recordStarts();
+    const { user, router, main } = await setup();
+    await user.type(main.getByRole("textbox", { name: "First message" }), "Fix the coupon field{Enter}");
+    await waitFor(() => expect(router.state.location.pathname).toBe(path));
+    expect(posts["/api/tab"]).toEqual([{ workspaceId: "w1", cwd: "/dev/collie" }]);
+    expect(posts["/api/workspace"]).toBeUndefined();
+    await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "ask" }]));
+  });
+
+  it("keeps the folder it showed while the herd moves elsewhere", async () => {
+    const { posts } = recordStarts();
+    const { user, update } = await setup();
+    expect(page().getByRole("heading", { level: 2, name: "What should we start in collie?" })).toBeInTheDocument();
+    await update({ ...twoWorkspaces, agents: [...data.agents, { ...data.agents[0]!, paneId: "w2:p9", workspaceId: "w2", cwd: "/dev/shop", lastActiveAt: Date.now() }] });
+    expect(page().getByRole("heading", { level: 2, name: "What should we start in collie?" })).toBeInTheDocument();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/tab"]).toEqual([{ workspaceId: "w1", cwd: "/dev/collie" }]));
+  });
+
+  it("keeps the agent's permission across a look at another view", async () => {
+    const { posts } = recordStarts();
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: "Permissions: Ask" }));
+    await user.click(page().getByRole("menuitemradio", { name: /^Auto/ }));
+    await user.click(within(views()).getByRole("tab", { name: "Board" }));
+    await user.click(within(views()).getByRole("tab", { name: "Start" }));
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/tab"]).toHaveLength(1));
+    await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "auto" }]));
+  });
+
+  it("never sends a start twice, even when another view was looked at while it ran", async () => {
+    const { posts, release, path } = recordStarts({ hold: true });
+    const { user, router } = await setup();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Once{Enter}");
+    await waitFor(() => expect(posts["/api/tab"]).toHaveLength(1));
+    await user.click(within(views()).getByRole("tab", { name: "Board" }));
+    await user.click(within(views()).getByRole("tab", { name: "Start" }));
+    expect(page().getByRole("button", { name: "Start Claude Code" })).toBeDisabled();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "{Enter}");
+    release();
+    await waitFor(() => expect(router.state.location.pathname).toBe(path));
+    expect(posts["/api/tab"]).toHaveLength(1);
+  });
+
+  it("keeps the first message being written while another view is looked at", async () => {
+    const { user, main } = await setup(twoWorkspaces);
+    await user.type(main.getByRole("textbox", { name: "First message" }), "Half a thought");
+    await user.click(within(views()).getByRole("tab", { name: "Board" }));
+    await user.click(within(views()).getByRole("tab", { name: "Start" }));
+    expect(page().getByRole("textbox", { name: "First message" })).toHaveValue("Half a thought");
+  });
+
+  it("holds the composer on a read-only device", async () => {
+    const { main } = await setup({ ...data, device: { enforced: true, device: "d", authorized: false } });
+    expect(main.getByRole("textbox", { name: "First message" })).toBeDisabled();
+    expect(main.getByRole("button", { name: "Start Claude Code" })).toBeDisabled();
+  });
+
+  it("lays the herd out by state on the Board, and remembers the view on this device", async () => {
+    const { user } = await setup(twoWorkspaces);
+    await user.click(screen.getByRole("button", { name: "1 needs you" }));
+    const main = page();
+    expect(within(views()).getByRole("tab", { name: "Board" })).toHaveAttribute("aria-selected", "true");
+    expect(within(main.getByRole("region", { name: "Needs you, 1" })).getByRole("link", { name: /^Review changes/ })).toBeInTheDocument();
+    expect(within(main.getByRole("region", { name: "Working, 1" })).getByRole("link", { name: /^Landing/ })).toBeInTheDocument();
+    expect(within(main.getByRole("region", { name: "Ready to review, 1" })).getByRole("link", { name: /^Mobile panel/ })).toBeInTheDocument();
+    const resting = within(main.getByRole("region", { name: "Resting" }));
+    await user.click(resting.getByRole("button", { name: /^Resting 2/ }));
+    expect(resting.getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
+    expect(localStorage.getItem("nenu:home-view:v1")).toBe(JSON.stringify("board"));
+    cleanup();
+    await setup(twoWorkspaces);
+    expect(within(views()).getByRole("tab", { name: "Board" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("says so where a Board column holds nothing", async () => {
+    localStorage.setItem("nenu:home-view:v1", JSON.stringify("board"));
+    const { main } = await setup({ ...twoWorkspaces, agents: twoWorkspaces.agents.filter((agent) => agent.status !== "blocked") });
+    expect(within(main.getByRole("region", { name: "Needs you" })).getByText("Nothing needs you.")).toBeInTheDocument();
+  });
+
+  it("keeps Recents, Workspaces and PRs as views, and opens on PRs when the link that opened it names that list", async () => {
+    const { user, router } = await setup({ ...twoWorkspaces, pullRequests: [pr] });
+    await user.click(within(views()).getByRole("tab", { name: "Workspaces" }));
+    expect(page().getByText("hub")).toBeInTheDocument();
+    await act(() => router.navigate("/?s=work", { state: { list: "prs" } }));
+    expect(within(views()).getByRole("tab", { name: "PRs" })).toHaveAttribute("aria-selected", "true");
+    expect(page().getByRole("link", { name: /^PR 1,/ })).toBeInTheDocument();
+    expect(router.state.location.state).not.toHaveProperty("list");
+  });
+
+  it("has no PRs view without a pull request, and falls back to Start from a remembered one", async () => {
+    localStorage.setItem("nenu:home-view:v1", JSON.stringify("prs"));
+    await setup();
+    expect(within(views()).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Start", "Board", "Recents", "Workspaces"]);
+    expect(within(views()).getByRole("tab", { name: "Start" })).toHaveAttribute("aria-selected", "true");
+  });
 });

@@ -3,17 +3,19 @@ import { useRouteLoaderData } from "react-router";
 import { ChatsCircle, Wifi } from "@/components/ui/icon";
 
 import { ColumnPage } from "@/components/column-page";
+import { DeskHome } from "@/components/desk-home";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MachinesSlot } from "@/components/machines-slot";
-import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, useOpeningPath } from "@/components/home-panels";
+import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, SessionLists, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
 import { PullRequestList, useHomeActivity } from "@/components/ready-to-review-list";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useInteractions } from "@/hooks/use-interactions";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { isConnecting } from "@/lib/connection";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats, type ReviewEntry } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { filterReviews, usePrFilter } from "@/lib/pr-filter";
 import { openNewAgent } from "@/lib/spawn";
@@ -21,7 +23,9 @@ import { isReadOnly } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
-// Home answers "what needs me now", top to bottom: one sentence saying what needs you, those asks
+// On a desk, Home is DeskHome: Start (a new chat's composer, what needs you, the chats to pick up), the
+// Board by state, and these same lists as views of its header (ADR 0131). On a phone, Home answers
+// "what needs me now", top to bottom: one sentence saying what needs you, those asks
 // (answered in place), then one list under tabs: every session as Recents or by Workspace, each row
 // carrying its pull request; the open pull requests of the repos in use, or all, under their repo, as
 // PRs. Then the workflows still running. Starting something is New's. Figures come from the
@@ -44,6 +48,7 @@ export function HomeRoute() {
   const lost = useConnectionLost(isConnecting(data));
   const opening = useOpeningPath();
   const { filter: prFilter } = usePrFilter();
+  const desk = useMediaQuery("(min-width: 1024px)");
   // The herd on screen is not live: a refusal at once, an outage once it is sustained.
   const stale = data.authError || lost;
   // `bridge` is only unknown when no snapshot was ever read: there is no herd to grey out.
@@ -69,6 +74,24 @@ export function HomeRoute() {
   // The headline counts the PRs the PRs tab lists with the filter kept on this device; a search is not kept.
   const counts = { needs: needs.length, review: filterReviews(reviews, prFilter).kept.length, working: data.agents.filter((a) => a.status === "working").length };
   const { title, detail } = homeHeadline(counts, data.agents.length, calm);
+  const lists = {
+    recent, workspaces: workspaceChats(data, reviews), reviews, session: data.session, now, opening,
+    pullRequests: (entries: readonly ReviewEntry[]) => <PullRequestList entries={entries} session={data.session} opening={opening} />,
+  };
+  const background = running.length > 0 && (
+    <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
+      <HomeHeading id="home-running" label="Running in background" count={running.length} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} opening={opening} />)}
+      </div>
+    </section>
+  );
+
+  if (desk) {
+    return <DeskHome data={data} stale={stale} now={now} opening={opening} needs={needs} receipts={receipts} interactions={interactions} lock={lock}
+      recent={recent} prs={{ listed: reviews.length, kept: counts.review }} list={(list) => <SessionLists {...lists} list={list} />}
+      extras={<><MachinesSlot data={data} place="home" />{background}</>} />;
+  }
 
   // A phone leaves the date out and starts on the headline, so the first screen holds more of the list.
   return <ColumnPage data={data} title="Home" bodyClassName="max-sm:pt-2">
@@ -86,18 +109,9 @@ export function HomeRoute() {
       <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
         <NeedsYouList agents={data.agents} session={data.session} items={needs} receipts={receipts}
           interactions={interactions} lockReason={lock} opening={opening} />
-        <HomeSessions recent={recent} workspaces={workspaceChats(data, reviews)} reviews={reviews}
-          pullRequests={(entries) => <PullRequestList entries={entries} session={data.session} opening={opening} />}
-          session={data.session} now={now} opening={opening} />
+        <HomeSessions {...lists} />
         <MachinesSlot data={data} place="home" />
-        {running.length > 0 && (
-          <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
-            <HomeHeading id="home-running" label="Running in background" count={running.length} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} opening={opening} />)}
-            </div>
-          </section>
-        )}
+        {background}
       </div>
     </div>
   </ColumnPage>;

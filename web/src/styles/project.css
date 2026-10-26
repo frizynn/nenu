@@ -55,3 +55,5 @@
 .desk-tab[aria-selected="true"]::after { content: ""; position: absolute; inset: auto 0 -1px; height: 2px; background: var(--foreground); }
 @media (hover: hover) { .desk-tab[aria-selected="false"]:hover { color: var(--foreground); } }
 @media (prefers-reduced-motion: reduce) { .desk-tab { transition: none; } }
+/* A desk Home's views fill its header, so the chosen one's underline sits on the header's own rule. */
+.home-views .desk-tab { height: 100%; }
