@@ -8,6 +8,21 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-26
+
+### Added
+
+- The sidebar lists chats by project (the repo a chat's folder sits in, clones and worktrees together), folded until opened, on a desk and in the phone drawer (2e72bdd3, 3dc9681a).
+- A toggle beside Search, or at the end of the drawer's list heading, switches to the list by time; the view and opened projects are kept per device (3dc9681a).
+
+### Changed
+
+- Usage counts a bare repo's worktrees under the repo's name; totals already scanned stay under their old "worktrees" row (59009094).
+
+### Fixed
+
+- Tapping Needs you, Working or Done now lists only those chats in the sidebar, until tapped again, Show all or Escape; the drawer shows the same counts (3dc9681a, 889532e6).
+
 ## [2.7.0] - 2026-10-26
 
 ### Added
