@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser } from "./browser.ts";
+import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
 import { seedDemoHerd } from "./scenario.ts";
 
@@ -23,6 +23,12 @@ const LONG = "Fisgón: la IA se apaga y prende sola en la charla de prueba cuand
 const WIDTHS = [220, 272, 420];
 
 
+
+/** Opens every project the bar lists folded, so its chats are on screen to measure. */
+async function openProjects(page: Page): Promise<void> {
+  const folded = page.locator('.nav-repo-row[aria-expanded="false"]');
+  for (let n = await folded.count(); n > 0; n--) await folded.first().click();
+}
 
 /** What breaks the bar's edge: a list wider than its scroller, a row past it, a long name without its ellipsis. */
 function measure(desk: boolean) {
@@ -71,6 +77,7 @@ async function main(): Promise<void> {
         await page.addInitScript((w) => localStorage.setItem("nenu:sidebar-width:v1", String(w)), width);
         await page.goto(bridge.url + "/");
         await page.locator(".workbench-sidebar .nav-chats .nav-row >> visible=true").first().waitFor({ timeout: 30_000 });
+        await openProjects(page);
         await page.waitForTimeout(600);
         for (const line of await page.evaluate(measure, true)) failures.push(`desk ${width}px ${scheme}: ${line}`);
         // A resting chat steps back to the muted ink, and the pointer brings the full ink back.
@@ -106,6 +113,7 @@ async function main(): Promise<void> {
       await page.goto(bridge.url + "/");
       await page.getByRole("button", { name: "Open navigation" }).first().click({ timeout: 30_000 });
       await page.locator(".nav-scroll .nav-row >> visible=true").first().waitFor({ timeout: 30_000 });
+      await openProjects(page);
       await page.waitForTimeout(600);
       for (const line of await page.evaluate(measure, false)) failures.push(`drawer ${scheme}: ${line}`);
       const name = `${values.tag}-drawer-${scheme}.png`;

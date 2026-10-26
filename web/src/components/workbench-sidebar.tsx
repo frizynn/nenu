@@ -1,8 +1,8 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, Gauge, GitPullRequest, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
+import { FolderTree, Gauge, History, GitPullRequest, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
-import { DeskLists } from "@/components/desk-nav";
+import { DeskLists, OnlyList, ProjectList, useHeldChats } from "@/components/desk-nav";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,11 +16,13 @@ import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { currentMachine, machineSearch, type MachineSearchGroup } from "@/lib/machines";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
-import { needsYouCount, reviewQueue } from "@/lib/home-stats";
+import { COUNTED, deskChats, type CountedState, type DeskChat } from "@/lib/desk-nav";
+import { useProjectView } from "@/lib/desk-projects";
+import { reviewQueue } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, panePath, settingsPath, usagePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
-import { STATUS_LABEL, type AgentStatus } from "@/lib/types";
+import { STATUS_LABEL } from "@/lib/types";
 
 export interface SidebarRequest {
   target: "search";
@@ -50,6 +52,8 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   // The pick is a row, not a place in the list: a poll that adds or drops a row leaves it where it was.
   const [picked, setPicked] = useState<string>();
   const [answered, setAnswered] = useState<{ query: string; order: Map<string, number> }>();
+  // A tapped count lists only the chats in its state, until it is tapped again or Show all.
+  const [only, setOnly] = useState<CountedState>();
   const searchBox = useRef<HTMLInputElement>(null);
   const navigation = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -58,7 +62,6 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   const listId = useId();
   const navigate = useNavigate();
   const { key } = useLocation();
-  const attention = needsYouCount(data);
   const phone = variant !== "sidebar";
   const order = answered?.query === query ? answered.order : undefined;
   const results: Array<SearchGroup | MachineSearchGroup> = searching ? [...navSearch(data, query, { order }), ...machineSearch(data, query, { order })] : [];
@@ -139,7 +142,11 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
 
   return (
     <nav ref={navigation} className="workbench-navigation" aria-label="Workspaces and chats" data-variant={variant} data-list={query.trim() ? "search" : "browse"}
-      onKeyDown={(event) => { if (event.key === "Escape" && searching && !phone) closeSearch(); }}>
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        if (searching && !phone) closeSearch();
+        else if (only) setOnly(undefined);
+      }}>
       {(!phone || searching) && <div className="nav-top">
         {searching ? (
           <label className="nav-row nav-search">
@@ -156,6 +163,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
             <Search aria-hidden size={16} /><span className="nav-row-text">Search</span><kbd className="nav-kbd" aria-hidden>⌘K</kbd>
           </button>
         )}
+        {!phone && !searching && <ViewToggle />}
         {/* New sits at the search row's end as a small action, as T3 Code keeps its own beside Search. */}
         {!phone && <button type="button" className="workbench-icon-button" onClick={onNewChat} disabled={!onNewChat}
           aria-label="New chat" aria-keyshortcuts="Meta+N" title="New chat (⌘N)">
@@ -170,17 +178,20 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
           ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked}
               onOpen={() => { picking.current = true; }} />
           : phone
-            ? <PhoneLists data={data} drawer={variant === "drawer"} onNewChat={onNewChat} />
+            ? <PhoneLists data={data} drawer={variant === "drawer"} only={only} onClear={() => setOnly(undefined)} onNewChat={onNewChat} />
             : searching ? <div className="nav-enter"><SidebarTree data={data} /><MachinesSlot data={data} place="nav" /></div>
             : <>
-              {data.agents.length ? <DeskLists data={data} /> : <Empty phone={false} />}
+              {data.agents.length ? <DeskLists data={data} only={only} onClear={() => setOnly(undefined)} /> : <Empty phone={false} />}
               <MachinesSlot data={data} place="nav" />
             </>}
       </div>
 
       {/* The host belongs to browsing: on a phone's Search sheet, until something is typed. */}
       {(!phone || !query.trim()) && <div className="nav-footer">
-        {!phone && <DeskStatus data={data} attention={attention} />}
+        {variant !== "sheet" && <DeskStatus data={data} only={only} onPick={(state) => {
+          closeSearch();
+          setOnly(state === only ? undefined : state);
+        }} />}
         <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />
         <HostRow data={data} actions={variant !== "sheet"} />
       </div>}
@@ -250,25 +261,53 @@ function hitState(hit: SearchHit): string {
 
 /**
  * A phone's drawer or Search sheet before anything is typed. The drawer leads with the chats waiting on
- * you, above the workspaces, and ends with the ones that moved last.
+ * you; then, by default, every chat under its project above the workspaces, or as this device chose the
+ * workspaces and the chats that moved last. A tapped count lists only the chats in its state.
  */
-function PhoneLists({ data, drawer, onNewChat }: { data: HomeData; drawer: boolean; onNewChat?: () => void }) {
+function PhoneLists({ data, drawer, only, onClear, onNewChat }: { data: HomeData; drawer: boolean; only?: CountedState; onClear: () => void; onNewChat?: () => void }) {
   const { paneId } = useParams();
-  const chats = drawer ? drawerSections(data, paneId) : undefined;
+  const { view } = useProjectView();
+  const held = useHeldChats();
+  const sections = drawer ? drawerSections(data, paneId) : undefined;
+  const projects = drawer && view === "projects";
+  // Only the lists that hold chats in place take the bar's order: a list taking it records the times it holds.
+  const chats = drawer && (only || projects) ? held.order(deskChats(data)) : [];
   const now = Date.now();
-  const section = (label: string, rows: readonly DrawerChat[], counted: boolean) => rows.length > 0 && (
+  const row = (chat: DeskChat) => <ChatRow key={chat.paneId} pane={chat.pane} current={chat.paneId === paneId} now={now} session={data.session} />;
+  const section = (label: string, rows: readonly DrawerChat[], counted: boolean, end?: ReactNode) => (rows.length > 0 || end) && (
     <section aria-label={label} className="nav-group">
-      <h3 className="nav-label">{label}{counted && <> <span className="nav-count">{rows.length}</span></>}</h3>
+      <div className="nav-label">
+        <h3 className="nav-label-text">{label}{counted && <> <span className="nav-count">{rows.length}</span></>}</h3>
+        {end}
+      </div>
       {rows.map((chat) => <ChatRow key={chat.pane.paneId} pane={chat.pane} current={chat.current} now={now}
         session={data.session} />)}
     </section>
   );
+  if (drawer && only) return <OnlyList key={only} state={only} chats={chats} row={row} onClear={onClear} className="nav-group" />;
   return <>
-    {chats && section("Needs you", chats.needsYou, true)}
+    {sections && section("Needs you", sections.needsYou, true)}
+    {projects && <ProjectList chats={chats} held={held} row={row} currentPaneId={paneId} end={<ViewToggle />} className="nav-group" />}
     <SidebarTree data={data} folded onNewChat={onNewChat} />
-    {chats && section("Recent", chats.recent, false)}
+    {sections && !projects && section("Recent", sections.recent, false, <ViewToggle />)}
     <MachinesSlot data={data} place="nav" />
   </>;
+}
+
+/**
+ * How this device lists the chats: under their projects (pressed, the default) or as one list by time,
+ * its icon the view on screen. The desk's sits in its search row, as T3 Code keeps its own; the drawer's
+ * at the end of its list's heading.
+ */
+function ViewToggle() {
+  const { view, setView } = useProjectView();
+  const Icon = view === "projects" ? FolderTree : History;
+  return (
+    <button type="button" className="workbench-icon-button nav-view-toggle" aria-pressed={view === "projects"}
+      aria-label="Group by project" title="Group by project" onClick={() => setView(view === "projects" ? "time" : "projects")}>
+      <Icon aria-hidden size={16} />
+    </button>
+  );
 }
 
 /**
@@ -289,26 +328,23 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
   );
 }
 
-/** The states the desk's bar counts at its foot, most pressing first. */
-const DESK_STATES = [["blocked", "Needs you"], ["working", "Working"], ["done", "Done"]] as const;
-
 /**
- * Home, as the desk's bar ends: how many agents need you, work and finished unseen, each a row that opens
- * Home, where they are answered and listed. Every count shows at zero too, so the rows never move; a
- * state's glyph shows only while it counts something.
+ * Home's counts, as the desk's bar and the phone's drawer end: how many agents need you, work and
+ * finished unseen. A tap lists only those chats in the bar, pressed until it is tapped again or Show all.
+ * Every count shows at zero too, so the rows never move; a state's glyph shows only while it counts something.
  */
-function DeskStatus({ data, attention }: { data: HomeData; attention: number }) {
-  const count = (status: AgentStatus) => status === "blocked" ? attention : data.agents.filter((pane) => pane.status === status).length;
+function DeskStatus({ data, only, onPick }: { data: HomeData; only?: CountedState; onPick: (state: CountedState) => void }) {
   return (
     <section aria-label="Home" className="nav-status">
-      {DESK_STATES.map(([status, label]) => {
-        const n = count(status);
+      {COUNTED.map(({ state, label }) => {
+        const n = data.agents.filter((pane) => pane.status === state).length;
         return (
-          <Link key={status} className="nav-row" to={homePath(data.session)} aria-label={`${label}, ${n}`} data-live={n > 0 || undefined}>
-            <span className="nav-lead">{n > 0 && <StatusDot status={status} />}</span>
+          <button key={state} type="button" className="nav-row" aria-label={`${label}, ${n}`} aria-pressed={only === state}
+            data-live={n > 0 || undefined} onClick={() => onPick(state)}>
+            <span className="nav-lead">{n > 0 && <StatusDot status={state} />}</span>
             <span className="nav-row-text">{label}</span>
-            <span className="nav-row-meta" aria-hidden>{n}<ChevronRight size={14} /></span>
-          </Link>
+            <span className="nav-row-meta" aria-hidden>{n}</span>
+          </button>
         );
       })}
     </section>

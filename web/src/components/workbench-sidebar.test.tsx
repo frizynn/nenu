@@ -303,15 +303,43 @@ describe("the sidebar", () => {
     return userEvent.setup();
   }
 
-  it("counts what needs you, works and finished at its foot, each opening Home, and keeps no Needs you list of its own", () => {
+  it("counts what needs you, works and finished at its foot, and keeps no Needs you list of its own", () => {
     open();
     const counts = within(screen.getByRole("region", { name: "Home" }));
-    expect(counts.getAllByRole("link").map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]))
-      .toEqual([["Needs you, 1", "/"], ["Working, 2", "/"], ["Done, 0", "/"]]);
-    expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
+    expect(counts.getAllByRole("button").map((button) => [button.getAttribute("aria-label"), button.getAttribute("aria-pressed")]))
+      .toEqual([["Needs you, 1", "false"], ["Working, 2", "false"], ["Done, 0", "false"]]);
+    expect(screen.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
+  });
+
+  it("lists only the chats in a tapped count's state, pressed, until it is tapped again, Show all or Escape", async () => {
+    const user = open("/pane/c");
+    const counts = within(screen.getByRole("region", { name: "Home" }));
+    await user.click(counts.getByRole("button", { name: "Working, 2" }));
+    expect(counts.getByRole("button", { name: "Working, 2" })).toHaveAttribute("aria-pressed", "true");
+    const working = within(screen.getByRole("region", { name: "Working" }));
+    expect(working.getByRole("heading")).toHaveTextContent("Working 2");
+    expect(working.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/c", "/pane/loose"]);
+    expect(working.getByRole("link", { name: /^c, working/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("region", { name: "Projects" })).toBeNull();
+
+    await user.click(counts.getByRole("button", { name: "Working, 2" }));
+    expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+
+    await user.click(counts.getByRole("button", { name: "Needs you, 1" }));
+    await user.click(counts.getByRole("button", { name: "Done, 0" }));
+    expect(counts.getByRole("button", { name: "Needs you, 1" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(screen.getByRole("region", { name: "Done" })).getByText("Nothing finished unseen.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show all" }));
+    expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+
+    await user.click(counts.getByRole("button", { name: "Needs you, 1" }));
+    expect(within(screen.getByRole("region", { name: "Needs you" })).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/depo"]);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("region", { name: "Needs you" })).toBeNull();
   });
 
   it("brings the tree back to where it was scrolled after a search", async () => {
+    localStorage.setItem("nenu:sidebar-view:v1", JSON.stringify({ view: "time" }));
     const user = open();
     const scroller = document.querySelector<HTMLElement>(".nav-scroll")!;
     const scrollTo = (top: number) => { scroller.scrollTop = top; fireEvent.scroll(scroller); };
@@ -326,6 +354,7 @@ describe("the sidebar", () => {
   });
 
   it("names a chat in the drawer's Recent as the chat names itself, with its workspace and tab under it", () => {
+    localStorage.setItem("nenu:sidebar-view:v1", JSON.stringify({ view: "time" }));
     const source = { ...herd, agents: herd.agents.map((agent) => agent.paneId === "c" ? { ...agent, tabLabel: "lead" } : agent) };
     const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={source} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
     render(<RouterProvider router={router} />);
@@ -336,14 +365,14 @@ describe("the sidebar", () => {
 
   it("marks none of Home's counts as the page on screen: the bar's brand says Home", () => {
     open("/");
-    for (const link of within(screen.getByRole("region", { name: "Home" })).getAllByRole("link")) expect(link).not.toHaveAttribute("aria-current");
+    for (const button of within(screen.getByRole("region", { name: "Home" })).getAllByRole("button")) expect(button).not.toHaveAttribute("aria-current");
   });
 
   it("draws a count's glyph only while it counts something", () => {
     open();
     const counts = within(screen.getByRole("region", { name: "Home" }));
-    expect(counts.getByRole("link", { name: "Needs you, 1" }).querySelector(".nav-lead svg")).not.toBeNull();
-    expect(counts.getByRole("link", { name: "Done, 0" }).querySelector(".nav-lead")).toBeEmptyDOMElement();
+    expect(counts.getByRole("button", { name: "Needs you, 1" }).querySelector(".nav-lead svg")).not.toBeNull();
+    expect(counts.getByRole("button", { name: "Done, 0" }).querySelector(".nav-lead")).toBeEmptyDOMElement();
   });
 
   describe("in the phone's sheets", () => {
@@ -427,6 +456,8 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     vi.setSystemTime(now);
   });
   afterEach(() => vi.useRealTimers());
+  // These are the list by time: the view a device chooses with the toggle.
+  beforeEach(() => localStorage.setItem("nenu:sidebar-view:v1", JSON.stringify({ view: "time" })));
 
   const at = (paneId: string, workspaceId: string, extra: Partial<AgentView> = {}): AgentView =>
     ({ ...pane(paneId, paneId), workspaceId, workspaceLabel: workspaceId, tabId: `${workspaceId}:t`, ...extra });
@@ -460,10 +491,10 @@ describe("the desk sidebar, drawn as Cursor's", () => {
   const section = (name: string) => within(screen.getByRole("region", { name }));
   const rowNames = (name: string) => section(name).queryAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent);
 
-  it("leads with Search, and New chat beside it as a small action", () => {
+  it("leads with Search, then the view toggle and New chat beside it as small actions", () => {
     open("/", herd, vi.fn());
     const top = [...document.querySelectorAll(".nav-top > *")].map((row) => row.querySelector(".nav-row-text")?.textContent ?? row.getAttribute("aria-label"));
-    expect(top).toEqual(["Search", "New chat"]);
+    expect(top).toEqual(["Search", "Group by project", "New chat"]);
   });
 
   it("says under each chat where it lives, by ear too, and beside its name when it last moved, for the eye", () => {
@@ -508,7 +539,7 @@ describe("the desk sidebar, drawn as Cursor's", () => {
 
   it("says what needs you as a quiet count beside a small glyph, never a red pill", () => {
     open("/pane/flow");
-    const needs = screen.getByRole("link", { name: "Needs you, 1" });
+    const needs = screen.getByRole("button", { name: "Needs you, 1" });
     expect(needs.querySelector(".nav-badge")).toBeNull();
     expect(needs.querySelector(".nav-row-meta")).toHaveTextContent("1");
   });
@@ -567,5 +598,159 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(flow.querySelector("[data-unread]")).toHaveTextContent("+1");
     expect(flow).toHaveAccessibleName(/, new, w1$/);
     expect(section("Today").getByRole("link", { name: /^Payments webhook/ }).querySelector("[data-unread]")).toBeNull();
+  });
+});
+
+describe("the sidebar by project", () => {
+  const now = new Date(2026, 9, 6, 12, 0, 0).getTime();
+  const MIN = 60_000;
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const at = (paneId: string, extra: Partial<AgentView>): AgentView =>
+    ({ ...pane(paneId, paneId), workspaceId: "w1", workspaceLabel: "Acme ws", tabId: "w1:t", ...extra });
+  const herd = {
+    agents: [
+      // The bridge names the repo, so a clone and a worktree of one repo join under it.
+      at("clone", { project: "shop", cwd: "/home/me/clones/shop", status: "done", lastActiveAt: now - 2 * MIN, lastSeenAt: now - 20 * MIN }),
+      at("tree", { project: "Shop", cwd: "/pool/7/shop", status: "working", lastActiveAt: now - 9 * MIN }),
+      at("notes", { project: "notes", cwd: "/home/me/notes", lastActiveAt: now - MIN }),
+      // An older bridge sends no project: the folder names it.
+      at("site", { cwd: "/home/me/site", status: "done", lastActiveAt: now - 30 * MIN, lastSeenAt: now - 40 * MIN }),
+      // No folder at all: its workspace does.
+      at("bare", { cwd: "", workspaceLabel: "scratch", status: "blocked", lastActiveAt: now - 50 * MIN }),
+    ],
+    shellPanes: [],
+    workspaces: [{ workspaceId: "w1", number: 1, label: "Acme ws", focused: true, activeTabId: "w1:t", tabCount: 1, paneCount: 5 }],
+    tabs: [{ tabId: "w1:t", workspaceId: "w1", number: 1, label: "main", focused: true, paneCount: 5 }],
+    sessions: [], session: undefined, bridge: "connected", error: false,
+  } as unknown as HomeData;
+
+  function open(path = "/", variant: "sidebar" | "drawer" = "sidebar") {
+    const router = createMemoryRouter([
+      { path: "/", element: <WorkbenchSidebar data={herd} variant={variant} /> },
+      { path: "/pane/:paneId", element: <WorkbenchSidebar data={herd} variant={variant} /> },
+    ], { initialEntries: [path] });
+    const view = render(<RouterProvider router={router} />);
+    return { user: userEvent.setup({ advanceTimers: () => undefined }), unmount: view.unmount };
+  }
+  const projects = () => within(screen.getByRole("region", { name: "Projects" }));
+  const projectRows = () => projects().getAllByRole("button", { name: /chats?/ });
+
+  it("lists the projects by default, folded: what needs you first, then what works, then by the last move", () => {
+    open();
+    expect(screen.getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Group by project" }).querySelector(".icon-folder-tree")).not.toBeNull();
+    expect(projectRows().map((row) => row.querySelector(".nav-row-text")?.textContent)).toEqual(["scratch", "shop", "notes", "site"]);
+    expect(projectRows().every((row) => row.getAttribute("aria-expanded") === "false")).toBe(true);
+    const shop = projects().getByRole("button", { name: /^shop, / });
+    expect(shop).toHaveAccessibleName("shop, 2 chats, 1 working, 1 done, 1 new");
+    // The state sits where a chat's mark does, the count apart from it, so neither reads as the other.
+    expect(shop.querySelector(".nav-row-meta")).toHaveTextContent(/^2$/);
+    expect(shop.querySelector(".nav-lead [data-node-state='working']")).not.toBeNull();
+    expect(shop.querySelector(".nav-row-meta [data-node-state]")).toBeNull();
+    expect(shop.querySelector("[data-unread]") ?? shop.querySelector(".nav-unread")).toHaveTextContent("+1");
+    // A resting project draws no state.
+    expect(projects().getByRole("button", { name: /^notes, / }).querySelector(".nav-lead")).toBeEmptyDOMElement();
+    // Folded, its chats are out of reach.
+    expect(projects().queryByRole("link", { name: /^clone/ })).toBeNull();
+  });
+
+  it("opens a project on its chats, newest first, and remembers it on this device", async () => {
+    const { user, unmount } = open();
+    await user.click(projects().getByRole("button", { name: /^shop, / }));
+    const shop = within(projects().getByRole("region", { name: "shop" }));
+    expect(shop.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/clone", "/pane/tree"]);
+    expect(projects().getByRole("button", { name: /^shop, / })).toHaveAccessibleName("shop, 2 chats, 1 working, 1 done");
+    unmount();
+    open();
+    expect(projects().getByRole("button", { name: /^shop, / })).toHaveAttribute("aria-expanded", "true");
+    expect(projects().getByRole("button", { name: /^notes, / })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("fills a folded project that holds the chat on screen", () => {
+    open("/pane/tree");
+    expect(projects().getByRole("button", { name: /^shop, / })).toHaveAttribute("aria-current", "true");
+    expect(projects().getByRole("button", { name: /^notes, / })).not.toHaveAttribute("aria-current");
+  });
+
+  it("switches to the list by time and back with the toggle, and remembers the choice", async () => {
+    const { user, unmount } = open();
+    await user.click(screen.getByRole("button", { name: "Group by project" }));
+    expect(screen.getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Group by project" }).querySelector(".icon-history")).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Projects" })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Today" })).getAllByRole("link")).toHaveLength(5);
+    unmount();
+    const again = open();
+    expect(screen.getByRole("region", { name: "Today" })).toBeInTheDocument();
+    await again.user.click(screen.getByRole("button", { name: "Group by project" }));
+    expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+  });
+
+  it("keeps a project where it was while its agents work, until updates puts them in order", () => {
+    let show: (data: HomeData) => void = () => undefined;
+    function Live() {
+      const [source, setSource] = useState(herd);
+      show = setSource;
+      return <WorkbenchSidebar data={source} />;
+    }
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Live /> }])} />);
+    act(() => show({ ...herd, agents: herd.agents.map((agent) => agent.paneId === "site" ? { ...agent, status: "blocked" as const, lastActiveAt: now } : agent) }));
+    expect(projectRows().map((row) => row.querySelector(".nav-row-text")?.textContent)).toEqual(["scratch", "shop", "notes", "site"]);
+    act(() => { projects().getByRole("button", { name: "1 update" }).click(); });
+    expect(projectRows().map((row) => row.querySelector(".nav-row-text")?.textContent)).toEqual(["site", "scratch", "shop", "notes"]);
+  });
+
+  it("groups the phone drawer's chats the same way, with its toggle in the heading and the counts above its foot", async () => {
+    const { user } = open("/", "drawer");
+    expect(projectRows().map((row) => row.querySelector(".nav-row-text")?.textContent)).toEqual(["scratch", "shop", "notes", "site"]);
+    expect(projects().getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Done, 2" }));
+    expect(within(screen.getByRole("region", { name: "Done" })).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/clone", "/pane/site"]);
+    await user.click(screen.getByRole("button", { name: "Show all" }));
+    await user.click(projects().getByRole("button", { name: "Group by project" }));
+    expect(within(screen.getByRole("region", { name: "Recent" })).getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("gives the drawer's counts, its toggle and a heading's text buttons a finger's reach, the counts side by side", () => {
+    const nav = readFileSync(resolve(import.meta.dirname, "../styles/nav.css"), "utf8");
+    const drawer = declarations(nav, '.workbench-navigation[data-variant="drawer"] .nav-status', ["@layer components"]);
+    expect(drawer["flex-direction"]).toBe("row");
+    const touch = ["@media (max-width: 1023px), (pointer: coarse)"];
+    expect(declarations(nav, ".nav-row", touch)["min-height"]).toBe("44px");
+    expect(declarations(nav, ".nav-label-updates::before", touch).height).toBe("44px");
+    const workbench = readFileSync(resolve(import.meta.dirname, "../workbench.css"), "utf8");
+    expect(declarations(workbench, ".workbench-icon-button", ["@media (max-width: 1023px), (pointer: coarse)"]).height).toBe("44px");
+  });
+
+  it("keeps a chat that leaves a tapped count's state on screen, in its new state, until a return to the window", async () => {
+    let show: (data: HomeData) => void = () => undefined;
+    function Live() {
+      const [source, setSource] = useState(herd);
+      show = setSource;
+      return <WorkbenchSidebar data={source} />;
+    }
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Live /> }])} />);
+    const user = userEvent.setup({ advanceTimers: () => undefined });
+    await user.click(screen.getByRole("button", { name: "Done, 2" }));
+    const listed = () => within(screen.getByRole("region", { name: "Done" })).getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(listed()).toEqual(["/pane/clone", "/pane/site"]);
+    const cloneIdle = herd.agents.map((agent) => agent.paneId === "clone" ? { ...agent, status: "idle" as const } : agent);
+    act(() => show({ ...herd, agents: cloneIdle }));
+    expect(listed()).toEqual(["/pane/clone", "/pane/site"]);
+    expect(within(screen.getByRole("region", { name: "Done" })).getByRole("heading")).toHaveTextContent("Done 1");
+    expect(screen.getByRole("link", { name: /^clone, idle/ })).toBeInTheDocument();
+    act(() => { window.dispatchEvent(new Event("focus")); });
+    expect(listed()).toEqual(["/pane/site"]);
+
+    // "N updates" lets a held row go too, for a desk that never loses focus.
+    act(() => show({ ...herd, agents: cloneIdle.map((agent) => agent.paneId === "site" ? { ...agent, status: "idle" as const } : agent) }));
+    expect(listed()).toEqual(["/pane/site"]);
+    await user.click(within(screen.getByRole("region", { name: "Done" })).getByRole("button", { name: "1 update" }));
+    expect(within(screen.getByRole("region", { name: "Done" })).getByText("Nothing finished unseen.")).toBeInTheDocument();
   });
 });

@@ -23,6 +23,12 @@ export interface AgentView {
   agent: string;
   status: AgentStatus;
   cwd: string;
+  /**
+   * The project its folder works in: the name of the repo the folder sits in, so a repo's clones and
+   * worktrees share it, else the folder's own name (`bridge/pane-project.ts`). The sidebar groups chats
+   * by it. Absent when Herdr reports no folder.
+   */
+  project?: string;
   focused: boolean;
   /** "agent" for an agent-bearing pane, "shell" for a bare shell. Defaults to "agent" when absent. */
   kind?: "agent" | "shell";

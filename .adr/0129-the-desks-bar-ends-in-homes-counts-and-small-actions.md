@@ -1,6 +1,6 @@
 # 0129. The desk's bar ends in Home's counts and a row of small actions; its chats say where they live
 
-- **Status:** Accepted (2026-10-26). Amends point 1 of [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md):
+- **Status:** Point 3 and the bar's list by time are amended by [ADR 0130](./0130-the-bar-lists-chats-by-project-and-a-count-lists-its-state.md) (2026-10-26): a count lists its state in the bar, and the chats are listed by project unless the device chooses time. Accepted (2026-10-26). Amends point 1 of [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md):
   the bar still lists chats and leaves the tree to Search, but it no longer leads with New chat,
   Search and Home as three rows. Requested by the operator, pointing at T3 Code's desktop sidebar:
   "fíjate abajo a la izquierda cómo está hecho esto que tiene configuración … sería bueno que en

@@ -31,3 +31,14 @@ export function deskChats(data: { agents: readonly AgentView[] }): DeskChat[] {
 export function liveliest(panes: readonly AgentView[]): AgentStatus | undefined {
   return (["blocked", "working", "done"] as const).find((status) => panes.some((pane) => pane.status === status));
 }
+
+/**
+ * The states the bar counts at its foot, most pressing first, each with what its list says when it holds
+ * nothing; a tap on one lists only its chats. Needs you counts the blocked panes, as Home's icon does.
+ */
+export const COUNTED = [
+  { state: "blocked", label: "Needs you", none: "Nothing needs you." },
+  { state: "working", label: "Working", none: "No agent is working." },
+  { state: "done", label: "Done", none: "Nothing finished unseen." },
+] as const;
+export type CountedState = (typeof COUNTED)[number]["state"];

@@ -12,6 +12,8 @@ export interface AgentView {
   agent: string;
   status: AgentStatus;
   cwd: string;
+  /** The repo its folder sits in, so clones and worktrees of one repo share it, else the folder's name; absent on an older bridge. */
+  project?: string;
   focused: boolean;
   /** "agent" for an agent-bearing pane, "shell" for a bare shell. Absent = "agent". */
   kind?: "agent" | "shell";
