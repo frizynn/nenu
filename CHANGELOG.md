@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-10-27
+
+### Fixed
+
+- The folder picker lists folders again when Nenu is opened over Tailscale, from Start and from New, on desk and phone; an Origin-less GET passes only as Nenu's own fetch (66aa8ff0, b7acecc4, 47f9d1c1).
+
 ## [2.10.0] - 2026-10-27
 
 ### Added
