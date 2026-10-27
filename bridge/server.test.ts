@@ -28,10 +28,11 @@ const CODEX_QUESTION = readFileSync(
 // checkAccess is the API security gate (same-origin/CSRF + optional Tailscale identity). A
 // regression here silently opens remote shell access, so it gets the most direct coverage.
 
-function req(headers: Record<string, string>): Request {
+function req(headers: Record<string, string>, method = "POST"): Request {
   const lower: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) lower[k.toLowerCase()] = v;
   return {
+    method,
     headers: { get: (name: string) => lower[name.toLowerCase()] ?? null },
   } as unknown as Request;
 }
@@ -281,6 +282,14 @@ describe("checkAccess — Origin required for writes", () => {
       ok: false,
       reason: "origin required",
     });
+  });
+
+  test("a write-level GET with no Origin passes only as Nenu's own fetch (the folder picker)", () => {
+    // Browsers send no Origin on a same-origin GET; a cross-site no-cors GET cannot add a header.
+    const host = "collie.example.ts.net";
+    expect(checkAccess(req({ host, "x-requested-with": "XMLHttpRequest" }, "GET"), cfg(), "write")).toEqual({ ok: true });
+    expect(checkAccess(req({ host }, "GET"), cfg(), "write")).toEqual({ ok: false, reason: "origin required" });
+    expect(checkAccess(req({ host, "x-requested-with": "XMLHttpRequest" }), cfg(), "write")).toEqual({ ok: false, reason: "origin required" });
   });
 
   test("write with no Origin from loopback is allowed (curl on the host)", () => {

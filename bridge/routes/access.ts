@@ -9,6 +9,9 @@ import { text } from "./http.ts";
 // (or a co-located proxy) can reach the bridge's port, so a loopback caller is the on-host operator.
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
+// The header Nenu's own fetches send (web/src/lib/api.ts XHR_HEADER).
+const XHR_HEADER = "x-requested-with";
+
 /**
  * Whether a TCP peer address is loopback. Unlike the `Host` header — which the client writes —
  * this comes from the kernel and cannot be forged.
@@ -34,9 +37,12 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
  *  - Same-origin only (Origin host must equal Host) — defeats cross-site requests/CSRF. Browsers
  *    omit Origin on same-origin GETs (so the snapshot poll passes); they send it on POSTs.
  *    localhost and explicitly-configured origins are also allowed.
- *  - Origin required for writes: a state-changing (`level === "write"`) request with no Origin is
- *    trusted only from loopback (curl on the host). Browsers always send Origin on fetch/SW POSTs,
- *    so a missing Origin on a remote write is a non-browser or Origin-stripped request — reject it.
+ *  - Origin required for writes: a state-changing (`level === "write"`) request with no
+ *    Origin is trusted only from loopback (curl on the host). Browsers always send Origin on fetch/SW
+ *    POSTs, so a missing Origin on a remote write is a non-browser or Origin-stripped request — reject
+ *    it. A same-origin GET carries no Origin, so a write-level GET (the folder picker) shows it is
+ *    Nenu's own fetch with `X-Requested-With` instead: a cross-site no-cors request cannot set a
+ *    custom header (that makes it a preflighted CORS request, and the bridge answers no preflight).
  *  - Tailscale identity: when a trusted user is configured under `tailscale serve`, the request
  *    must carry a matching `Tailscale-User-Login`. A missing header is rejected too — serve injects
  *    none for tagged nodes. Under COLLIE_SKIP_SERVE=1 or COLLIE_TRUSTED_USER_OPTIONAL=1, only a
@@ -69,8 +75,10 @@ export function checkAccess(
       cfg.allowedOrigins.includes(origin);
     if (!allowed) return { ok: false, reason: "cross-origin rejected" };
   } else if (level === "write" && !LOOPBACK_HOST.test(host)) {
-    // A write with no Origin header from a non-loopback Host isn't a real browser request — refuse.
-    return { ok: false, reason: "origin required" };
+    // A write with no Origin header from a non-loopback Host isn't a real browser request — refuse,
+    // unless it is Nenu's own same-origin GET, which a browser sends without Origin.
+    const ownGet = req.method === "GET" && req.headers.get(XHR_HEADER) !== null;
+    if (!ownGet) return { ok: false, reason: "origin required" };
   }
 
   if (cfg.trustedUser) {

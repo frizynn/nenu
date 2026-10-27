@@ -60,7 +60,8 @@ export type { NotifyPrefs, UpdateInfo };
  * the operator-owned recovery path.
  *
  * Costs nothing against the bridge itself: it is same-origin by design, so no preflight in practice,
- * and the bridge ignores headers it does not read.
+ * and the bridge ignores headers it does not read — except one: it lets a write-level GET without
+ * Origin (the folder picker over the tailnet) through only with this header (bridge/routes/access.ts).
  */
 export const XHR_HEADER = "x-requested-with";
 export const XHR_HEADER_VALUE = "XMLHttpRequest";

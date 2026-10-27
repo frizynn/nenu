@@ -52,7 +52,9 @@ export function DirPicker({ home, shortcuts, onHome, onPick, session }: DirPicke
   const exact = dirs && filter && dirs.entries.includes(filter) ? `${dirs.path}/${filter}` : null;
   // What "Use" picks, and its label names: the folder the filter names exactly, else the listed one.
   // A path the bridge will not list (outside home) is taken as typed; creating reports if it exists.
-  const target = exact ?? dirs?.path ?? (listing.state === "error" ? expandPath(query.trim().replace(/(.)\/+$/, "$1"), home) : null);
+  // A `~` path needs home to resolve, and home comes from a listing: until one answers, it has none.
+  const typed = query.trim().replace(/(.)\/+$/, "$1");
+  const target = exact ?? dirs?.path ?? (listing.state === "error" && (home || !typed.startsWith("~")) ? expandPath(typed, home) : null);
   const shown = dirs ? tildePath(dirs.path, dirs.home) : dir.replace(/(.)\/+$/, "$1") || "~";
   const showShortcuts = query === "~/" && shortcuts.length > 0;
   const labels = shortcutLabels(shortcuts, home);
@@ -126,7 +128,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick, session }: DirPicke
       <section aria-label="Folders" className="flex-1">
         {showShortcuts && <h3 className="px-2 pt-2 pb-1 text-footnote font-medium text-muted-foreground">In {shown === "~" ? "Home" : baseName(shown)}</h3>}
         {listing.state === "loading" && <p className="px-2 py-3 text-subhead text-muted-foreground">Loading…</p>}
-        {listing.state === "error" && <p className="px-2 py-3 text-subhead text-muted-foreground">Can't list this folder. You can still use the path as typed.</p>}
+        {listing.state === "error" && <p className="px-2 py-3 text-subhead text-muted-foreground">{target ? "Can't list this folder. You can still use the path as typed." : "Can't list this folder. Type its full path to use it."}</p>}
         {dirs && matches.length === 0 && <p className="px-2 py-3 text-subhead text-muted-foreground">{filter ? `No folder starts with “${filter}”.` : "No folders here."}</p>}
         <ul>
           {matches.map((name) => (
