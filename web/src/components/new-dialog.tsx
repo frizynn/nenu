@@ -18,7 +18,11 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { useHoldReload } from "@/lib/reload-guard";
 import { workspaceName } from "@/lib/spaces";
-import { SPAWN_AGENTS, agentLabel, loadAgent, loadPermission, type SpawnAgent, type SpawnTarget } from "@/lib/spawn";
+import { agentLabel, DEFAULT_MODEL, loadAgent, loadModel, loadPermission, type SpawnTarget } from "@/lib/spawn";
+import { ModelMenu, type StartAgent } from "@/components/start-pickers";
+import { listedModel, useStartModels } from "@/hooks/use-start-models";
+import { destinationFolder, destinationTarget, SCRATCH } from "@/lib/start-destination";
+import { tabName } from "@/lib/spaces";
 import { isReadOnly, type WorkspaceView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -32,8 +36,6 @@ export interface NewPreset {
   message?: string;
 }
 
-/** The workspace a quick chat opens in, created on the first one. */
-export const SCRATCH = "scratch";
 const DESKTOP = "(min-width: 1024px)";
 const matches = (query: string) => typeof window.matchMedia === "function" && window.matchMedia(query).matches;
 
@@ -195,8 +197,8 @@ function AgentPane({ target, data, readOnly, message, browsing, onBrowsing, onDo
   const [session, setSession] = useState(data?.session);
   const picked = machines.find((m) => m.session === session);
   const form = (
-    <NewAgentForm key={session ?? ""} machine={machines.length > 1 ? { session } : undefined}
-      defaultCwd={picked && session !== data?.session ? "" : defaultCwdFor(target, data)} defaultMessage={message}
+    <NewAgentForm key={session ?? ""} machine={machines.length > 1 ? { session } : undefined} session={data?.session} place={JSON.stringify(target)}
+      defaultCwd={picked && session !== data?.session ? "" : target.kind === "pane" && data ? destinationFolder(target, data) ?? "" : defaultCwdFor(target, data)} defaultMessage={message}
       liveDirs={picked?.herd ? liveDirsOf(picked.herd) : liveDirsOf(data)} readOnly={readOnly}
       browsing={browsing} onBrowsing={onBrowsing} onSubmit={(values) => spawnInto(target, values)} />
   );
@@ -210,30 +212,47 @@ function AgentPane({ target, data, readOnly, message, browsing, onBrowsing, onDo
   );
 }
 
+/** A new tab of a workspace, or a new pane beside one of its tabs' (the same destinations Start offers). */
 function TabPane({ workspaces, workspaceId, onWorkspace, ...pane }: AgentPaneProps & {
   workspaces: WorkspaceView[];
   workspaceId: string;
   onWorkspace: (id: string) => void;
 }) {
+  const tabs = (pane.data?.tabs ?? []).filter((t) => t.workspaceId === workspaceId);
+  const [tabId, setTabId] = useState("");
+  const tab = tabs.find((t) => t.tabId === tabId);
+  const target: SpawnTarget = tab ? { kind: "pane", tabId: tab.tabId } : { kind: "tab", workspaceId };
   return (
     <div className="flex flex-1 flex-col gap-3">
       {!pane.browsing && (
-        <Field label="Workspace">
-          <SelectField value={workspaceId} onChange={(e) => onWorkspace(e.currentTarget.value)}>
-            {workspaces.map((w) => <option key={w.workspaceId} value={w.workspaceId}>{workspaceName(w)}</option>)}
-          </SelectField>
-        </Field>
+        <>
+          <Field label="Workspace">
+            <SelectField value={workspaceId} onChange={(e) => { onWorkspace(e.currentTarget.value); setTabId(""); }}>
+              {workspaces.map((w) => <option key={w.workspaceId} value={w.workspaceId}>{workspaceName(w)}</option>)}
+            </SelectField>
+          </Field>
+          <Field label="Opens in">
+            <SelectField value={tab?.tabId ?? ""} onChange={(e) => setTabId(e.currentTarget.value)}>
+              <option value="">A new tab</option>
+              {tabs.map((t, i) => <option key={t.tabId} value={t.tabId}>{`Beside ${tabName(t.label, i + 1)}`}</option>)}
+            </SelectField>
+          </Field>
+        </>
       )}
-      <AgentPane key={workspaceId} target={{ kind: "tab", workspaceId }} {...pane} />
+      <AgentPane key={workspaceId} target={target} {...pane} />
     </div>
   );
 }
 
 function QuickChatPane({ data, readOnly, message: preset = "", onDone }: { data: HomeData | undefined; readOnly: boolean; message?: string; onDone: () => void }) {
-  const [agent, setAgent] = useState<Exclude<SpawnAgent, "shell">>(() => {
+  const [agent, setAgent] = useState<StartAgent>(() => {
     const last = loadAgent();
     return last === "shell" ? "claude" : last;
   });
+  const [models, setModels] = useState(() => ({ claude: loadModel("claude"), codex: loadModel("codex") }));
+  const listed = useStartModels(data?.session, !readOnly);
+  const model = listedModel(listed, agent, models[agent]);
+  const shownModel = model ?? DEFAULT_MODEL;
   const [message, setMessage] = useState(preset);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -244,11 +263,9 @@ function QuickChatPane({ data, readOnly, message: preset = "", onDone }: { data:
     if (busy || readOnly) return;
     setBusy(true);
     setError(null);
-    // The scratch workspace is made once, and every later quick chat is a tab in it. No cwd: the
-    // bridge creates a workspace on the home folder and a tab inherits its workspace's folder, and
-    // spawn() would otherwise record ~ as the last folder picked.
-    const target: SpawnTarget = scratch ? { kind: "tab", workspaceId: scratch.workspaceId } : { kind: "workspace" };
-    const failure = await spawnInto(target, { agent, cwd: "", name: scratch ? "" : SCRATCH, message, permission: loadPermission(agent) });
+    // The scratch workspace is made once, and every later quick chat is a tab in it (lib/start-destination).
+    const { target, cwd, name } = destinationTarget({ kind: "quick" }, "", data ?? { workspaces: [], tabs: [], agents: [], shellPanes: [] });
+    const failure = await spawnInto(target, { agent, cwd, name, message, permission: loadPermission(agent), model });
     if (failure !== null) {
       setError(failure);
       setBusy(false);
@@ -257,7 +274,9 @@ function QuickChatPane({ data, readOnly, message: preset = "", onDone }: { data:
 
   return (
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-      <Segmented label="Agent" options={SPAWN_AGENTS.filter((a) => a.id !== "shell")} value={agent} onChange={(id) => setAgent(id as typeof agent)} />
+      <div className="flex items-center text-footnote text-muted-foreground">
+        <ModelMenu models={listed} agent={agent} model={shownModel} onPick={(a, m) => { setAgent(a); setModels((current) => ({ ...current, [a]: m })); }} />
+      </div>
       <textarea aria-label="Message" value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
         placeholder="Ask anything" className={textField} data-autofocus />
       <p className="text-footnote text-muted-foreground">

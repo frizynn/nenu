@@ -3,6 +3,7 @@ import { ChevronRight, Folder, TriangleAlert } from "@/components/ui/icon";
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 
 import type { NewPreset } from "@/components/new-dialog";
+import { ModelMenu } from "@/components/start-pickers";
 import { Button } from "@/components/ui/button";
 import { inputField, textField } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
@@ -11,12 +12,15 @@ import { baseName, tildePath } from "@/lib/dir-picker";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { useHoldReload } from "@/lib/reload-guard";
+import { listedModel, useStartModels } from "@/hooks/use-start-models";
 import {
   PERMISSIONS,
   SPAWN_AGENTS,
   agentLabel,
   loadAgent,
+  DEFAULT_MODEL,
   loadDirs,
+  loadModel,
   loadPermission,
   openNewAgent,
   spawn,
@@ -36,6 +40,8 @@ export interface NewAgentValues {
   name: string;
   message: string;
   permission: string;
+  /** A model id the bridge lists for the agent; absent = its own default. */
+  model?: string;
   /** Where it starts when the person picked a machine: that machine's session (undefined = this one). */
   session?: string;
 }
@@ -82,9 +88,13 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
  * The agent form of the New flow. Mounting it starts a fresh form. The folder picker takes the form's
  * place while `browsing`, and the host owns that switch, so its header can title the step and step back.
  */
-export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing, machine }: {
+export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing, machine, session, place = "" }: {
   /** The machine picked for it, when there is more than one: its folders, and where it starts. */
   machine?: { session: string | undefined };
+  /** The session on screen, whose models it offers when no machine was picked. */
+  session?: string;
+  /** Names where it opens; a new one takes {@link defaultCwd} as the folder again. */
+  place?: string;
   defaultCwd: string;
   defaultMessage?: string;
   liveDirs: string[];
@@ -96,7 +106,17 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
 }) {
   const [agent, setAgent] = useState<SpawnAgent>(loadAgent);
   const [permissions, setPermissions] = useState(() => ({ claude: loadPermission("claude"), codex: loadPermission("codex") }));
+  const [models, setModels] = useState(() => ({ claude: loadModel("claude"), codex: loadModel("codex") }));
+  // The models of the machine it starts on: the one picked, else the one on screen.
+  const listed = useStartModels(machine ? machine.session : session, !readOnly);
   const [cwd, setCwd] = useState(defaultCwd);
+  // Another place for it (the New flow's Opens in) brings its folder and keeps the rest of the form;
+  // the herd moving under the same place never moves a folder already shown or picked.
+  const [shownPlace, setShownPlace] = useState(place);
+  if (shownPlace !== place) {
+    setShownPlace(place);
+    setCwd(defaultCwd);
+  }
   const [name, setName] = useState("");
   const [message, setMessage] = useState(defaultMessage);
   const [recent] = useState(loadDirs);
@@ -120,7 +140,8 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
     setBusy(true);
     setError(null);
     const permission = agent === "shell" ? "ask" : permissions[agent];
-    const failure = await onSubmit({ agent, cwd, name, message, permission, ...(machine ? { session: machine.session } : {}) });
+    const model = agent === "shell" ? undefined : listedModel(listed, agent, models[agent]);
+    const failure = await onSubmit({ agent, cwd, name, message, permission, model, ...(machine ? { session: machine.session } : {}) });
     if (failure !== null) {
       setError(failure);
       setBusy(false);
@@ -155,6 +176,13 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
       }}
     >
       <Segmented label="Agent" options={SPAWN_AGENTS} value={agent} onChange={setAgent} />
+
+      {!shell && (
+        <div className="-mt-1 flex items-center gap-1 text-footnote text-muted-foreground">
+          <ModelMenu models={listed} agent={agent} agents={[agent]} model={listedModel(listed, agent, models[agent]) ?? DEFAULT_MODEL}
+            onPick={(a, m) => setModels((current) => ({ ...current, [a]: m }))} />
+        </div>
+      )}
 
       <FolderButton shown={shown} parent={parent} onClick={() => onBrowsing(true)} />
 

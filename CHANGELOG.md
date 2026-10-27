@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-27
+
+### Added
+
+- Start and New pick the model from a search grouped by agent, and where a chat opens: by folder, quick chat, a new workspace, a workspace's new tab or a pane beside a tab (ba2064b8, 47abefe9, 8761957b).
+
 ## [2.9.0] - 2026-10-26
 
 ### Added

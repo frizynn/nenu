@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claudeModels, codexModels, discoverPaneModels } from "./models.ts";
+import { CODEX_DOC_MODELS } from "./agent-start.ts";
+import { claudeModels, codexModels, discoverPaneModels, startCatalog } from "./models.ts";
 
 const cleanup: string[] = [];
 afterEach(async () => { for (const path of cleanup.splice(0)) await rm(path, { recursive: true, force: true }); });
@@ -82,5 +83,21 @@ describe("pane model catalog", () => {
     const result = await discoverPaneModels({ ...pane, agent: "claude" }, { codex: [], claude: [join(base, ".claude", "projects")] }, base);
     expect(result.models.at(-1)?.name).toBe("Fable");
     expect(JSON.stringify(result)).not.toContain("never-return");
+  });
+});
+
+describe("startCatalog", () => {
+  test("lists the models the first Codex profile caches, after Codex's default", async () => {
+    const { first, roots } = await setup();
+    await writeFile(join(first, "models_cache.json"), catalog("gpt-7"));
+    const models = await startCatalog(roots);
+    expect(models.codex.map((m) => m.id)).toEqual(["default", "gpt-7"]);
+    expect(models.claude.map((m) => m.id)).toContain("opus[1m]");
+  });
+
+  test("falls back to the documented Codex models where Codex cached none", async () => {
+    const { roots } = await setup();
+    expect((await startCatalog(roots)).codex.slice(1)).toEqual([...CODEX_DOC_MODELS]);
+    expect((await startCatalog({ codex: [] })).codex.slice(1)).toEqual([...CODEX_DOC_MODELS]);
   });
 });

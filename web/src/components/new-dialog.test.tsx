@@ -221,6 +221,27 @@ it("opens a tab with the chosen agent in the workspace on screen, then opens its
   await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "codex", permission: "ask" }]));
 });
 
+it("opens beside a tab's panes in that workspace, on the model chosen", async () => {
+  const splits: unknown[] = [];
+  server.use(http.post("/api/tab/:tabId/split", async ({ request }) => {
+    splits.push(await request.json());
+    return HttpResponse.json({ ok: true, pane: { paneId: "w:2:p7", workspaceId: "w:2", workspaceLabel: "rediseño mobile", tabId: "t2", cwd: `${HOME}/code/acme` } });
+  }));
+  const { user, router } = setup({ data: { ...base, tabs: [{ tabId: "t2", workspaceId: "w:2", number: 1, label: "1", focused: true, paneCount: 1 }] } });
+  await user.click(await screen.findByRole("button", { name: /^Here in/ }));
+  await user.type(screen.getByLabelText("First message (optional)"), "fix it");
+  await user.selectOptions(screen.getByLabelText("Opens in"), "Beside Tab 1");
+  expect(screen.getByLabelText("First message (optional)")).toHaveValue("fix it");
+  await user.click(screen.getByRole("button", { name: /^Model: Claude Code/ }));
+  expect(screen.queryByRole("group", { name: "Codex" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("menuitemradio", { name: /^Opus 1M/ }));
+  await user.click(screen.getByRole("button", { name: "Start Claude Code" }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/pane/w%3A2%3Ap7"));
+  expect(splits).toEqual([{ cwd: `${HOME}/code/acme` }]);
+  expect(posts["/api/tab"]).toBeUndefined();
+  await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "ask", model: "opus[1m]" }]));
+});
+
 it("makes the scratch workspace on the bridge's home for the first quick chat, then reuses it", async () => {
   localStorage.setItem("collie.spawn.dirs", JSON.stringify([`${HOME}/code/acme`]));
   const first = setup();

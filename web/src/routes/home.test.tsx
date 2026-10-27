@@ -937,6 +937,113 @@ describe("on a desk", () => {
     await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "auto" }]));
   });
 
+  it("starts on a model found by searching the agent's menu", async () => {
+    const { posts } = recordStarts();
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: "Model: Claude Code, Default" }));
+    const menu = within(page().getByRole("menu", { name: "Model" }));
+    expect(menu.getByRole("group", { name: "Codex" })).toBeInTheDocument();
+    await user.type(menu.getByRole("searchbox", { name: "Search models" }), "1m");
+    expect(menu.getAllByRole("menuitemradio").map((row) => row.textContent)).toEqual(["Opus 1MOpus with a 1 million token context window"]);
+    await user.keyboard("{Enter}");
+    expect(page().getByRole("button", { name: "Model: Claude Code, Opus 1M" })).toBeInTheDocument();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "claude", permission: "ask", model: "opus[1m]" }]));
+  });
+
+  it("leaves the focus on the chosen row where a finger opens the menu, so no keyboard comes up unasked", async () => {
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: /^Model: Claude Code/ }));
+    expect(within(page().getByRole("group", { name: "Claude Code" })).getByRole("menuitemradio", { name: /^Default/ })).toHaveFocus();
+    expect(page().getByRole("searchbox", { name: "Search models" })).not.toHaveFocus();
+  });
+
+  it("keeps the choice when Enter closes the menu with nothing typed, and walks back to the search with the arrows", async () => {
+    // A desk with a mouse: the search field takes the focus as the menu opens.
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(min-width: 1024px)" || query === "(pointer: fine)", media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    }));
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: /^Model: Claude Code/ }));
+    await user.click(page().getByRole("menuitemradio", { name: /^gpt-6\.1-sol/ }));
+    await user.click(page().getByRole("button", { name: "Model: Codex, gpt-6.1-sol" }));
+    const search = page().getByRole("searchbox", { name: "Search models" });
+    expect(search).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(page().getAllByRole("menuitemradio").at(-1)).toHaveFocus();
+    await user.keyboard("{ArrowDown}{ArrowUp}");
+    expect(search).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(page().getByRole("button", { name: "Model: Codex, gpt-6.1-sol" })).toBeInTheDocument();
+    expect(page().queryByRole("menu", { name: "Model" })).not.toBeInTheDocument();
+  });
+
+  it("switches agent through a model of the other one", async () => {
+    const { posts } = recordStarts();
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: /^Model: Claude Code/ }));
+    await user.click(page().getByRole("menuitemradio", { name: /^gpt-6\.1-sol/ }));
+    expect(page().getByRole("textbox", { name: "First message" })).toHaveAttribute("placeholder", "Ask Codex anything, or describe the task");
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/pane/:paneId/start"]).toEqual([{ agent: "codex", permission: "ask", model: "gpt-6.1-sol" }]));
+  });
+
+  it("opens beside a tab's panes, in that tab's folder, when a tab is the destination", async () => {
+    const splits: Array<{ url: string; body: unknown }> = [];
+    const { posts } = recordStarts();
+    server.use(http.post("/api/tab/:tabId/split", async ({ request }) => {
+      splits.push({ url: new URL(request.url).pathname, body: await request.json() });
+      return HttpResponse.json({ ok: true, pane: { paneId: "w2:p8", workspaceId: "w2", workspaceLabel: "hub", tabId: "t2", cwd: "/dev/shop" } });
+    }));
+    const herd: HomeData = {
+      ...twoWorkspaces,
+      tabs: [{ tabId: "t1", workspaceId: "w1", number: 1, label: "1", focused: true, paneCount: 2 }, { tabId: "t2", workspaceId: "w2", number: 1, label: "review", focused: false, paneCount: 3 }],
+      agents: twoWorkspaces.agents.map((agent) => agent.workspaceId === "w2" ? { ...agent, tabId: "t2", cwd: "/dev/shop" } : agent),
+    };
+    const { user } = await setup(herd);
+    await user.click(page().getByRole("button", { name: "Opens: By folder" }));
+    const menu = within(page().getByRole("menu", { name: "Where it opens" }));
+    await user.type(menu.getByRole("searchbox", { name: "Search workspaces and tabs" }), "review");
+    await user.click(menu.getByRole("menuitemradio", { name: /^hub › review/ }));
+    expect(page().getByRole("button", { name: "Opens: Beside hub › review" })).toBeInTheDocument();
+    expect(page().getByRole("button", { name: "Folder: /dev/shop" })).toBeInTheDocument();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(splits).toEqual([{ url: "/api/tab/t2/split", body: { cwd: "/dev/shop" } }]));
+    expect(posts["/api/tab"]).toBeUndefined();
+  });
+
+  it("opens a quick chat in the scratch workspace on home, with no folder to choose", async () => {
+    const { posts } = recordStarts();
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: "Opens: By folder" }));
+    await user.click(page().getByRole("menuitemradio", { name: /^Quick chat/ }));
+    expect(page().queryByRole("button", { name: /^Folder:/ })).not.toBeInTheDocument();
+    expect(page().getByRole("heading", { level: 2, name: "What should we start?" })).toBeInTheDocument();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/workspace"]).toEqual([{ label: "scratch" }]));
+  });
+
+  it("opens a new tab of a workspace picked from the list", async () => {
+    const { posts } = recordStarts();
+    const { user } = await setup(twoWorkspaces);
+    await user.click(page().getByRole("button", { name: "Opens: By folder" }));
+    await user.click(page().getByRole("menuitemradio", { name: /^hub/ }));
+    expect(page().getByRole("button", { name: "Opens: New tab in hub" })).toBeInTheDocument();
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/tab"]).toEqual([{ workspaceId: "w2", cwd: "/dev/collie" }]));
+  });
+
+  it("opens a workspace of its own on the folder, though one already works there", async () => {
+    const { posts } = recordStarts();
+    const { user } = await setup();
+    await user.click(page().getByRole("button", { name: "Opens: By folder" }));
+    await user.click(page().getByRole("menuitemradio", { name: /^New workspace/ }));
+    await user.type(page().getByRole("textbox", { name: "First message" }), "Go{Enter}");
+    await waitFor(() => expect(posts["/api/workspace"]).toEqual([{ cwd: "/dev/collie" }]));
+    expect(posts["/api/tab"]).toBeUndefined();
+  });
+
   it("never sends a start twice, even when another view was looked at while it ran", async () => {
     const { posts, release, path } = recordStarts({ hold: true });
     const { user, router } = await setup();
