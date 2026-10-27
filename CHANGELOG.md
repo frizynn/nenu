@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.10.2] - 2026-10-27
+
+### Fixed
+
+- A Claude model picked with a 1M context reads "Opus 5.5 1M" under the box instead of its raw id `claude-opus-5-5[1m]` (2ab96f89).
+- The model picker marks a context variant only on its own row, never on the family row (8e38f8e0).
+
 ## [2.10.1] - 2026-10-27
 
 ### Fixed
