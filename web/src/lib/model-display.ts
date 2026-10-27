@@ -1,16 +1,19 @@
 /** Display only: selection and provider requests retain the original model ID. */
 export function modelDisplayName(model: string): string {
-  const current = model.match(
+  // Claude names the context window chosen with /model as a suffix (`claude-opus-5-5[1m]`); it reads
+  // as the picker names that choice, "Opus 1M".
+  const [, id = model, window] = model.match(/^(.*)\[(\d+[km])\]$/i) ?? [];
+  const current = id.match(
     /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8}|-latest)?$/i,
   );
-  const legacy = model.match(
+  const legacy = id.match(
     /^claude-(\d+)(?:-(\d{1,2}))?-(opus|sonnet|haiku)(?:-\d{8}|-latest)?$/i,
   );
   const family = current?.[1] ?? legacy?.[3];
   if (!family) return model;
   const major = current?.[2] ?? legacy?.[1];
   const minor = current?.[3] ?? legacy?.[2];
-  return `${family[0]!.toUpperCase()}${family.slice(1).toLowerCase()} ${major}${minor ? `.${minor}` : ""}`;
+  return `${family[0]!.toUpperCase()}${family.slice(1).toLowerCase()} ${major}${minor ? `.${minor}` : ""}${window ? ` ${window.toUpperCase()}` : ""}`;
 }
 
 /**
