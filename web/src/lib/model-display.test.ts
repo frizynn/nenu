@@ -7,6 +7,7 @@ it.each([
   // Claude's status line reports the context variant chosen with /model as a suffix.
   ["claude-opus-5-5[1m]", "Opus 5.5 1M"],
   ["claude-sonnet-4-5-20250929[1m]", "Sonnet 4.5 1M"],
+  ["gpt-6-astra[1m]", "gpt-6-astra[1m]"],
   ["gpt-6-astra", "gpt-6-astra"],
   ["custom-model", "custom-model"],
 ])("displays %s without changing unknown provider names", (input, expected) => {
@@ -17,7 +18,10 @@ it("finds the catalogue row a reported model stands for, and guesses none it doe
   const names = ["Default (recommended)", "Opus", "Sonnet", "Fable"];
   expect(catalogRowFor(names, "claude-opus-5-5")).toBe("Opus");
   expect(catalogRowFor(names, "claude-fable-5-1")).toBe("Fable");
-  expect(catalogRowFor(names, "claude-opus-5-5[1m]")).toBe("Opus");
+  // Claude lists a context variant as its own row, so a suffixed id marks none rather than its family.
+  expect(catalogRowFor(["Opus (1M context)", "Sonnet"], "claude-sonnet-5[1m]")).toBeUndefined();
+  expect(catalogRowFor(["Opus", "Opus (1M context)"], "claude-opus-5-5[1m]")).toBeUndefined();
+  expect(catalogRowFor(["opus[1m]"], "opus[1m]")).toBe("opus[1m]");
   expect(catalogRowFor(["gpt-5.5-codex", "gpt-5.5"], "gpt-5.5")).toBe("gpt-5.5");
   expect(catalogRowFor(names, "custom-model")).toBeUndefined();
   expect(catalogRowFor(names, undefined)).toBeUndefined();
