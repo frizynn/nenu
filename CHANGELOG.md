@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.10.3] - 2026-10-28
+
+### Fixed
+
+- A slash command such as `/goal` sent while Claude works no longer leaves a "Sent" bubble with "Working…" at the end of the chat, below the agent's answers (ed0a3ff5, 926433e9).
+
 ## [2.10.2] - 2026-10-27
 
 ### Fixed
