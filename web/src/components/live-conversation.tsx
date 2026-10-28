@@ -325,13 +325,16 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // the content under the reader shrinks (a turn's Working… line goes), Find closes. Left held, the
   // arrow stood over the tail and new turns waited behind it. There the thread follows again, as a
   // scroll to the end does, but never while Find holds its window or an older page loads.
+  // Read when a fold's motion ends, which can be after Find opened or closed.
+  const searchingNow = useRef(searching);
+  searchingNow.current = searching;
   const followAtEnd = useCallback((el: HTMLElement) => {
-    if (!following.current && !searching && !request.current && atEnd(el)) followLatest();
-  }, [followLatest, searching]);
+    if (!following.current && !searchingNow.current && !request.current && atEnd(el)) followLatest();
+  }, [followLatest]);
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!searching && el) followAtEnd(el);
+    if (!searching && el && !restoring.current) followAtEnd(el);
   }, [searching, followAtEnd]);
 
   useEffect(() => {

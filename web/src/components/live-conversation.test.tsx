@@ -143,6 +143,22 @@ describe("LiveConversation", () => {
     expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
   });
 
+  // Find's matches point into the window it holds: a fold's motion ending at the end leaves it held.
+  it("keeps Find's window when a fold's motion ends at the end while Find is open", () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+    onTestFinished(() => { vi.useRealTimers(); });
+    const initial: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const view = (history: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} searching loading={false} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(initial));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); });
+    fireEvent.click(screen.getByRole("button", { name: /^Ran git log/ }));
+    act(() => { vi.advanceTimersByTime(1_000); });
+    rerender(view({ ...initial, entries: [...fixtureTranscript, { uuid: "new", ts: "", role: "assistant", parts: [{ kind: "text", text: "Held while finding" }] }] }));
+    expect(screen.queryByText("Held while finding")).not.toBeInTheDocument();
+  });
+
   // A reader a little above the end, when what is under them shrinks (a turn's Working… line going):
   // the list ends where they stand and its scrollTop never moves, so no scroll event comes.
   it("follows again when the content under a reader shrinks to where they stand", () => {
