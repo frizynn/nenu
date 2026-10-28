@@ -59,6 +59,12 @@ function stopCap(el: HTMLElement): number | null {
   return cap < el.scrollHeight - el.clientHeight ? cap : null;
 }
 
+/** Where following would stand: the tail, or inside a question at the tail, whose foot may be far below. */
+function atEnd(el: HTMLElement): boolean {
+  const cap = stopCap(el);
+  return atTail(el) || (cap !== null && el.scrollTop >= cap - 1);
+}
+
 /** The element on the reader's top line, where it stood and where the list stood then. */
 type Line = { node: Element; top: number; scroll: number };
 
@@ -431,9 +437,13 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       release.abort();
       restoring.current = false;
       restoreFrame.current = null;
+      // A fold that leaves the list at its end (one shut at the bottom, or one whose body fits) sends
+      // no scroll event that could resume following, so the arrow stayed up over the tail and new
+      // turns waited behind it.
+      if (!following.current && atEnd(el)) followLatest();
     };
     restoreFrame.current = requestAnimationFrame(hold);
-  }, [history]);
+  }, [history, followLatest]);
 
   function onScroll() {
     const el = scrollRef.current;
@@ -448,9 +458,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       reading.current = following.current ? null : lineAt(el, contentRef.current);
       return;
     }
-    // Reading inside a question at the tail is being at the tail: its foot may be far below.
-    const cap = stopCap(el);
-    if (atTail(el) || (cap !== null && el.scrollTop >= cap - 1)) {
+    if (atEnd(el)) {
       if (!following.current) followLatest();
     } else if (up && !(following.current && (editShift() || clamped(el, top)))) {
       following.current = false;
