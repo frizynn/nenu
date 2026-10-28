@@ -38,7 +38,7 @@ import { appendJournal, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJou
 //   bun scripts/e2e/run.ts terminal [--before] [--port 8797] [--out DIR]  The desk's Terminal tab, the + menu, watch reads
 //   bun scripts/e2e/run.ts motion   [--before] [--port 8797] [--out DIR] [--seconds 60]  Page transitions frame by frame, tap to content, transitions while quiet
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
-//   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips under the box and Stop in it: seven moments, phone and desk, nothing above the box
+//   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips under the box and Stop in it: eight moments, phone and desk, nothing above the box
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
 //   bun scripts/e2e/run.ts reading  [--port 8797] [--out DIR]   Tables, nested lists, the way back and the model picker, phone and desk
@@ -2141,11 +2141,13 @@ async function chipLine(): Promise<void> {
       { name: "done-stop", paneId: "w1:donestop", status: "working", activity: done },
       { name: "done", paneId: "w1:done", status: "done", activity: done },
       { name: "many", paneId: herd.working, status: "working", activity: everything },
+      // The fullest row and a goal (ADR 0133), as the bridge attaches it from Claude's log.
+      { name: "goal", paneId: herd.working, status: "working", activity: everything, goal: "Merge what is pending, deploy when it is green, and send me the messages to forward" },
       // The terminal view, whose mirror says how long the turn has run.
       { name: "terminal", paneId: "w1:line", status: "working", activity: background, raw: true },
     ] as const;
     for (const [i, moment] of moments.entries()) {
-      if (moment.paneId === herd.working || "raw" in moment) continue;
+      if (moment.paneId === herd.working || "raw" in moment || "goal" in moment) continue;
       const session = `7777777${i}-7777-4777-8777-777777777777`;
       await writeChatJournal(join(folder, `${session}.jsonl`), now, 3, moment.status === "working" ? "running" : "finished");
       fake.addPane({ paneId: moment.paneId, workspaceId: "w1", tabId: "w1:t3", agent: "claude", label: "Checkout flow", sessionId: session, cwd: bridge.dir,
@@ -2177,6 +2179,15 @@ async function chipLine(): Promise<void> {
             return route.fulfill({ json: activityOf(url) });
           });
           await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? subagents : { ...subagents, agents: [] } }));
+          if ("goal" in moment) {
+            await page.route("**/api/snapshot*", async (route) => {
+              const snapshot = JSON.parse(await (await fetch(route.request().url())).text()) as { agents: { paneId: string; turn?: object }[] };
+              for (const pane of snapshot.agents) {
+                if (pane.paneId === moment.paneId) pane.turn = { running: true, source: "claude-session", ...pane.turn, goal: { condition: moment.goal } };
+              }
+              return route.fulfill({ json: snapshot });
+            });
+          }
           // The model as a real session reports it, so the row under the box is as full as it gets.
           await reportModel(page);
           await page.goto(`${bridge.url}/pane/${encodeURIComponent(moment.paneId)}`);
@@ -2232,6 +2243,8 @@ async function chipLine(): Promise<void> {
       || (working.has(momentOf[key] ?? "") && !m.stopInBox)
       || (m.stop && (m.stop.left < 0 || m.stop.right > m.viewportWidth))
       || (m.aboveBox !== null && m.aboveBox > 0) || !m.chipsUnderBox || m.rowBroken).map(([key]) => key);
+    // The goal's chip is in that row, whatever else fills it.
+    for (const [key, m] of Object.entries(seen as Record<string, Seen>)) if (momentOf[key] === "goal" && !m?.goalChip) failed.push(key);
     // Opened from the ⋯ menu, finished work's panel floats: the box stays where it was.
     for (const [key, value] of Object.entries(seen)) {
       if (key.endsWith("-finished-panel") && (value as { box?: number }).box !== (seen[key.replace(/-finished-panel$/, "")] as Seen)?.boxTop) failed.push(key);
@@ -2286,6 +2299,7 @@ function measureAboveBox() {
     chipLabels: Array.from(chipRow?.querySelectorAll("button") ?? []).map((b) => b.getAttribute("aria-label")),
     chipsScroll: chipRow ? { scrollWidth: chipRow.scrollWidth, clientWidth: chipRow.clientWidth } : null,
     chipsUnderBox: chipsRect === null || (chipRow!.closest(".composer-meta") !== null && chipsRect.top >= box.bottom),
+    goalChip: chipRow?.querySelector('[data-chip="goal"]') !== null && chipRow?.querySelector('[data-chip="goal"]') !== undefined,
     // A branch named in the row keeps some of its name: never a bare icon.
     rowBroken: overlaps || Array.from(document.querySelectorAll(".composer-place-branch .truncate")).some((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().width < 24),
     stop: rect(stop),

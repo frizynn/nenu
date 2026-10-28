@@ -1843,6 +1843,32 @@ describe("AgentChat — an agent at its usage limit", () => {
   });
 });
 
+// ADR 0133: Claude runs /goal itself and logs no turn for it; the bridge reads the goal from its log.
+describe("AgentChat — a Claude working toward a goal", () => {
+  const CONDITION = "Merge what is pending, deploy when it is green, and send me the messages to forward to each client";
+  const claude = (goal?: { condition: string }) => ({ ...fixtureAgents[0]!, paneId: "goal", agent: "claude", status: "working" as const, hasSession: true,
+    turn: { running: true, source: "claude-session" as const, ...(goal ? { goal } : {}) } });
+
+  it("puts a Goal chip under the box with the condition, whole on hover and in its panel", async () => {
+    const agent = claude({ condition: CONDITION });
+    renderChat({ paneId: agent.paneId, agent, agents: [agent] });
+    const chip = await screen.findByRole("button", { name: `Goal: ${CONDITION}` });
+    expect(chip).toHaveAttribute("title", CONDITION);
+    expect(chip.closest('[role="group"][aria-label="Status"]')).not.toBeNull();
+    await userEvent.setup().click(chip);
+    const panel = await screen.findByRole("dialog", { name: "Goal" });
+    expect(within(panel).getByText(CONDITION)).toBeVisible();
+    expect(within(panel).getByText(/until this holds/)).toBeVisible();
+  });
+
+  it("draws no Goal chip once the goal is met or cleared", async () => {
+    const agent = claude();
+    renderChat({ paneId: agent.paneId, agent, agents: [agent] });
+    expect(await screen.findByRole("textbox")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Goal/ })).not.toBeInTheDocument();
+  });
+});
+
 // ADR 0058: the bridge watches a pane's screen only while a browser shows it. On a desk the session
 // panel's Terminal tab is such a place, beside the conversation, and only while it is on screen.
 describe("AgentChat — the desk's Terminal tab", () => {

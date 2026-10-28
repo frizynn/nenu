@@ -90,6 +90,8 @@ export interface TurnState {
   /** Claude, at rest: its usage limit refused the last request; epoch ms it resets (ADR 0120). */
   limit?: { resetsAt: number };
   source: "claude-session" | "codex-rollout";
+  /** Claude: the `/goal` it keeps working toward; gone once met or cleared (ADR 0133). */
+  goal?: { condition: string };
 }
 
 /**

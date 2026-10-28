@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, Laptop, X, type IconComponent } from "@/components/ui/icon";
+import { ArrowLeft, Laptop, Target, X, type IconComponent } from "@/components/ui/icon";
 
 import { StateMark } from "@/components/status-badge";
 import { usePresence } from "@/components/ui/presence";
@@ -10,17 +10,20 @@ import { cn } from "@/lib/utils";
 
 // The chips under the composer's box (issue: Cursor-style chips): what needs you and what works in
 // this chat's background, one chip each in the row the model sits in, and the chip's panel floating
-// over the thread. Only what asks for you or runs is a chip; finished work opens from the ⋯ menu, and
-// no line of their own ever sits between the thread and the box (ADR 0108).
+// over the thread. Only what asks for you or runs is a chip, and the goal the agent works toward
+// (ADR 0133); finished work opens from the ⋯ menu, and no line of their own ever sits between the
+// thread and the box (ADR 0108).
 // Every mark is still: a working state is a dot, never a spinner, so an idle page draws nothing.
 
-export type ChipId = "needs" | "working";
+export type ChipId = "needs" | "working" | "goal";
 
 export interface ChipView {
   id: ChipId;
   label: string;
   /** Shown beside the label when above zero. */
   count: number;
+  /** Text that follows the label in a wide box, cut to fit, and whole on hover and in its panel. */
+  detail?: string;
   mark?: ReactNode;
   /** Asks nothing of you (finished work): off the line, its panel opened from the ⋯ menu. */
   tucked?: boolean;
@@ -34,6 +37,18 @@ export const rowChips = (chips: readonly ChipView[]) => chips.filter((chip) => !
 
 export const NEEDS_MARK = <StateMark state="needs" />;
 export const WORKING_MARK = <StateMark state="working" />;
+/** Claude's own ◎ for an active goal, as still and as grey as a mark that asks nothing (ADR 0113). */
+export const GOAL_MARK = <Target aria-hidden strokeWidth={2} className="size-3.5 shrink-0" />;
+
+/** The goal chip's panel: the condition whole, and what ends it. */
+export function GoalDetail({ condition }: { condition: string }) {
+  return (
+    <div className="flex flex-col gap-2 px-1.5 pb-1">
+      <p className="whitespace-pre-wrap text-body text-foreground [overflow-wrap:anywhere]">{condition}</p>
+      <p className="text-footnote text-muted-foreground">Claude keeps working until this holds. It ends once Claude finds it met, or with /goal clear.</p>
+    </div>
+  );
+}
 
 /** The chips a chat hands its composer, which one is open, and on a phone a process's details. */
 export interface ChipLine {
@@ -144,12 +159,13 @@ export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }
       {row.length > 0 && <div role="group" aria-label="Status" className="composer-chip-row">
         {row.map((chip) => (
           <button key={chip.id} ref={(node) => { if (node) buttons.current.set(chip.id, node); else buttons.current.delete(chip.id); }}
-            type="button" className="composer-chip" data-chip={chip.id}
-            aria-label={chip.count > 0 ? `${chip.label}, ${chip.count}` : chip.label}
+            type="button" className="composer-chip" data-chip={chip.id} title={chip.detail}
+            aria-label={chip.count > 0 ? `${chip.label}, ${chip.count}` : chip.detail ? `${chip.label}: ${chip.detail}` : chip.label}
             aria-expanded={chip.id === open} aria-haspopup="dialog" aria-controls={chip.id === open ? "composer-chip-panel" : undefined}
             onClick={() => (chip.id === open ? close() : onOpenChange(chip.id))}>
             {chip.mark}
             <span className="composer-chip-label">{chip.label}</span>
+            {chip.detail && <span className="composer-chip-detail">{chip.detail}</span>}
             {chip.count > 0 && <span className="composer-chip-count">{chip.count}</span>}
           </button>
         ))}
