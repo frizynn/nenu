@@ -16,9 +16,9 @@ export const IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
 /** The CLI's own placeholder (Claude Code, Codex) where it attached a pasted image path. */
 const IMAGE_TOKEN = /\[Image #\d+\]/g;
 
-/** A slash command: a message that starts with "/", unless that is the path of a picture it opens with. */
+/** A slash command: a message that opens with `/name`, never a path (a picture's, a file's), as the bridge reads it (guarded-send.ts). */
 export function isSlashCommand(text: string): boolean {
-  return text.startsWith("/") && !isUploadPath(text.split(/\s/, 1)[0]!);
+  return /^\/[^\s/]+(?:\s|$)/.test(text);
 }
 
 function removePaths(text: string, paths: string[]): string {

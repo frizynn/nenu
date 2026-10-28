@@ -1,4 +1,4 @@
-import { draftFromWire, dropStrayChips, editChips, imageChip, imageLabel, insertImageChips, isUploadPath, keepChipsWhole, messageMatchKey, pathPieces, serializeDraft, serializeMessage, splitDraftUploads, splitMessageImages, tokenPieces, uploadName, withoutImages } from "./message-images";
+import { draftFromWire, dropStrayChips, editChips, imageChip, imageLabel, insertImageChips, isSlashCommand, isUploadPath, keepChipsWhole, messageMatchKey, pathPieces, serializeDraft, serializeMessage, splitDraftUploads, splitMessageImages, tokenPieces, uploadName, withoutImages } from "./message-images";
 
 const UP = "/home/you/.local/state/collie/uploads";
 const a = `${UP}/w1-p1-mabc123-1234abcd.png`;
@@ -156,4 +156,10 @@ describe("pictures in their places", () => {
   it("matches a journal turn sent with pictures in place", () => {
     expect(messageMatchKey(`first ${a} then ${b} end`)).toBe(messageMatchKey("first [Image #3] then [Image #4]  end"));
   });
+});
+
+// The bridge's rule (guarded-send.ts NOT_LOGGED): a command is `/name`, a path never is.
+it("reads a message as a slash command only when it opens with /name", () => {
+  for (const command of ["/goal merge everything", "/compact", "/plugin:skill now", "/goal\nwith a second line"]) expect(isSlashCommand(command)).toBe(true);
+  for (const prose of [`${a} what is this?`, "/Users/fran/app/crash.log has the error", "/", "status /goal", "/ goal"]) expect(isSlashCommand(prose)).toBe(false);
 });
