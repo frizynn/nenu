@@ -1773,6 +1773,7 @@ describe("AgentChat — Send while only background work runs", () => {
     const box = screen.getByRole("textbox");
     await user.type(box, goal);
     await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(delivered).toHaveLength(1));
     await waitFor(() => expect(box).toHaveValue(""));
     expect(await screen.findByText("On it: merging the open PRs.")).toBeVisible();
     expect(document.querySelector("[data-pending-send]")).toBeNull();
