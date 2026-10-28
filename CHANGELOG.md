@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-28
+
+### Added
+
+- A Claude chat with an active `/goal` shows it as a Goal chip under the box, its condition whole on hover and in its panel; it goes once the goal is met or cleared (d3ad65dc, 94b4a6c1, 4d7431c5, a82d7b0b).
+
+### Fixed
+
+- At the end of a chat, opening or shutting a work fold, closing Find or the content shrinking no longer leaves the jump-to-latest arrow up while new turns arrive (8f201f5f, d52eae04, d3b097e1).
+
 ## [2.10.3] - 2026-10-28
 
 ### Fixed
