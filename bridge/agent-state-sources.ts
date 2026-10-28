@@ -96,6 +96,8 @@ export class ClaudeTurnScan {
   lastReply = -Infinity;
   /** The usage limit that refused the latest request, until a reply came through after it. */
   limit: { at: number; resetsAt: number } | undefined;
+  /** The goal its newest goal row sets: null when that row ends one, undefined when no row was read. */
+  goal: ClaudeGoal | null | undefined;
   private fifo: { content: string; notice: boolean }[] = [];
 
   line(text: string): void {
@@ -103,6 +105,8 @@ export class ClaudeTurnScan {
     try { raw = JSON.parse(text); } catch { return; }
     const row = record(raw);
     if (row.isSidechain === true) return;
+    const goal = claudeGoalRow(row);
+    if (goal !== undefined) this.goal = goal;
     const at = typeof row.timestamp === "string" ? Date.parse(row.timestamp) : NaN;
     if (row.type === "queue-operation") return this.queue(row);
     if (!Number.isFinite(at)) return;
@@ -161,6 +165,30 @@ function limitResetsAt(row: Record<string, unknown>): number | null {
   return typeof seconds === "number" && Number.isFinite(seconds) && seconds > 1e9 ? seconds * 1000 : null;
 }
 
+/**
+ * A `/goal` Claude keeps working toward. Claude logs no operator turn for it: the goal lives in its
+ * `goal_status` attachments (2.1.296–2.1.310, measured), a sentinel when it is set, cleared or restated
+ * after a compaction, and one row per check of the condition. Claude restores a goal on resume by the
+ * newest of those rows, active unless it is `met` or `failed` (2.1.310, read in code); Nenu reads it the
+ * same way. A compaction restates an active goal right after its boundary row (measured twice), so a
+ * boundary with no goal row after it means no goal.
+ */
+export interface ClaudeGoal { condition: string }
+
+/** Claude's own `/goal` condition is at most this long (2.1.310, read in code); longer is not one. */
+const GOAL_MAX = 4_000;
+
+/** What one transcript row says of the goal: a goal, null for none, undefined when it says nothing. */
+export function claudeGoalRow(row: Record<string, unknown>): ClaudeGoal | null | undefined {
+  if (row.isSidechain === true) return undefined;
+  if (row.type === "system" && row.subtype === "compact_boundary") return null;
+  const status = record(row.attachment);
+  if (row.type !== "attachment" || status.type !== "goal_status") return undefined;
+  if (status.met === true || status.failed === true) return null;
+  const condition = typeof status.condition === "string" ? status.condition.trim() : "";
+  return condition ? { condition: condition.slice(0, GOAL_MAX) } : null;
+}
+
 const MAX_QUEUED = 64;
 /** "[Request interrupted by user]" and "[Request interrupted by user for tool use]" (measured). */
 const INTERRUPTED = /^\[Request interrupted by user\b/;
@@ -189,6 +217,17 @@ export function claudeTurn(
   scan: Pick<ClaudeTurnScan, "lastMove" | "lastEnd" | "queued"> | null,
   busySince = file.statusUpdatedAt,
   limit?: TurnState["limit"],
+  goal?: ClaudeGoal,
+): TurnState {
+  const turn = claudeTurnState(file, scan, busySince, limit);
+  return goal ? { ...turn, goal } : turn;
+}
+
+function claudeTurnState(
+  file: ClaudeSessionFile,
+  scan: Pick<ClaudeTurnScan, "lastMove" | "lastEnd" | "queued"> | null,
+  busySince: number,
+  limit: TurnState["limit"],
 ): TurnState {
   const source = "claude-session" as const;
   if (file.waitingFor || file.status === "waiting") return { running: false, waiting: file.waitingFor ?? "dialog open", source };

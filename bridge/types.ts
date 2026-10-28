@@ -119,6 +119,8 @@ export interface TurnState {
    */
   limit?: { resetsAt: number };
   source: "claude-session" | "codex-rollout";
+  /** Claude: the `/goal` it keeps working toward, from its own goal rows; gone once met or cleared. */
+  goal?: { condition: string };
 }
 
 /**
