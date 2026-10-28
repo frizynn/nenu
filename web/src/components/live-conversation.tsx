@@ -59,6 +59,12 @@ function stopCap(el: HTMLElement): number | null {
   return cap < el.scrollHeight - el.clientHeight ? cap : null;
 }
 
+/** Where following would stand: the tail, or inside a question at the tail, whose foot may be far below. */
+function atEnd(el: HTMLElement): boolean {
+  const cap = stopCap(el);
+  return atTail(el) || (cap !== null && el.scrollTop >= cap - 1);
+}
+
 /** The element on the reader's top line, where it stood and where the list stood then. */
 type Line = { node: Element; top: number; scroll: number };
 
@@ -315,6 +321,22 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     if (el) pin(el);
   }, [cancelOlder, pin]);
 
+  // The list can come to stand at its end with no scroll event to say so: a fold's motion ends there,
+  // the content under the reader shrinks (a turn's Working… line goes), Find closes. Left held, the
+  // arrow stood over the tail and new turns waited behind it. There the thread follows again, as a
+  // scroll to the end does, but never while Find holds its window or an older page loads.
+  // Read when a fold's motion ends, which can be after Find opened or closed.
+  const searchingNow = useRef(searching);
+  searchingNow.current = searching;
+  const followAtEnd = useCallback((el: HTMLElement) => {
+    if (!following.current && !searchingNow.current && !request.current && atEnd(el)) followLatest();
+  }, [followLatest]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!searching && el && !restoring.current) followAtEnd(el);
+  }, [searching, followAtEnd]);
+
   useEffect(() => {
     if (localSendCount > previousSendCount.current) followLatest();
     previousSendCount.current = localSendCount;
@@ -375,12 +397,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     if (!el || !content || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       if (following.current) pin(el);
-      else holdLine(el);
+      else {
+        holdLine(el);
+        if (!restoring.current) followAtEnd(el);
+      }
     });
     observer.observe(el);
     observer.observe(content);
     return () => observer.disconnect();
-  }, [pin, holdLine]);
+  }, [pin, holdLine, followAtEnd]);
 
   // A tap on the thread's text, or a drag down of DISMISS_DRAG px, closes the keyboard. A tap on a
   // control stays the control's; a drag up or sideways (a code block) is only scrolling.
@@ -431,9 +456,10 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       release.abort();
       restoring.current = false;
       restoreFrame.current = null;
+      followAtEnd(el);
     };
     restoreFrame.current = requestAnimationFrame(hold);
-  }, [history]);
+  }, [history, followAtEnd]);
 
   function onScroll() {
     const el = scrollRef.current;
@@ -448,9 +474,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       reading.current = following.current ? null : lineAt(el, contentRef.current);
       return;
     }
-    // Reading inside a question at the tail is being at the tail: its foot may be far below.
-    const cap = stopCap(el);
-    if (atTail(el) || (cap !== null && el.scrollTop >= cap - 1)) {
+    if (atEnd(el)) {
       if (!following.current) followLatest();
     } else if (up && !(following.current && (editShift() || clamped(el, top)))) {
       following.current = false;
