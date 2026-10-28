@@ -170,8 +170,10 @@ function limitResetsAt(row: Record<string, unknown>): number | null {
  * `goal_status` attachments (2.1.296–2.1.310, measured), a sentinel when it is set, cleared or restated
  * after a compaction, and one row per check of the condition. Claude restores a goal on resume by the
  * newest of those rows, active unless it is `met` or `failed` (2.1.310, read in code); Nenu reads it the
- * same way. A compaction restates an active goal right after its boundary row (measured twice), so a
- * backward look can stop at a boundary: with no goal row after it, there is no goal.
+ * same way, from the rows after the last compaction boundary, as a resume loads them: a compaction
+ * restates an active goal right after its boundary (measured twice), and with no goal row after the
+ * boundary there is no goal. A compaction runs as a busy turn, so its restated row is read before the
+ * pane rests.
  */
 export interface ClaudeGoal { condition: string }
 
@@ -181,6 +183,7 @@ const GOAL_MAX = 4_000;
 /** What one transcript row says of the goal: a goal, null for none, undefined when it says nothing. */
 export function claudeGoalRow(row: Record<string, unknown>): ClaudeGoal | null | undefined {
   if (row.isSidechain === true) return undefined;
+  if (row.type === "system" && row.subtype === "compact_boundary") return null;
   const status = record(row.attachment);
   if (row.type !== "attachment" || status.type !== "goal_status") return undefined;
   if (status.met === true || status.failed === true) return null;

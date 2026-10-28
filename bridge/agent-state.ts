@@ -48,6 +48,8 @@ const IDLE_TAIL_BYTES = 1024 * 1024;
 const LIMIT_RECHECK_MS = 3_600_000;
 /** The backward look for a transcript's goal reads this much at a time. */
 const GOAL_CHUNK_BYTES = 1024 * 1024;
+/** A failed look for a session's goal is tried again on a later read, this long after. */
+const GOAL_RETRY_MS = 60_000;
 /** A session file is a few hundred bytes; anything bigger is not one. */
 const SESSION_FILE_MAX = 64 * 1024;
 /** How often an unresolved pane is retried when Herdr reports no transition. */
@@ -75,6 +77,8 @@ export interface AgentStatesOptions {
   openFiles?(pids: number[]): Promise<string[]>;
   /** Whether `pid` is the process a session file's `procStart` names; null when that cannot be read. */
   sameProcess?(pid: number, procStart: string): Promise<boolean | null>;
+  /** The goal a transcript leaves active, read from its whole log: {@link lastClaudeGoal}. */
+  lastGoal?(path: string): Promise<ClaudeGoal | null>;
   watch?: WatchFn;
   now?(): number;
 }
@@ -116,6 +120,8 @@ interface Entry {
   goalSeed?: { sessionId: string; goal: ClaudeGoal | null };
   /** The session whose goal is being looked up, so two looks never read the log twice. */
   goalSeeding?: string;
+  /** When a failed look may be tried again. */
+  goalRetryAt?: number;
   state?: TurnState;
   published: string;
   dropped?: boolean;
@@ -317,7 +323,7 @@ export class AgentStates {
     if (entry.transcript?.sessionId !== sessionId) {
       this.closeTail(entry.transcript);
       entry.transcript = undefined;
-      const path = await this.transcriptPath(entry, sessionId);
+      const path = await this.opts.claudeTranscript(sessionId).catch(() => null);
       // A busy spell that began meanwhile followed the transcript itself, watched: that tail stays.
       if (!path || entry.dropped || entry.file?.sessionId !== sessionId || entry.transcript) return;
       for (const bytes of [IDLE_PEEK_BYTES, IDLE_TAIL_BYTES]) {
@@ -343,7 +349,7 @@ export class AgentStates {
     if (entry.transcript?.sessionId !== sessionId) {
       this.closeTail(entry.transcript);
       entry.transcript = undefined;
-      const path = await this.transcriptPath(entry, sessionId);
+      const path = await this.opts.claudeTranscript(sessionId).catch(() => null);
       if (entry.dropped || entry.file?.sessionId !== sessionId) return;
       if (!path) {
         // A first prompt's transcript lands ~150 ms after the busy flip: look again a few times.
@@ -366,24 +372,29 @@ export class AgentStates {
     if (entry.file?.status === "busy" && !entry.file.waitingFor) this.watchTranscript(entry, transcript);
   }
 
-  /** The contained transcript of a session, its goal looked up once when the session is new. */
-  private async transcriptPath(entry: Entry, sessionId: string): Promise<string | null> {
-    const path = await this.opts.claudeTranscript(sessionId).catch(() => null);
-    if (path) this.seedGoal(entry, sessionId, path);
-    return path;
-  }
-
-  /** Look up the session's goal in its whole log, beside the turn's own reads rather than before them:
-   *  a long log without a goal is read back to its last compaction. A failed read is tried again. */
-  private seedGoal(entry: Entry, sessionId: string, path: string): void {
-    if (entry.goalSeed?.sessionId === sessionId || entry.goalSeeding === sessionId) return;
+  /**
+   * Look up the session's goal in its whole log once, beside the turn's own reads rather than before
+   * them: a long log without a goal is read back to its last compaction. A failed read is tried again
+   * on a later read, a minute on.
+   */
+  private seedGoal(entry: Entry): void {
+    const transcript = entry.transcript;
+    const sessionId = transcript?.sessionId;
+    if (!transcript || !sessionId || sessionId !== entry.file?.sessionId) return;
+    if (entry.goalSeed?.sessionId === sessionId || entry.goalSeeding === sessionId || this.now() < (entry.goalRetryAt ?? -Infinity)) return;
     entry.goalSeeding = sessionId;
-    void lastClaudeGoal(path)
-      .then((goal) => { if (entry.goalSeeding === sessionId) entry.goalSeed = { sessionId, goal }; }, () => {})
-      .finally(() => {
-        if (entry.goalSeeding === sessionId) entry.goalSeeding = undefined;
+    void (this.opts.lastGoal ?? lastClaudeGoal)(transcript.path).then(
+      (goal) => {
+        if (entry.goalSeeding !== sessionId) return;
+        entry.goalSeeding = undefined;
+        entry.goalSeed = { sessionId, goal };
         this.update(entry);
-      });
+      },
+      () => {
+        if (entry.goalSeeding === sessionId) entry.goalSeeding = undefined;
+        entry.goalRetryAt = this.now() + GOAL_RETRY_MS;
+      },
+    );
   }
 
   private watchTranscript(entry: Entry, transcript: NonNullable<Entry["transcript"]>): void {
@@ -450,6 +461,7 @@ export class AgentStates {
 
   private update(entry: Entry): void {
     if (entry.dropped) return;
+    if (entry.agent === "claude") this.seedGoal(entry);
     const scan = entry.transcript?.scan ?? null;
     const limit = entry.agent === "claude" ? claudeLimit(scan, this.profileReply(entry), this.now()) : undefined;
     const goal = entry.agent === "claude" ? this.goalOf(entry) : undefined;
@@ -586,12 +598,11 @@ export async function lastClaudeGoal(path: string, chunk = GOAL_CHUNK_BYTES): Pr
 
 const GOAL_MARKS = ['"type":"goal_status"', '"subtype":"compact_boundary"'].map((mark) => Buffer.from(mark));
 
-/** A goal row's goal, or null for a compaction boundary: an active goal is restated after one. */
 function goalLine(text: string): ClaudeGoal | null | undefined {
-  let row: Record<string, unknown>;
-  try { row = JSON.parse(text) as Record<string, unknown>; } catch { return undefined; }
-  if (!row || typeof row !== "object" || row.isSidechain === true) return undefined;
-  return row.type === "system" && row.subtype === "compact_boundary" ? null : claudeGoalRow(row);
+  try {
+    const row: unknown = JSON.parse(text);
+    return row && typeof row === "object" ? claudeGoalRow(row as Record<string, unknown>) : undefined;
+  } catch { return undefined; }
 }
 
 export async function readSmall(path: string): Promise<string | null> {

@@ -556,6 +556,48 @@ describe("Claude goal", () => {
     } finally { spy.mockRestore(); }
   });
 
+  test("the goal's look never holds back the turn, and a failed look is tried again on a later read", async () => {
+    const w = watches();
+    let release!: (goal: { condition: string } | null) => void;
+    let looks = 0;
+    let fail = false;
+    let clock = T0;
+    const { service } = states(w, {
+      now: () => clock,
+      lastGoal: () => {
+        looks++;
+        if (fail) return Promise.reject(new Error("EMFILE"));
+        return new Promise((resolve) => { release = resolve; });
+      },
+    });
+    await writeFile(transcript, JSON.stringify({ type: "user", timestamp: iso(T0 + 20), message: { content: "go" } }) + "\n");
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 10));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await until(() => service.get("s", "w1:p1") !== undefined);
+    expect(service.get("s", "w1:p1")).toEqual({ running: true, queued: null, source: "claude-session" });
+    expect(looks).toBe(1);
+    release({ condition: "ship it" });
+    await until(() => service.get("s", "w1:p1")?.goal !== undefined);
+    expect(service.get("s", "w1:p1")?.goal).toEqual({ condition: "ship it" });
+    service.close();
+
+    // Another bridge whose look fails: nothing shows, and a read a minute later looks again.
+    fail = true;
+    looks = 0;
+    const second = states(watches(), { now: () => clock, lastGoal: () => (fail ? Promise.reject(new Error("EMFILE")) : (looks++, Promise.resolve({ condition: "ship it" }))) });
+    second.service.sync("s", herdr([PID]), [pane("claude")]);
+    await until(() => second.service.get("s", "w1:p1") !== undefined);
+    await settle();
+    expect(second.service.get("s", "w1:p1")?.goal).toBeUndefined();
+    fail = false;
+    clock += 61_000;
+    await appendFile(transcript, JSON.stringify({ type: "user", timestamp: iso(T0 + 30), message: { content: "more" } }) + "\n");
+    expect(await second.service.fresh("s", pane("claude"), herdr([PID]), { remap: false })).toBeDefined();
+    await until(() => second.service.get("s", "w1:p1")?.goal !== undefined);
+    expect(looks).toBe(1);
+    second.service.close();
+  });
+
   const reply0 = () => JSON.stringify({ type: "assistant", timestamp: iso(T0 - 5), message: { model: "claude-opus-5-5", stop_reason: "end_turn", content: [] } }) + "\n";
 });
 

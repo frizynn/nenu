@@ -265,7 +265,7 @@ describe("Claude goal", () => {
 
   test("a met goal and a cleared one are gone, each by its own row", () => {
     const met = goal("claude-2.1.296-goal-met.jsonl").seen;
-    // Set, checked and not met, then met; the compaction rows after it change nothing.
+    // Set, checked and not met, then met; the compaction rows after it bring nothing back.
     expect(met.slice(0, 5).every((at) => at === "Add a benchmark per agent and merge it")).toBe(true);
     expect(met.slice(5)).toEqual([null, null, null]);
     // Cleared: the sentinel says met, before the "Goal cleared" rows.
@@ -276,10 +276,11 @@ describe("Claude goal", () => {
     expect(goal("claude-2.1.308-goal-replaced.jsonl").goal).toEqual({ condition: "Simplify the prompt and keep it human" });
   });
 
-  test("a compaction restates an active goal right after its boundary; a read between them keeps it", () => {
+  test("a compaction restates an active goal right after its boundary", () => {
     const { goal: after, seen } = goal("claude-2.1.308-goal-compacted.jsonl");
     expect(after).toEqual({ condition: "Hill-climb the prompt to 100% on every case" });
-    expect(seen.slice(-3)).toEqual(Array(3).fill("Hill-climb the prompt to 100% on every case"));
+    // As a resume reads it: only rows after the boundary count, and the restated row is one.
+    expect(seen.slice(-3)).toEqual([null, null, "Hill-climb the prompt to 100% on every case"]);
   });
 
   test("an impossible goal ends it, and a subagent's goal row is not this session's", () => {
