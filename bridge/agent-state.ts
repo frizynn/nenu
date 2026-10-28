@@ -4,6 +4,7 @@ import { open, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ClaudeTurnScan,
+  claudeGoalRow,
   claudeLimit,
   claudeSessionDirs,
   claudeTurn,
@@ -15,6 +16,7 @@ import {
   procStartTicks,
   sameProcStart,
   statStartTicks,
+  type ClaudeGoal,
   type ClaudeSessionFile,
 } from "./agent-state-sources.ts";
 import type { HerdrClient } from "./herdr-client.ts";
@@ -44,6 +46,10 @@ const IDLE_PEEK_BYTES = 64 * 1024;
 const IDLE_TAIL_BYTES = 1024 * 1024;
 /** The longest wait before a Claude held by its usage limit is looked at again. */
 const LIMIT_RECHECK_MS = 3_600_000;
+/** The backward look for a transcript's goal reads this much at a time. */
+const GOAL_CHUNK_BYTES = 1024 * 1024;
+/** A failed look for a session's goal is tried again on a later read, this long after. */
+const GOAL_RETRY_MS = 60_000;
 /** A session file is a few hundred bytes; anything bigger is not one. */
 const SESSION_FILE_MAX = 64 * 1024;
 /** How often an unresolved pane is retried when Herdr reports no transition. */
@@ -71,6 +77,8 @@ export interface AgentStatesOptions {
   openFiles?(pids: number[]): Promise<string[]>;
   /** Whether `pid` is the process a session file's `procStart` names; null when that cannot be read. */
   sameProcess?(pid: number, procStart: string): Promise<boolean | null>;
+  /** The goal a transcript leaves active, read from its whole log: {@link lastClaudeGoal}. */
+  lastGoal?(path: string): Promise<ClaudeGoal | null>;
   watch?: WatchFn;
   now?(): number;
 }
@@ -108,6 +116,12 @@ interface Entry {
   limitTimer?: ReturnType<typeof setTimeout>;
   /** The transcript's latest reply this entry has told its profile about. */
   replySeen?: number;
+  /** The session's goal as its whole transcript said when first seen; the tail's own goal rows win. */
+  goalSeed?: { sessionId: string; goal: ClaudeGoal | null };
+  /** The session whose goal is being looked up, so two looks never read the log twice. */
+  goalSeeding?: string;
+  /** When a failed look may be tried again. */
+  goalRetryAt?: number;
   state?: TurnState;
   published: string;
   dropped?: boolean;
@@ -300,8 +314,6 @@ export class AgentStates {
       // At rest the transcript is read once more, unwatched: the row that ended the turn may say the
       // usage limit refused it (ADR 0120), and it can land after the last watch event.
       if (file && !file.waitingFor) await this.peekTranscript(entry, file.sessionId);
-      // Unless a busy spell began during that read and watches the transcript now.
-      if (entry.file?.status !== "busy") this.closeTail(entry.transcript);
     }
     this.update(entry);
   }
@@ -323,6 +335,8 @@ export class AgentStates {
         const found = transcript.scan.lastReply > -Infinity || (transcript.tail?.offset ?? Infinity) <= bytes;
         const moved = entry.dropped || (entry as Entry).transcript !== transcript || entry.file?.sessionId !== sessionId || entry.file?.status === "busy";
         if (found || moved) return;
+        // A look that ran meanwhile may have watched this short tail for a goal; the longer one replaces it.
+        this.closeTail(transcript);
       }
       return;
     }
@@ -355,12 +369,48 @@ export class AgentStates {
     if (!transcript) return;
     await this.readTail(transcript);
     // Only a turn still running watches: one that ended during the read left a Claude at rest.
-    const busy = entry.file?.status === "busy" && !entry.file.waitingFor;
-    if (!transcript.watcher && !entry.dropped && busy && entry.transcript === transcript) {
-      transcript.watcher = this.watchFile(transcript.path, () => {
-        void this.readTail(transcript).then(() => this.update(entry));
-      });
-    }
+    if (entry.file?.status === "busy" && !entry.file.waitingFor) this.watchTranscript(entry, transcript);
+  }
+
+  /**
+   * Look up the session's goal in its whole log once, beside the turn's own reads rather than before
+   * them: a long log without a goal is read back to its last compaction. A failed read is tried again
+   * on a later read, a minute on.
+   */
+  private seedGoal(entry: Entry): void {
+    const transcript = entry.transcript;
+    const sessionId = transcript?.sessionId;
+    if (!transcript || !sessionId || sessionId !== entry.file?.sessionId) return;
+    if (entry.goalSeed?.sessionId === sessionId || entry.goalSeeding === sessionId || this.now() < (entry.goalRetryAt ?? -Infinity)) return;
+    entry.goalSeeding = sessionId;
+    void (this.opts.lastGoal ?? lastClaudeGoal)(transcript.path).then(
+      (goal) => {
+        if (entry.goalSeeding !== sessionId) return;
+        entry.goalSeeding = undefined;
+        entry.goalSeed = { sessionId, goal };
+        this.update(entry);
+      },
+      () => {
+        if (entry.goalSeeding === sessionId) entry.goalSeeding = undefined;
+        entry.goalRetryAt = this.now() + GOAL_RETRY_MS;
+      },
+    );
+  }
+
+  private watchTranscript(entry: Entry, transcript: NonNullable<Entry["transcript"]>): void {
+    if (transcript.watcher || entry.dropped || entry.transcript !== transcript) return;
+    transcript.watcher = this.watchFile(transcript.path, () => {
+      void this.readTail(transcript).then(() => this.update(entry));
+    });
+  }
+
+  /** The goal the pane's Claude works toward: its tail's newest goal row, else its whole transcript's. */
+  private goalOf(entry: Entry): ClaudeGoal | undefined {
+    const sessionId = entry.file?.sessionId;
+    if (!sessionId) return undefined;
+    const seen = entry.transcript?.sessionId === sessionId ? entry.transcript.scan.goal : undefined;
+    const goal = seen !== undefined ? seen : entry.goalSeed?.sessionId === sessionId ? entry.goalSeed.goal : null;
+    return goal ?? undefined;
   }
 
   private async resolveCodex(entry: Entry, pids: number[]): Promise<void> {
@@ -411,11 +461,20 @@ export class AgentStates {
 
   private update(entry: Entry): void {
     if (entry.dropped) return;
+    if (entry.agent === "claude") this.seedGoal(entry);
     const scan = entry.transcript?.scan ?? null;
     const limit = entry.agent === "claude" ? claudeLimit(scan, this.profileReply(entry), this.now()) : undefined;
-    const state = entry.agent === "claude"
+    const goal = entry.agent === "claude" ? this.goalOf(entry) : undefined;
+    const turn = entry.agent === "claude"
       ? entry.file ? claudeTurn(entry.file, scan, entry.busySince, limit) : undefined
       : entry.rollout ? codexTurn(entry.rollout.scan) ?? undefined : undefined;
+    const state = turn && goal ? { ...turn, goal } : turn;
+    // At rest the transcript is watched only for a goal: clearing one writes the transcript, and
+    // nothing says the session file moves with it.
+    if (entry.agent === "claude" && entry.file?.status !== "busy" && entry.transcript) {
+      if (goal) this.watchTranscript(entry, entry.transcript);
+      else this.closeTail(entry.transcript);
+    }
     clearTimeout(entry.limitTimer);
     if (state?.limit) {
       // At most an hour: a timer past 2^31 ms fires at once, and the next look re-arms it.
@@ -498,6 +557,52 @@ export class AgentStates {
       this.dirWatchers.clear();
     }
   }
+}
+
+/**
+ * The goal a Claude transcript leaves active (see {@link ClaudeGoal}): its newest goal row, read
+ * backwards a chunk at a time, stopping at the first goal row or compaction boundary. Rows are found by
+ * their raw markers and confirmed by parsing the whole line, so the same words quoted inside another
+ * row never count. A line longer than a chunk is dropped while it is read: a goal row is never that long.
+ */
+export async function lastClaudeGoal(path: string, chunk = GOAL_CHUNK_BYTES): Promise<ClaudeGoal | null> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const st = await file.stat();
+    if (!st.isFile()) return null;
+    let end = st.size;
+    let carry = Buffer.alloc(0);
+    while (end > 0) {
+      const start = Math.max(0, end - chunk);
+      const read = Buffer.alloc(end - start);
+      const { bytesRead } = await file.read(read, 0, read.length, start);
+      const bytes = Buffer.concat([read.subarray(0, bytesRead), carry]);
+      // The bytes before the first newline belong to a line that starts in an earlier chunk.
+      const from = start === 0 ? 0 : bytes.indexOf(0x0a) + 1;
+      let below = bytes.length;
+      while (from > 0 || start === 0) {
+        const at = Math.max(...GOAL_MARKS.map((mark) => (below < mark.length ? -1 : bytes.lastIndexOf(mark, below - mark.length))));
+        if (at < from) break;
+        const lineStart = bytes.lastIndexOf(0x0a, at) + 1;
+        const nl = bytes.indexOf(0x0a, at);
+        const goal = goalLine(bytes.toString("utf8", lineStart, nl === -1 ? bytes.length : nl));
+        if (goal !== undefined) return goal;
+        below = lineStart;
+      }
+      carry = from > 0 && from <= chunk ? Buffer.from(bytes.subarray(0, from)) : Buffer.alloc(0);
+      end = start;
+    }
+    return null;
+  } finally { await file.close(); }
+}
+
+const GOAL_MARKS = ['"type":"goal_status"', '"subtype":"compact_boundary"'].map((mark) => Buffer.from(mark));
+
+function goalLine(text: string): ClaudeGoal | null | undefined {
+  try {
+    const row: unknown = JSON.parse(text);
+    return row && typeof row === "object" ? claudeGoalRow(row as Record<string, unknown>) : undefined;
+  } catch { return undefined; }
 }
 
 export async function readSmall(path: string): Promise<string | null> {

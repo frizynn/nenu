@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   ClaudeTurnScan,
+  claudeGoalRow,
   claudeLimit,
   claudeSessionDirs,
   claudeTurn,
@@ -238,5 +239,55 @@ describe("Claude usage limit", () => {
     scan.line(JSON.stringify({ type: "assistant", timestamp: "2026-10-21T21:37:00.000Z", isApiErrorMessage: false, message: { model: "<synthetic>", content: [{ type: "text", text: "No response requested." }] } }));
     expect(scan.limit?.resetsAt).toBe(RESETS);
     expect(scan.lastReply).toBe(-Infinity);
+  });
+});
+
+describe("Claude goal", () => {
+  // Real goal rows (Claude 2.1.296–2.1.310, four sessions), reduced to the fields Claude wrote and the
+  // operator's words replaced: set while a turn ran, checked, met, cleared with /goal stop, set again
+  // over another goal, and restated after a compaction.
+  const goal = (name: string) => {
+    const s = new ClaudeTurnScan();
+    const seen: (string | null | undefined)[] = [];
+    for (const row of lines(name)) {
+      s.line(row);
+      seen.push(s.goal === undefined ? undefined : s.goal?.condition ?? null);
+    }
+    return { goal: s.goal, seen };
+  };
+
+  test("a goal set while Claude worked is active through a check that finds it not met", () => {
+    const { goal: active, seen } = goal("claude-2.1.310-goal-active.jsonl");
+    expect(active).toEqual({ condition: "Merge what is pending, deploy, and send me the messages" });
+    // Active from its first row on: the queued "Goal set" and the meta Stop hook rows change nothing.
+    expect(seen.every((at) => at === "Merge what is pending, deploy, and send me the messages")).toBe(true);
+  });
+
+  test("a met goal and a cleared one are gone, each by its own row", () => {
+    const met = goal("claude-2.1.296-goal-met.jsonl").seen;
+    // Set, checked and not met, then met; the compaction rows after it bring nothing back.
+    expect(met.slice(0, 5).every((at) => at === "Add a benchmark per agent and merge it")).toBe(true);
+    expect(met.slice(5)).toEqual([null, null, null]);
+    // Cleared: the sentinel says met, before the "Goal cleared" rows.
+    expect(goal("claude-2.1.296-goal-cleared.jsonl").seen.slice(-3)).toEqual([null, null, null]);
+  });
+
+  test("a goal set over another one replaces it", () => {
+    expect(goal("claude-2.1.308-goal-replaced.jsonl").goal).toEqual({ condition: "Simplify the prompt and keep it human" });
+  });
+
+  test("a compaction restates an active goal right after its boundary", () => {
+    const { goal: after, seen } = goal("claude-2.1.308-goal-compacted.jsonl");
+    expect(after).toEqual({ condition: "Hill-climb the prompt to 100% on every case" });
+    // As a resume reads it: only rows after the boundary count, and the restated row is one.
+    expect(seen.slice(-3)).toEqual([null, null, "Hill-climb the prompt to 100% on every case"]);
+  });
+
+  test("an impossible goal ends it, and a subagent's goal row is not this session's", () => {
+    // `failed` is read in 2.1.310's code (an evaluator that finds the goal impossible), not seen in a log.
+    expect(claudeGoalRow({ type: "attachment", attachment: { type: "goal_status", met: false, failed: true, condition: "x" } })).toBeNull();
+    expect(claudeGoalRow({ type: "attachment", isSidechain: true, attachment: { type: "goal_status", met: false, condition: "x" } })).toBeUndefined();
+    expect(claudeGoalRow({ type: "attachment", attachment: { type: "goal_status", met: false, condition: "  " } })).toBeNull();
+    expect(claudeGoalRow({ type: "attachment", attachment: { type: "queued_command", prompt: "Goal set: x" } })).toBeUndefined();
   });
 });

@@ -10,7 +10,7 @@ import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
 import { detailTitle, ProcessDetailView, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
-import { ComposerPlace, NEEDS_MARK, WORKING_MARK, type ChipId, type ChipView } from "@/components/composer-chips";
+import { ComposerPlace, GOAL_MARK, GoalDetail, NEEDS_MARK, WORKING_MARK, type ChipId, type ChipView } from "@/components/composer-chips";
 import { RunNamedAbove } from "@/components/activity/workflow-detail";
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -933,6 +933,8 @@ export const AgentChat = memo(function AgentChat({
   const workingCount = sessionWork ? processes.running.length : 0;
   const finished = sessionWork ? processes.done.length : 0;
   const publishedCount = sessionWork ? published.length : 0;
+  // The goal Claude works toward, read from its own log by the bridge (ADR 0133).
+  const goal = sessionWork ? agent?.turn?.goal : undefined;
   const chips: ChipView[] = [
     ...(needsCount > 0 ? [{ id: "needs" as const, label: "Needs you", count: needsCount, mark: NEEDS_MARK, content: processList({ waiting: processes.waiting }) }] : []),
     // Nothing runs: what finished asks nothing of you, so it leaves the line for the ⋯ menu, one tap
@@ -943,6 +945,7 @@ export const AgentChat = memo(function AgentChat({
       count: workingCount > 0 ? workingCount : finished > 0 ? finished : publishedCount, mark: workingCount > 0 ? WORKING_MARK : undefined,
       tucked: workingCount === 0, icon: ListChecks,
       content: processList({ running: processes.running, done: processes.done }, published, undefined, workingCount === 0) }] : []),
+    ...(goal ? [{ id: "goal" as const, label: "Goal", count: 0, mark: GOAL_MARK, detail: goal.condition, content: <GoalDetail condition={goal.condition} /> }] : []),
   ];
   const openChip = (next: ChipId | null) => { setChip(next); if (!desktop) setProcessDetail(null); };
   const tuckedActions: ConversationAction[] = chips.flatMap((c) => c.tucked && c.icon ? [{ id: `chip-${c.id}`,

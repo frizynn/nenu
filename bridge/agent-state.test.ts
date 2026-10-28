@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { statStartTicks } from "./agent-state-sources.ts";
-import { AgentStates, sameProcess, type WatchFn } from "./agent-state.ts";
+import { AgentStates, lastClaudeGoal, sameProcess, type WatchFn } from "./agent-state.ts";
 import * as lines from "./journal/lines.ts";
 import type { AgentView, LiveEvent } from "./types.ts";
 
@@ -410,6 +410,195 @@ describe("Claude panes, races and restarts", () => {
     await settle();
     expect(service.get("s", "w1:p1")).toEqual({ running: false, background: true, source: "claude-session" });
   });
+});
+
+describe("Claude goal", () => {
+  // The real goal rows (test-support/agent-state/*goal*), written as Claude writes them: one compact
+  // JSON object per line.
+  const goalRows = async (name: string) => (await readFile(join(import.meta.dirname, "test-support", "agent-state", name), "utf8"))
+    .split("\n").filter(Boolean).map((row) => JSON.stringify(JSON.parse(row)) + "\n").join("");
+  // A long row like Claude's request blobs, and one that quotes a goal row's words inside its text.
+  const blob = (bytes: number) => JSON.stringify({ type: "api-request-blob", message: { role: "user", content: "x".repeat(bytes) } }) + "\n";
+  const quoting = JSON.stringify({ type: "user", timestamp: iso(T0), message: { content: '{"type":"goal_status","met":false,"condition":"quoted"} and "subtype":"compact_boundary"' } }) + "\n";
+  const until = async (test: () => boolean) => { for (let i = 0; i < 100 && !test(); i++) await settle(); };
+
+  test("the backward look finds the newest goal row across chunks, past long rows and quoted words", async () => {
+    const cases: [string, string | null][] = [
+      ["claude-2.1.310-goal-active.jsonl", "Merge what is pending, deploy, and send me the messages"],
+      ["claude-2.1.296-goal-met.jsonl", null],
+      ["claude-2.1.296-goal-cleared.jsonl", null],
+      ["claude-2.1.308-goal-replaced.jsonl", "Simplify the prompt and keep it human"],
+      ["claude-2.1.308-goal-compacted.jsonl", "Hill-climb the prompt to 100% on every case"],
+    ];
+    for (const [name, condition] of cases) {
+      await writeFile(transcript, blob(5_000) + (await goalRows(name)) + blob(3_000) + quoting + blob(700) + quoting);
+      // Chunks smaller than the long rows, which are dropped while read, so rows straddle chunks.
+      for (const chunk of [1_024, 4_096, 1024 * 1024]) {
+        expect(await lastClaudeGoal(transcript, chunk)).toEqual(condition === null ? null : { condition });
+      }
+    }
+  });
+
+  test("the backward look ends a goal by its met row, as a forward read does", async () => {
+    const met = (await goalRows("claude-2.1.296-goal-met.jsonl")).split("\n").slice(0, 6).join("\n") + "\n";
+    await writeFile(transcript, met + blob(3_000));
+    expect(await lastClaudeGoal(transcript, 1_024)).toBeNull();
+    // Without its met row, the same log holds the goal it set.
+    await writeFile(transcript, met.split("\n").slice(0, 5).join("\n") + "\n" + blob(3_000));
+    expect(await lastClaudeGoal(transcript, 1_024)).toEqual({ condition: "Add a benchmark per agent and merge it" });
+  });
+
+  test("a goal set before a compaction that did not restate it is gone; a log with no goal row has none", async () => {
+    const boundary = JSON.stringify({ type: "system", subtype: "compact_boundary", timestamp: iso(T0) }) + "\n";
+    await writeFile(transcript, (await goalRows("claude-2.1.310-goal-active.jsonl")) + boundary + blob(2_000));
+    expect(await lastClaudeGoal(transcript, 1_024)).toBeNull();
+    await writeFile(transcript, blob(2_000) + quoting);
+    expect(await lastClaudeGoal(transcript, 1_024)).toBeNull();
+  });
+
+  test("a Claude at rest shows the goal its log holds far back, watches for it to clear, and stops watching then", async () => {
+    const w = watches();
+    const { service } = states(w);
+    // The goal sits further back than the look at rest reads (1 MB), behind a reply.
+    const reply = JSON.stringify({ type: "assistant", timestamp: iso(T0 + 5), message: { model: "claude-opus-5-5", stop_reason: "end_turn", content: [] } }) + "\n";
+    await writeFile(transcript, (await goalRows("claude-2.1.310-goal-active.jsonl")) + blob(1_100_000) + reply);
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0 + 10));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await until(() => service.get("s", "w1:p1")?.goal !== undefined);
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session", goal: { condition: "Merge what is pending, deploy, and send me the messages" } });
+    expect(w.paths()).toContain(transcript);
+
+    // `/goal clear` at rest: the sentinel row Claude writes, and no session file change.
+    const cleared = (await goalRows("claude-2.1.296-goal-cleared.jsonl")).split("\n").slice(4).join("\n");
+    await appendFile(transcript, cleared);
+    w.fire(transcript);
+    await until(() => service.get("s", "w1:p1")?.goal === undefined);
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
+    expect(w.paths()).toEqual([sessions]);
+    service.close();
+  });
+
+  test("a goal set in a turn shows while it runs and stays once the turn ends", async () => {
+    const w = watches();
+    const { service } = states(w);
+    await writeFile(transcript, reply0());
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await until(() => service.get("s", "w1:p1") !== undefined);
+    expect(service.get("s", "w1:p1")?.goal).toBeUndefined();
+
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 10));
+    w.fire(sessions, `${PID}.json`);
+    await settle();
+    await appendFile(transcript, (await goalRows("claude-2.1.308-goal-replaced.jsonl")));
+    w.fire(transcript);
+    await until(() => service.get("s", "w1:p1")?.goal !== undefined);
+    expect(service.get("s", "w1:p1")?.goal).toEqual({ condition: "Simplify the prompt and keep it human" });
+
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0 + 2_000));
+    w.fire(sessions, `${PID}.json`);
+    await settle();
+    expect(service.get("s", "w1:p1")?.goal).toEqual({ condition: "Simplify the prompt and keep it human" });
+    expect(w.paths()).toContain(transcript);
+    service.close();
+  });
+
+  test("a look at rest that watched the first short tail for a goal leaves no watch behind when the long read replaces it", async () => {
+    const open = new Set<number>();
+    const listeners = new Map<string, () => void>();
+    let next = 0;
+    const watch: WatchFn = (path, onChange) => {
+      const id = ++next;
+      open.add(id);
+      listeners.set(path === sessions ? path : `${path}#${id}`, () => onChange("change", path === sessions ? `${PID}.json` : null));
+      return { close: () => { open.delete(id); listeners.delete(`${path}#${id}`); } };
+    };
+    // The goal and the reply sit further back than the first short look reads.
+    const reply = JSON.stringify({ type: "assistant", timestamp: iso(T0 + 5), message: { model: "claude-opus-5-5", stop_reason: "end_turn", content: [] } }) + "\n";
+    await writeFile(transcript, (await goalRows("claude-2.1.310-goal-active.jsonl")) + reply + blob(200_000));
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0 + 10));
+    const gate = () => { let release!: () => void; let reach!: () => void; const reached = new Promise<void>((r) => (reach = r)); const released = new Promise<void>((r) => (release = r)); return { reach, reached, release, released }; };
+    const firstRead = gate();
+    const lookups = [gate(), gate()];
+    const realRead = lines.readAppended;
+    let reads = 0;
+    const spy = spyOn(lines, "readAppended").mockImplementation(async (...args: Parameters<typeof realRead>) => {
+      if (reads++ === 0) { firstRead.reach(); await firstRead.released; }
+      return realRead(...args);
+    });
+    let calls = 0;
+    const { service } = states(watches(), {
+      watch,
+      claudeTranscript: async (id) => {
+        const g = lookups[calls++];
+        if (g) { g.reach(); await g.released; }
+        return id === SESSION_ID ? transcript : null;
+      },
+    });
+    try {
+      service.sync("s", herdr([PID]), [pane("claude")]);
+      await lookups[0]!.reached;
+      // A second look at rest (the session file was written) while the first finds the transcript.
+      listeners.get(sessions)?.();
+      await lookups[1]!.reached;
+      lookups[0]!.release();
+      await firstRead.reached;
+      // The second look finds the first one's short tail and, the goal being active, watches it.
+      lookups[1]!.release();
+      await settle();
+      // The first look finds no reply in its short tail and reads the long one into a new tail.
+      firstRead.release();
+      await until(() => service.get("s", "w1:p1")?.goal !== undefined);
+      await settle();
+      expect([...listeners.keys()].filter((k) => k.includes(".jsonl"))).toHaveLength(1);
+      service.close();
+      expect(open.size).toBe(0);
+    } finally { spy.mockRestore(); }
+  });
+
+  test("the goal's look never holds back the turn, and a failed look is tried again on a later read", async () => {
+    const w = watches();
+    let release!: (goal: { condition: string } | null) => void;
+    let looks = 0;
+    let fail = false;
+    let clock = T0;
+    const { service } = states(w, {
+      now: () => clock,
+      lastGoal: () => {
+        looks++;
+        if (fail) return Promise.reject(new Error("EMFILE"));
+        return new Promise((resolve) => { release = resolve; });
+      },
+    });
+    await writeFile(transcript, JSON.stringify({ type: "user", timestamp: iso(T0 + 20), message: { content: "go" } }) + "\n");
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 10));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await until(() => service.get("s", "w1:p1") !== undefined);
+    expect(service.get("s", "w1:p1")).toEqual({ running: true, queued: null, source: "claude-session" });
+    expect(looks).toBe(1);
+    release({ condition: "ship it" });
+    await until(() => service.get("s", "w1:p1")?.goal !== undefined);
+    expect(service.get("s", "w1:p1")?.goal).toEqual({ condition: "ship it" });
+    service.close();
+
+    // Another bridge whose look fails: nothing shows, and a read a minute later looks again.
+    fail = true;
+    looks = 0;
+    const second = states(watches(), { now: () => clock, lastGoal: () => (fail ? Promise.reject(new Error("EMFILE")) : (looks++, Promise.resolve({ condition: "ship it" }))) });
+    second.service.sync("s", herdr([PID]), [pane("claude")]);
+    await until(() => second.service.get("s", "w1:p1") !== undefined);
+    await settle();
+    expect(second.service.get("s", "w1:p1")?.goal).toBeUndefined();
+    fail = false;
+    clock += 61_000;
+    await appendFile(transcript, JSON.stringify({ type: "user", timestamp: iso(T0 + 30), message: { content: "more" } }) + "\n");
+    expect(await second.service.fresh("s", pane("claude"), herdr([PID]), { remap: false })).toBeDefined();
+    await until(() => second.service.get("s", "w1:p1")?.goal !== undefined);
+    expect(looks).toBe(1);
+    second.service.close();
+  });
+
+  const reply0 = () => JSON.stringify({ type: "assistant", timestamp: iso(T0 - 5), message: { model: "claude-opus-5-5", stop_reason: "end_turn", content: [] } }) + "\n";
 });
 
 describe("Codex panes", () => {
