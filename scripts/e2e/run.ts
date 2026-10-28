@@ -2147,7 +2147,7 @@ async function chipLine(): Promise<void> {
       { name: "terminal", paneId: "w1:line", status: "working", activity: background, raw: true },
     ] as const;
     for (const [i, moment] of moments.entries()) {
-      if (moment.paneId === herd.working || "raw" in moment || "goal" in moment) continue;
+      if (moment.paneId === herd.working || "raw" in moment) continue;
       const session = `7777777${i}-7777-4777-8777-777777777777`;
       await writeChatJournal(join(folder, `${session}.jsonl`), now, 3, moment.status === "working" ? "running" : "finished");
       fake.addPane({ paneId: moment.paneId, workspaceId: "w1", tabId: "w1:t3", agent: "claude", label: "Checkout flow", sessionId: session, cwd: bridge.dir,
@@ -2299,7 +2299,7 @@ function measureAboveBox() {
     chipLabels: Array.from(chipRow?.querySelectorAll("button") ?? []).map((b) => b.getAttribute("aria-label")),
     chipsScroll: chipRow ? { scrollWidth: chipRow.scrollWidth, clientWidth: chipRow.clientWidth } : null,
     chipsUnderBox: chipsRect === null || (chipRow!.closest(".composer-meta") !== null && chipsRect.top >= box.bottom),
-    goalChip: chipRow?.querySelector('[data-chip="goal"]') !== null && chipRow?.querySelector('[data-chip="goal"]') !== undefined,
+    goalChip: Boolean(chipRow?.querySelector('[data-chip="goal"]')),
     // A branch named in the row keeps some of its name: never a bare icon.
     rowBroken: overlaps || Array.from(document.querySelectorAll(".composer-place-branch .truncate")).some((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().width < 24),
     stop: rect(stop),

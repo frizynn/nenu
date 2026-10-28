@@ -439,6 +439,15 @@ describe("Claude goal", () => {
     }
   });
 
+  test("the backward look ends a goal by its met row, as a forward read does", async () => {
+    const met = (await goalRows("claude-2.1.296-goal-met.jsonl")).split("\n").slice(0, 6).join("\n") + "\n";
+    await writeFile(transcript, met + blob(3_000));
+    expect(await lastClaudeGoal(transcript, 1_024)).toBeNull();
+    // Without its met row, the same log holds the goal it set.
+    await writeFile(transcript, met.split("\n").slice(0, 5).join("\n") + "\n" + blob(3_000));
+    expect(await lastClaudeGoal(transcript, 1_024)).toEqual({ condition: "Add a benchmark per agent and merge it" });
+  });
+
   test("a goal set before a compaction that did not restate it is gone; a log with no goal row has none", async () => {
     const boundary = JSON.stringify({ type: "system", subtype: "compact_boundary", timestamp: iso(T0) }) + "\n";
     await writeFile(transcript, (await goalRows("claude-2.1.310-goal-active.jsonl")) + boundary + blob(2_000));
@@ -492,6 +501,59 @@ describe("Claude goal", () => {
     expect(service.get("s", "w1:p1")?.goal).toEqual({ condition: "Simplify the prompt and keep it human" });
     expect(w.paths()).toContain(transcript);
     service.close();
+  });
+
+  test("a look at rest that watched the first short tail for a goal leaves no watch behind when the long read replaces it", async () => {
+    const open = new Set<number>();
+    const listeners = new Map<string, () => void>();
+    let next = 0;
+    const watch: WatchFn = (path, onChange) => {
+      const id = ++next;
+      open.add(id);
+      listeners.set(path === sessions ? path : `${path}#${id}`, () => onChange("change", path === sessions ? `${PID}.json` : null));
+      return { close: () => { open.delete(id); listeners.delete(`${path}#${id}`); } };
+    };
+    // The goal and the reply sit further back than the first short look reads.
+    const reply = JSON.stringify({ type: "assistant", timestamp: iso(T0 + 5), message: { model: "claude-opus-5-5", stop_reason: "end_turn", content: [] } }) + "\n";
+    await writeFile(transcript, (await goalRows("claude-2.1.310-goal-active.jsonl")) + reply + blob(200_000));
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0 + 10));
+    const gate = () => { let release!: () => void; let reach!: () => void; const reached = new Promise<void>((r) => (reach = r)); const released = new Promise<void>((r) => (release = r)); return { reach, reached, release, released }; };
+    const firstRead = gate();
+    const lookups = [gate(), gate()];
+    const realRead = lines.readAppended;
+    let reads = 0;
+    const spy = spyOn(lines, "readAppended").mockImplementation(async (...args: Parameters<typeof realRead>) => {
+      if (reads++ === 0) { firstRead.reach(); await firstRead.released; }
+      return realRead(...args);
+    });
+    let calls = 0;
+    const { service } = states(watches(), {
+      watch,
+      claudeTranscript: async (id) => {
+        const g = lookups[calls++];
+        if (g) { g.reach(); await g.released; }
+        return id === SESSION_ID ? transcript : null;
+      },
+    });
+    try {
+      service.sync("s", herdr([PID]), [pane("claude")]);
+      await lookups[0]!.reached;
+      // A second look at rest (the session file was written) while the first finds the transcript.
+      listeners.get(sessions)?.();
+      await lookups[1]!.reached;
+      lookups[0]!.release();
+      await firstRead.reached;
+      // The second look finds the first one's short tail and, the goal being active, watches it.
+      lookups[1]!.release();
+      await settle();
+      // The first look finds no reply in its short tail and reads the long one into a new tail.
+      firstRead.release();
+      await until(() => service.get("s", "w1:p1")?.goal !== undefined);
+      await settle();
+      expect([...listeners.keys()].filter((k) => k.includes(".jsonl"))).toHaveLength(1);
+      service.close();
+      expect(open.size).toBe(0);
+    } finally { spy.mockRestore(); }
   });
 
   const reply0 = () => JSON.stringify({ type: "assistant", timestamp: iso(T0 - 5), message: { model: "claude-opus-5-5", stop_reason: "end_turn", content: [] } }) + "\n";

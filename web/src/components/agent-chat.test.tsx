@@ -1861,11 +1861,20 @@ describe("AgentChat — a Claude working toward a goal", () => {
     expect(within(panel).getByText(/until this holds/)).toBeVisible();
   });
 
-  it("draws no Goal chip once the goal is met or cleared", async () => {
-    const agent = claude();
-    renderChat({ paneId: agent.paneId, agent, agents: [agent] });
-    expect(await screen.findByRole("textbox")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Goal/ })).not.toBeInTheDocument();
+  it("takes the Goal chip away once the bridge says the goal is met or cleared", async () => {
+    function Chat() {
+      const [goal, setGoal] = useState<{ condition: string } | undefined>({ condition: CONDITION });
+      const agent = claude(goal);
+      return <>
+        <button type="button" onClick={() => setGoal(undefined)}>goal met</button>
+        <AgentChat paneId={agent.paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]} text="" onBack={vi.fn()} onSelect={vi.fn()} />
+      </>;
+    }
+    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <Chat /> }], { initialEntries: ["/pane/goal"] });
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByRole("button", { name: `Goal: ${CONDITION}` })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "goal met" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^Goal/ })).not.toBeInTheDocument());
   });
 });
 

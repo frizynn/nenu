@@ -109,8 +109,8 @@
    box beside the model, quiet as its other controls: no line of their own above the box (ADR 0108). The
    open chip's panel floats over the thread from the box's top edge (.composer-dock), so it takes no
    height and neither the box nor the conversation moves when it opens. Marks are still; only the
-   panel moves, once, as it opens. A narrow box keeps the word only for Needs you: the rest are a mark
-   and a count, named in full to a screen reader. */
+   panel moves, once, as it opens. A narrow box keeps the word only for Needs you and Goal (it has no
+   count): the rest are a mark and a count, named in full to a screen reader. */
 .composer-dock { position: relative; container: composer / inline-size; }
 .composer-chips { display: flex; flex: 0 0 auto; }
 .composer-chip-row { display: flex; align-items: center; gap: 2px; }
