@@ -1743,6 +1743,41 @@ describe("AgentChat — Send while only background work runs", () => {
     expect(screen.queryByText(/when should it read this/i)).not.toBeInTheDocument();
     expect(wire.sends).toEqual([]);
   });
+
+  // Measured 2026-10-28 on a real log (Claude Code, `/goal` typed from Nenu mid-turn): Claude runs the
+  // command and logs no turn of the operator's, only a queued "Goal set: …" auto-continuation and an
+  // isMeta "A session-scoped Stop hook is now active…" note. A bubble for it never landed, so it sat
+  // at the thread's end with Working… under it, below every answer the goal's turns wrote.
+  it("draws no bubble for a slash command it queued, so the agent's answers stay the thread's end", async () => {
+    const goal = "/goal merge everything and deploy";
+    let delivered: Array<Record<string, unknown>> = [];
+    const page = () => HttpResponse.json({ available: true, scope: "scope", messages: [], delivered });
+    server.use(
+      http.get(/\/api\/pane\/[^/]+\/queue$/, page),
+      http.post(/\/api\/pane\/[^/]+\/queue$/, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        if (body.action === "add") delivered = [{ id: body.id, text: body.text, sentAt: Date.now(), deliveryMode: "asap" }];
+        return page();
+      }),
+      http.get(/\/api\/pane\/[^/]+\/history$/, () => HttpResponse.json({
+        paneId: "background-send", available: true, total: 3, hasMore: false, fileTruncated: false, entries: [
+          { uuid: "asked", ts: "2026-10-28T09:14:00Z", role: "user", parts: [{ kind: "text", text: "is everything merged?" }] },
+          { uuid: "goal-note", ts: "2026-10-28T09:17:41Z", role: "note", parts: [{ kind: "context", label: "A session-scoped Stop hook is now active with condition: \"merge everything and deploy\"", text: "" }] },
+          { uuid: "answer", ts: "2026-10-28T09:20:32Z", role: "assistant", phase: "final_answer", parts: [{ kind: "text", text: "On it: merging the open PRs." }] },
+        ],
+      })),
+    );
+    const agent = claude({ running: true });
+    renderChat({ paneId: agent.paneId, agent, agents: [agent], text: "" });
+    const user = userEvent.setup();
+    const box = screen.getByRole("textbox");
+    await user.type(box, goal);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(box).toHaveValue(""));
+    expect(await screen.findByText("On it: merging the open PRs.")).toBeVisible();
+    expect(document.querySelector("[data-pending-send]")).toBeNull();
+    expect(screen.queryByText("Sent")).not.toBeInTheDocument();
+  });
 });
 
 // ADR 0120: a Claude at its account's usage limit. The line says until when; Send waits in Nenu's

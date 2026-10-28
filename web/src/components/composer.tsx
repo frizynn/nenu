@@ -439,7 +439,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (echo) {
         if (echo.state !== "queued" || echo.queueId !== accepted.id)
           updateLocalSend(sendScope, echo.id, { state: "queued", queueState: "queued", queueId: accepted.id, error: undefined });
-      } else if (nativeWorkbench) {
+      } else if (nativeWorkbench && !isSlashCommand(text)) {
+        // A slash command gets no bubble here either (send): the CLI runs it rather than logging it as
+        // the operator's turn (`/goal` becomes a meta note), so its bubble would never land and would
+        // sit at the thread's end, over everything the agent writes after it, with Working… under it.
         const id = addLocalSend(sendScope, accepted.text, "queued");
         updateLocalSend(sendScope, id, { queueId: accepted.id, agent: agent ?? undefined });
       }
