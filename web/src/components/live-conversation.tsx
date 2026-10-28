@@ -321,6 +321,19 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     if (el) pin(el);
   }, [cancelOlder, pin]);
 
+  // The list can come to stand at its end with no scroll event to say so: a fold's motion ends there,
+  // the content under the reader shrinks (a turn's Working… line goes), Find closes. Left held, the
+  // arrow stood over the tail and new turns waited behind it. There the thread follows again, as a
+  // scroll to the end does, but never while Find holds its window or an older page loads.
+  const followAtEnd = useCallback((el: HTMLElement) => {
+    if (!following.current && !searching && !request.current && atEnd(el)) followLatest();
+  }, [followLatest, searching]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!searching && el) followAtEnd(el);
+  }, [searching, followAtEnd]);
+
   useEffect(() => {
     if (localSendCount > previousSendCount.current) followLatest();
     previousSendCount.current = localSendCount;
@@ -381,12 +394,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     if (!el || !content || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       if (following.current) pin(el);
-      else holdLine(el);
+      else {
+        holdLine(el);
+        if (!restoring.current) followAtEnd(el);
+      }
     });
     observer.observe(el);
     observer.observe(content);
     return () => observer.disconnect();
-  }, [pin, holdLine]);
+  }, [pin, holdLine, followAtEnd]);
 
   // A tap on the thread's text, or a drag down of DISMISS_DRAG px, closes the keyboard. A tap on a
   // control stays the control's; a drag up or sideways (a code block) is only scrolling.
@@ -437,13 +453,10 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       release.abort();
       restoring.current = false;
       restoreFrame.current = null;
-      // A fold that leaves the list at its end (one shut at the bottom, or one whose body fits) sends
-      // no scroll event that could resume following, so the arrow stayed up over the tail and new
-      // turns waited behind it.
-      if (!following.current && atEnd(el)) followLatest();
+      followAtEnd(el);
     };
     restoreFrame.current = requestAnimationFrame(hold);
-  }, [history, followLatest]);
+  }, [history, followAtEnd]);
 
   function onScroll() {
     const el = scrollRef.current;

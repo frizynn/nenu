@@ -111,6 +111,8 @@ describe("LiveConversation", () => {
     const fold = screen.getByRole("button", { name: /^Ran git log/ });
     fireEvent.click(fold);
     fireEvent.click(fold);
+    // The clamp the shut fold causes lands during the hold, which reads no scroll event.
+    fireEvent.scroll(scroller);
     act(() => { vi.advanceTimersByTime(1_000); });
     const second = next("Output after the fold", initial);
     rerender(view(second));
@@ -124,6 +126,48 @@ describe("LiveConversation", () => {
     rerender(view(next("Held below the fold", second)));
     expect(screen.queryByText("Held below the fold")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
+  });
+
+  // Reproduced on desk and phone: Find opened and closed at the bottom left the same held window.
+  it("follows again when Find closes with the list at its end", () => {
+    const initial: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const view = (history: PaneHistoryResponse, searching: boolean) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} searching={searching} loading={false} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(initial, false));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    rerender(view(initial, true));
+    rerender(view(initial, false));
+    rerender(view({ ...initial, entries: [...fixtureTranscript, { uuid: "new", ts: "", role: "assistant", parts: [{ kind: "text", text: "Output after Find" }] }] }, false));
+    expect(screen.getByText("Output after Find")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
+  });
+
+  // A reader a little above the end, when what is under them shrinks (a turn's Working… line going):
+  // the list ends where they stand and its scrollTop never moves, so no scroll event comes.
+  it("follows again when the content under a reader shrinks to where they stand", () => {
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      cb: ResizeObserverCallback;
+      constructor(cb: ResizeObserverCallback) { this.cb = cb; }
+      observe() { observers.push(this.cb); }
+      disconnect() {}
+    });
+    onTestFinished(() => { vi.unstubAllGlobals(); });
+    const initial: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const view = (history: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(initial));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    box.top = 860;
+    fireEvent.scroll(scroller);
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
+    box.height = 970;
+    act(() => { for (const cb of [...observers]) cb([], {} as ResizeObserver); });
+    rerender(view({ ...initial, entries: [...fixtureTranscript, { uuid: "new", ts: "", role: "assistant", parts: [{ kind: "text", text: "Output after the shrink" }] }] }));
+    expect(screen.getByText("Output after the shrink")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
   });
 
   // Measured on the e2e bench with a real transcript: a new turn slid the 60-entry window (the list
