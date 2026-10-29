@@ -1,4 +1,4 @@
-import type { HerdrClient } from "./herdr-client.ts";
+import type { HerdrApi } from "./herdr-client.ts";
 import type { QueuedMessage, QueueOutcome } from "./message-queue.ts";
 import { guardedSend, type GuardedSendDeps, type SendHerdr } from "./guarded-send.ts";
 import { adapterFor } from "../web/src/lib/harness/index.ts";
@@ -100,7 +100,7 @@ export async function sendQueuedNow(
   paneId: string,
   agent: string,
   keys: string[],
-  herdr: Pick<HerdrClient, "readPane" | "sendPaneKeys">,
+  herdr: Pick<HerdrApi, "readPane" | "sendPaneKeys">,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const adapter = adapterFor(agent);
   if (!adapter?.composerReady) return { ok: false, error: "This agent cannot read queued messages early." };

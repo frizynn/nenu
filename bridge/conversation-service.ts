@@ -8,12 +8,12 @@ import { CodexSessions } from "./codex-sessions.ts";
 import { processOpenFiles } from "./agent-state.ts";
 import { isCodexSessionId } from "./journal/codex.ts";
 import type { AgentView } from "./types.ts";
-import type { HerdrClient } from "./herdr-client.ts";
+import type { HerdrApi } from "./herdr-client.ts";
 import type { TranscriptPage } from "./journal/types.ts";
 
 export interface ConversationChoice { id: string; title: string }
 type Rpc = Pick<CodexRpc, "request">;
-type SessionClient = Pick<HerdrClient, "processInfo">;
+type SessionClient = Pick<HerdrApi, "processInfo">;
 
 type Cached<T> = Map<string, { expires: number; value: Promise<T> }>;
 

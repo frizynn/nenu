@@ -8,7 +8,8 @@ import { loadConfig, type Config } from "./config.ts";
 import { EventPoker } from "./event-poker.ts";
 import { LiveEvents, snapshotWatcher } from "./live-events.ts";
 import { startMachines } from "./machines-runtime.ts";
-import { DEFAULT_TIMEOUT_MS, HerdrClient } from "./herdr-client.ts";
+import { DEFAULT_TIMEOUT_MS, HerdrClient, type HerdrApi } from "./herdr-client.ts";
+import { HcClient, hcBinary } from "./hc-client.ts";
 import { AlertDescriber, NotificationCoordinator, decisionLine, makeNotifySink, type MuteGate, type NotifyClock } from "./notifications.ts";
 import { NotifyPrefsStore } from "./notify-prefs.ts";
 import { Push } from "./push.ts";
@@ -18,6 +19,7 @@ import {
   herdTagFor,
   SessionRegistry,
   type SessionFactory,
+  type SessionParts,
 } from "./sessions.ts";
 import { Snooze } from "./snooze.ts";
 import { StateEngine } from "./state-engine.ts";
@@ -139,11 +141,10 @@ const usage = new Usage({
 await usage.load();
 
 // ── Per-session runtime factory ──────────────────────────────────────────────
-// One HerdrClient + StateEngine + EventPoker + NotificationCoordinator per herdr session. The
-// registry calls this for the primary at construction and for each session discovered later. Push,
-// snooze, notify-prefs, the audit log and the uploads dir stay process-global (shared here).
-const makeSession: SessionFactory = (name, socketPath, isPrimary) => {
-  const herdr = new HerdrClient(socketPath, DEFAULT_TIMEOUT_MS, cfg.dialMode);
+// One client + StateEngine + EventPoker + NotificationCoordinator per session. The registry calls
+// this for the primary at construction and for each session discovered later. Push, snooze,
+// notify-prefs, the audit log and the uploads dir stay process-global (shared here).
+const startSession = (name: string, herdr: HerdrApi, isPrimary: boolean): SessionParts => {
   const engine = new StateEngine(herdr, cfg.pollMs);
 
   // Event-poked polling: a long-lived events.subscribe stream pokes an immediate re-poll on any herd
@@ -190,6 +191,13 @@ const makeSession: SessionFactory = (name, socketPath, isPrimary) => {
   return { herdr, engine, poker, notifications };
 };
 
+const makeSession: SessionFactory = (name, socketPath, isPrimary) =>
+  startSession(name, new HerdrClient(socketPath, DEFAULT_TIMEOUT_MS, cfg.dialMode), isPrimary);
+
+// COLLIE_HC_CORE: herdr-core's terminals as one more session, `hc` (hc-client.ts).
+const hcBin = cfg.hcCore ? hcBinary() : null;
+if (cfg.hcCore && !hcBin) console.warn("[bridge] COLLIE_HC_CORE is on but no `hc` was found (COLLIE_HC_BIN, PATH, ~/.local/bin)");
+
 // List the session directory names under `<configRoot>/sessions` (empty if the dir doesn't exist).
 const listSessionDirs = (dir: string): string[] => {
   try {
@@ -208,6 +216,7 @@ const registry = new SessionRegistry({
   multiSession: cfg.multiSession,
   listSessionDirs,
   exists: (p) => existsSync(p),
+  ...(hcBin ? { extraSessions: [{ name: "hc", socketPath: hcBin, start: () => startSession("hc", new HcClient(hcBin), false) }] } : {}),
 });
 
 // Fail soft with a clear message if the PRIMARY Herdr isn't reachable at startup. Other sessions come

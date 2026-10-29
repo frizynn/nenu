@@ -1,7 +1,7 @@
 import { basename, dirname, join } from "node:path";
 
 import type { EventPoker } from "./event-poker.ts";
-import type { HerdrClient } from "./herdr-client.ts";
+import type { HerdrApi } from "./herdr-client.ts";
 import type { NotificationCoordinator } from "./notifications.ts";
 import type { StateEngine } from "./state-engine.ts";
 import type { SessionSummary } from "./types.ts";
@@ -81,7 +81,7 @@ export function discoverSessionSockets(
 
 /** The live per-session pieces a factory builds. push/snooze/notify-prefs/audit stay process-global. */
 export interface SessionParts {
-  herdr: HerdrClient;
+  herdr: HerdrApi;
   engine: StateEngine;
   poker: EventPoker;
   notifications: NotificationCoordinator;
@@ -96,7 +96,7 @@ export interface SessionRuntime extends SessionParts {
 
 /**
  * Builds (and starts + wires) the runtime for one session. Injected into the registry so the bridge
- * supplies the real HerdrClient/StateEngine/EventPoker/NotificationCoordinator wiring while tests can
+ * supplies the real HerdrApi/StateEngine/EventPoker/NotificationCoordinator wiring while tests can
  * pass fakes. `isPrimary` is threaded so the factory can pick the primary's bare notification tag.
  */
 export type SessionFactory = (name: string, socketPath: string, isPrimary: boolean) => SessionParts;
@@ -114,6 +114,11 @@ interface SessionRegistryOpts {
   listSessionDirs: (dir: string) => string[];
   /** Whether a path exists (real fs in the bridge). */
   exists: (p: string) => boolean;
+  /**
+   * Sessions that are not Herdr sockets (herdr-core): each starts itself at construction, and refresh
+   * never disposes it or starts a Herdr session over its name. `socketPath` is only what it reports.
+   */
+  extraSessions?: Array<{ name: string; socketPath: string; start: () => SessionParts }>;
 }
 
 /**
@@ -129,6 +134,7 @@ export class SessionRegistry {
   private readonly listSessionDirs: (dir: string) => string[];
   private readonly exists: (p: string) => boolean;
   private readonly primaryName: string;
+  private readonly extraNames: Set<string>;
 
   constructor(opts: SessionRegistryOpts) {
     this.configRoot = opts.configRoot;
@@ -139,6 +145,12 @@ export class SessionRegistry {
     this.primaryName = sessionNameFor(opts.primarySocketPath, opts.configRoot);
     // The primary comes up eagerly — it's the fallback for every session-less request.
     this.runtimes.set(this.primaryName, this.spawn(this.primaryName, opts.primarySocketPath, true));
+    this.extraNames = new Set();
+    for (const { name, socketPath, start } of opts.extraSessions ?? []) {
+      if (this.runtimes.has(name)) continue;
+      this.extraNames.add(name);
+      this.runtimes.set(name, { name, isPrimary: false, socketPath, ...start() });
+    }
   }
 
   /** The primary session's registry name (`"default"` unless HERDR_SOCKET_PATH names a session). */
@@ -195,8 +207,9 @@ export class SessionRegistry {
   async refresh(): Promise<void> {
     if (!this.multiSession) return;
     const discovered = discoverSessionSockets(this.configRoot, this.listSessionDirs, this.exists);
-    const seen = new Set<string>([this.primaryName]);
+    const seen = new Set<string>([this.primaryName, ...this.extraNames]);
     for (const { name, socketPath } of discovered) {
+      if (this.extraNames.has(name)) continue; // an extra session owns its name
       seen.add(name);
       if (this.runtimes.has(name)) continue;
       this.runtimes.set(name, this.spawn(name, socketPath, false));

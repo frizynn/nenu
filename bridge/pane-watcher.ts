@@ -1,4 +1,4 @@
-import type { HerdrClient } from "./herdr-client.ts";
+import type { HerdrApi } from "./herdr-client.ts";
 import { LiveThrottle } from "./live-events.ts";
 import type { LivePublisher } from "./types.ts";
 
@@ -40,7 +40,7 @@ export function quietDelay(quiet: number, every: number, max: number): number {
   return Math.min(every * 2 ** quiet, Math.max(max, every));
 }
 
-export type PaneReader = Pick<HerdrClient, "readPane">;
+export type PaneReader = Pick<HerdrApi, "readPane">;
 
 interface Watch {
   readonly session: string;

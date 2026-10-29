@@ -40,6 +40,8 @@ export interface PaneIO {
   readPane(paneId: string, source: "recent", lines: number, format: "ansi"): Promise<PaneRead>;
   sendPaneKeys(paneId: string, keys: string[]): Promise<void>;
   sendPaneText(paneId: string, text: string): Promise<void>;
+  /** The session's screen text blinks between reads (herdr-core), so an answer re-reads before refusing. */
+  readonly screenBlinks?: boolean;
 }
 
 /** How one option is answered, kept bridge-side: the wire only names the option by index. */
@@ -95,6 +97,9 @@ export type AnswerResult = { status: 200 | 400 | 409 | 422 | 502; outcome: Answe
 
 /** Settle time between the multi-select walk's pointer moves (multi-select-action.ts). */
 const NAV_SETTLE_MS = 250;
+/** Reads an answer may take to find the dialog it was tapped on on a blinking screen, and the wait between them. */
+const ANSWER_READS = 4;
+const ANSWER_REREAD_MS = 350;
 /** A matched dialog regex keeps a pane eligible for detection this long even before Herdr says blocked. */
 const OUTPUT_MATCH_WINDOW_MS = 30_000;
 /** How long a client's list reuses a pane read; follow() re-reads on every herd or screen change. */
@@ -650,13 +655,23 @@ export class Interactions {
    * caller holds the pane's write lock and has already passed the write gate.
    */
   async answer(session: string, io: PaneIO, pane: AgentView, body: AnswerRequest): Promise<AnswerResult> {
-    let read: PaneRead;
-    try {
-      read = await io.readPane(pane.paneId, "recent", this.lines, "ansi");
-    } catch (err) {
-      return { status: 502, outcome: { ok: false, error: `herdr read failed: ${(err as Error).message}` } };
+    const hints = this.panes.get(paneKey(session, pane.paneId))?.detection?.interaction.hints ?? [];
+    let detection: Detection | null = null;
+    // A screen that blinks (Claude's pending-tool bullet comes and goes about every half second,
+    // measured on herdr-core) can read as another dialog for a moment. A few re-reads inside one blink
+    // period find the dialog the operator saw again; one that really changed never matches.
+    const reads = io.screenBlinks ? ANSWER_READS : 1;
+    for (let attempt = 0; attempt < reads; attempt++) {
+      if (attempt > 0) await this.sleep(ANSWER_REREAD_MS);
+      let read: PaneRead;
+      try {
+        read = await io.readPane(pane.paneId, "recent", this.lines, "ansi");
+      } catch (err) {
+        return { status: 502, outcome: { ok: false, error: `herdr read failed: ${(err as Error).message}` } };
+      }
+      detection = this.store(session, pane, read, hints);
+      if (!detection || detection.interaction.signature === body.signature) break;
     }
-    const detection = this.store(session, pane, read, this.panes.get(paneKey(session, pane.paneId))?.detection?.interaction.hints ?? []);
     if (!detection || detection.interaction.signature !== body.signature) return changed("The question changed in the terminal. Nothing was sent.");
     const choice = detection.choices[body.optionIndex];
     if (!choice) return { status: 400, outcome: { ok: false, error: "unknown option" } };

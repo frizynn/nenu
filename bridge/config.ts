@@ -234,6 +234,8 @@ export interface Config {
    * already-discovered session; they never build a filesystem path.
    */
   multiSession: boolean;
+  /** herdr-core (`hc`) terminals as one more session named `hc` (COLLIE_HC_CORE). Off by default. */
+  hcCore: boolean;
   /**
    * Whether `tailscale serve` is bypassed (COLLIE_SKIP_SERVE=1) because an operator-run reverse
    * proxy (Caddy/Nginx) fronts the loopback bridge instead. The bridge itself handles every request
@@ -365,6 +367,7 @@ export function loadConfig(): Config {
     vapidSubject: process.env.COLLIE_VAPID_SUBJECT ?? "mailto:admin@example.com",
     stateDir,
     multiSession: envBool("COLLIE_MULTI_SESSION", true),
+    hcCore: envBool("COLLIE_HC_CORE", false),
     skipServe: envBool("COLLIE_SKIP_SERVE", false),
   };
 }

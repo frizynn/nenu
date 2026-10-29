@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import type { AuditLog } from "../audit.ts";
-import type { HerdrClient } from "../herdr-client.ts";
+import type { HerdrApi } from "../herdr-client.ts";
 import { listHomeDirs } from "../home-dirs.ts";
 import { startCatalog } from "../models.ts";
 import type { StateEngine } from "../state-engine.ts";
@@ -105,7 +105,7 @@ async function refreshStructuralState(engine: StateEngine): Promise<void> {
 // Close a pane ("kill the agent"). Structural op — strictly less powerful than the text/keys
 // injection the bridge already allows, so it stays within the existing remote-shell threat model.
 async function closePane(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   engine: StateEngine,
   paneId: string,
   req: Request,
@@ -129,7 +129,7 @@ async function closePane(
 // The body's `label` must be a string or null; a blank string clears (so a user can wipe a label by
 // saving an empty field), which we send to Herdr as `label: null`.
 async function renamePane(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   engine: StateEngine,
   paneId: string,
   req: Request,
@@ -177,7 +177,7 @@ export function normalizeTabLabel(
 // bridge already allows, so it stays within the existing remote-shell threat model. A tab has no
 // "clear" (see normalizeTabLabel): a blank label is a 400, not a reset to the tab number.
 async function renameTab(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   engine: StateEngine,
   tabId: string,
   req: Request,
@@ -209,7 +209,7 @@ async function renameTab(
 // the bridge already allows via pane.close — so it stays within the existing remote-shell threat
 // model. No body: the tab id is in the path.
 async function closeTab(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   engine: StateEngine,
   tabId: string,
   req: Request,
@@ -253,7 +253,7 @@ export function tabInsertIndex(
 // index the browser computed from a snapshot that may be a poll old. Structural metadata op, like a
 // rename — strictly less powerful than the text/keys injection the bridge already allows.
 async function moveTab(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   engine: StateEngine,
   tabId: string,
   req: Request,
@@ -286,7 +286,7 @@ async function moveTab(
 // it). Structural — no more privilege than typing into an existing pane (you can already spawn a
 // shell that way). `cwd` omitted => inherits the workspace dir. session.* stays unexposed.
 async function createTab(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   engine: StateEngine,
   req: Request,
   audit: AuditLog,
@@ -326,7 +326,7 @@ async function createTab(
 // Open a fresh shell pane in an existing tab, beside its largest pane (tab-split.ts). `cwd` omitted =
 // the pane it splits from's folder. Same structural-only threat model as createTab.
 async function splitTab(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   engine: StateEngine,
   tabId: string,
   req: Request,
@@ -359,7 +359,7 @@ async function splitTab(
 // when the client doesn't specify one (typing a path on a phone is painful) — it's a shell, so you
 // can cd from there. Same structural-only threat model as createTab.
 async function createWorkspace(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   req: Request,
   audit: AuditLog,
   device: string | null,

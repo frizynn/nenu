@@ -1,6 +1,6 @@
 import type { Config } from "../config.ts";
 import type { ConversationService } from "../conversation-service.ts";
-import type { HerdrClient } from "../herdr-client.ts";
+import type { HerdrApi } from "../herdr-client.ts";
 import { historyResponse } from "../history-response.ts";
 import { computeEtag, notModified } from "../http-cache.ts";
 import { adapterFor } from "../journal/registry.ts";
@@ -95,7 +95,7 @@ async function paneJournal(
   { cfg, journals, transcripts, conversations }: Services,
   engine: StateEngine,
   paneId: string,
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   session: string,
 ): Promise<{ adapter: JournalAdapter; ref: AgentSessionRef } | null> {
   if (!cfg.transcript || transcripts === null || journals === null) return null;
@@ -136,7 +136,7 @@ async function paneHistory(
   url: URL,
   req: Request,
   conversations: ConversationService,
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   session: string,
 ): Promise<Response> {
   const accept = req.headers.get("accept-encoding");
