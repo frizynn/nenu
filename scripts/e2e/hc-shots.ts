@@ -1,4 +1,5 @@
 // Phone-size captures of a prototype bridge's `hc` session, headless Chromium, read only.
+// Reads only; for anything that types, use a core from scripts/e2e/hc-isolated-core.sh.
 //   bun scripts/e2e/hc-shots.ts <bridge url> <out dir> <pane id>
 import { launchEngine } from "./browser.ts";
 

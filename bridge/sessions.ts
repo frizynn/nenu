@@ -114,8 +114,11 @@ interface SessionRegistryOpts {
   listSessionDirs: (dir: string) => string[];
   /** Whether a path exists (real fs in the bridge). */
   exists: (p: string) => boolean;
-  /** Sessions that are not Herdr sockets (herdr-core): started at construction, never disposed by refresh. */
-  extraSessions?: Array<{ name: string; socketPath: string }>;
+  /**
+   * Sessions that are not Herdr sockets (herdr-core): each starts itself at construction, and refresh
+   * never disposes it or starts a Herdr session over its name. `socketPath` is only what it reports.
+   */
+  extraSessions?: Array<{ name: string; socketPath: string; start: () => SessionParts }>;
 }
 
 /**
@@ -143,10 +146,10 @@ export class SessionRegistry {
     // The primary comes up eagerly — it's the fallback for every session-less request.
     this.runtimes.set(this.primaryName, this.spawn(this.primaryName, opts.primarySocketPath, true));
     this.extraNames = new Set();
-    for (const { name, socketPath } of opts.extraSessions ?? []) {
+    for (const { name, socketPath, start } of opts.extraSessions ?? []) {
       if (this.runtimes.has(name)) continue;
       this.extraNames.add(name);
-      this.runtimes.set(name, this.spawn(name, socketPath, false));
+      this.runtimes.set(name, { name, isPrimary: false, socketPath, ...start() });
     }
   }
 

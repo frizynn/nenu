@@ -234,7 +234,7 @@ export interface Config {
    * already-discovered session; they never build a filesystem path.
    */
   multiSession: boolean;
-  /** Read-only herdr-core (`hc`) terminals as one more session named `hc` (COLLIE_HC_CORE). Off by default. */
+  /** herdr-core (`hc`) terminals as one more session named `hc` (COLLIE_HC_CORE). Off by default. */
   hcCore: boolean;
   /**
    * Whether `tailscale serve` is bypassed (COLLIE_SKIP_SERVE=1) because an operator-run reverse

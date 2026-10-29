@@ -410,7 +410,10 @@ export async function sendPane(
     const started = Date.now();
     const delivered = prior !== null && !prior.outcome.ok && prior.outcome.textDelivered;
     const received = log?.();
-    const locked = await input.run(rt.name, paneId, () => rt.herdr instanceof HcClient ? hcSend(rt.herdr, paneId, send, prior?.trace) :
+    // herdr-core cannot type without Enter, so the screen can never show the text first: hc's own
+    // send is the whole step there (hc-client.ts).
+    const herdr = rt.herdr;
+    const locked = await input.run(rt.name, paneId, () => herdr instanceof HcClient ? hcSend(herdr, paneId, send, prior?.trace) :
       guardedSend(
         { herdr: rt.herdr, paneId, readLines: cfg.readLines, submitKeys: cfg.submitKeys, trigger: triggerFor(rt.poker), ...(received ? { received } : {}), ...(turn ? { turn } : {}) },
         send,

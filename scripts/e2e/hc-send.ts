@@ -1,5 +1,6 @@
 // Send one chat message through Nenu's composer to an hc pane, headless Chromium, phone size, with
 // captures before, just after Send and once the reply is in. Only for an isolated hc core.
+// The core is a throwaway one from scripts/e2e/hc-isolated-core.sh, which keeps agents from self-updating.
 //   bun scripts/e2e/hc-send.ts <bridge url> <out dir> <pane id> <message> <reply text>
 import { launchEngine, type Page } from "./browser.ts";
 

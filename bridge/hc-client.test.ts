@@ -184,7 +184,7 @@ test("a Claude on another machine gets its conversation id from that machine's s
     }
     throw new Error(`unexpected ${method}`);
   };
-  const snap = await new HcClient("/nonexistent/hc", 5000, rpc, Date.now, () => { throw new Error("no local group for a remote pid"); }).sessionSnapshot();
+  const snap = await new HcClient("/nonexistent/hc", 5000, rpc, Date.now, async () => { throw new Error("no local group for a remote pid"); }).sessionSnapshot();
   expect(reads).toEqual([{ path: ".claude/sessions/42.json", on: "box" }]);
   expect(snap.panes[0]!.agent_session).toEqual({ agent: "claude", kind: "id", value: "remote-1" });
 });

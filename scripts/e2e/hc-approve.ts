@@ -1,5 +1,6 @@
 // Approve the permission dialog an hc pane shows, through Nenu's chat, headless Chromium, phone size,
 // with captures before and after. Only for an isolated hc core.
+// The core is a throwaway one from scripts/e2e/hc-isolated-core.sh, which keeps agents from self-updating.
 //   bun scripts/e2e/hc-approve.ts <bridge url> <out dir> <pane id> <button text>
 import { launchEngine, type Page } from "./browser.ts";
 

@@ -10,12 +10,12 @@ import {
 } from "./hc-core.ts";
 
 // herdr-core behind COLLIE_HC_CORE (off by default). It implements HerdrApi, so the session runtime,
-// the state engine and the routes take it unchanged. Reads, a chat's send and keys map; every other write refuses.
+// the state engine and the routes take it unchanged. Reads, keys, a chat's send (hcSend below), new
+// spaces, tabs and agents map; closing, renaming and moving refuse.
 //
-// hc has no "type without Enter": `terminal.send` pastes and submits in one call. So typed text waits
-// here, per pane, and goes with the submit key that follows it. A send path that reads the screen to
-// see its text in the box before Enter therefore never sees it and stops; the idle-Claude path, whose
-// witness is Claude's log (ADR 0117), goes through.
+// hc has no "type without Enter": `terminal.send` pastes and submits in one call. So text typed
+// through sendPaneText waits here, per pane, and goes with the submit key that follows it. A path that
+// reads the screen to see its text in the box before Enter never sees it and stops before Enter.
 //
 // Each call is one `hc connect`: hello, the request, its reply, exit, the same one-shot shape as
 // Herdr's socket. Only events.subscribe keeps its connection.
@@ -73,7 +73,7 @@ export class HcClient implements HerdrApi {
     private readonly hcTimeoutMs = 5000,
     rpc?: HcRpc,
     private readonly now: () => number = Date.now,
-    private readonly group: (pgid: number) => number[] = localGroup,
+    private readonly group: (pgid: number) => Promise<number[]> = localGroup,
     private readonly claudeSessionDir = join(homedir(), ".claude", "sessions"),
   ) {
     if (rpc) this.call = rpc;
@@ -132,7 +132,7 @@ export class HcClient implements HerdrApi {
       const read: SessionFileReader = machine
         ? (pid) => this.call<{ text: string }>("file.read", { path: `.claude/sessions/${pid}.json`, on: machine }).then((r) => r.text)
         : async (pid) => readFileSync(join(this.claudeSessionDir, `${pid}.json`), "utf8");
-      const id = await hcClaudeSession(t, read, machine || !t.foreground ? [] : this.group(t.foreground.pid));
+      const id = await hcClaudeSession(t, read, machine || !t.foreground ? [] : await this.group(t.foreground.pid));
       if (id) ids.set(t.address, id);
     }));
     return ids;
@@ -185,7 +185,7 @@ export class HcClient implements HerdrApi {
 
   async processInfo(paneId: string): Promise<unknown> {
     const t = await this.call<HcTerminal>("terminal.get", { terminal: hcAddress(paneId) });
-    return hcProcessInfo(t, hcMachine(t.address) || !t.foreground ? [] : this.group(t.foreground.pid));
+    return hcProcessInfo(t, hcMachine(t.address) || !t.foreground ? [] : await this.group(t.foreground.pid));
   }
 
   /** Any hc event is a poke; Nenu re-reads the snapshot, as it does for Herdr's. */
@@ -324,9 +324,10 @@ export class HcClient implements HerdrApi {
 }
 
 /** The pids of a local process group, from `pgrep -g` (none when it cannot tell). */
-function localGroup(pgid: number): number[] {
-  const out = Bun.spawnSync(["pgrep", "-g", String(pgid)], { stdout: "pipe", stderr: "ignore" });
-  return out.success ? out.stdout.toString().split("\n").map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : [];
+async function localGroup(pgid: number): Promise<number[]> {
+  const child = Bun.spawn(["pgrep", "-g", String(pgid)], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  return code === 0 ? out.split("\n").map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : [];
 }
 
 /**

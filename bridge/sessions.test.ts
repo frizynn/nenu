@@ -166,7 +166,7 @@ function makeRegistry(opts: {
     multiSession: opts.multiSession ?? true,
     listSessionDirs: () => dirs,
     exists: (p) => present.has(p),
-    ...(opts.extraSessions ? { extraSessions: opts.extraSessions } : {}),
+    ...(opts.extraSessions ? { extraSessions: opts.extraSessions.map((e) => ({ ...e, start: () => factory(e.name, e.socketPath, false) })) } : {}),
   });
 
   return {
