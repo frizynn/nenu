@@ -15,7 +15,7 @@ import { RunNamedAbove } from "@/components/activity/workflow-detail";
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ComponentProps, MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
+import { AppWindow, ArrowUpToLine, Bell, ChevronDown, ChevronUp, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { Button } from "@/components/ui/button";
 import { agentName } from "@/hooks/use-message-queue";
@@ -29,6 +29,7 @@ import { useDayTurn } from "@/hooks/use-day-turn";
 import { useNavigateTo, useRevalidate } from "@/hooks/use-router";
 import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
+import { setAgentNotify } from "@/lib/api";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { ConversationActions, type ConversationAction } from "@/components/conversation-actions";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -884,6 +885,13 @@ export const AgentChat = memo(function AgentChat({
     ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal view", icon: SquareTerminal, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
     ...composerControls.filter((control) => control.group === "View"),
   ];
+  // Whether this agent may push at all (ADR 0134), bridge-wide like the kinds in Settings. Absent when
+  // the bridge predates the switch, and then the row is too.
+  const notifyActions: ConversationAction[] = agent && agent.notify !== undefined ? [{ id: "notify", label: "Notifications", icon: Bell, on: agent.notify,
+    run: () => void setAgentNotify(paneId, !agent.notify, session).then(
+      (r) => { setStatus(r.notify ? "Notifications on for this agent" : "Notifications off for this agent", "success"); revalidate(); },
+      () => setStatus("Could not change this agent's notifications", "error"),
+    ) }] : [];
   // Renaming and closing the pane and its tab: a tap on a strip's open chip opens the same sheet, so the
   // menu offers only what no strip on screen does. The tab strip is always there and the pane strip from
   // two panes, except while a phone keyboard hides both.
@@ -965,7 +973,7 @@ export const AgentChat = memo(function AgentChat({
     ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} published={published} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
     : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions ref={actionsRef}
-    groups={[{ label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
+    groups={[{ label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Notifications", actions: notifyActions }, { label: "Tab and pane", actions: paneActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
     folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
   /> : undefined;

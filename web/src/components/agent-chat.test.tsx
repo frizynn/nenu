@@ -99,6 +99,36 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, n
   return props;
 }
 
+// The agent's own notifications switch (ADR 0134): a row of the ⋯ menu, checked while it may push.
+describe("AgentChat — the agent's notifications", () => {
+  it("turns the agent's notifications off from the ⋯ menu and says so", async () => {
+    let sent: unknown = null;
+    server.use(http.post("/api/notifications/agent", async ({ request }) => {
+      sent = await request.json();
+      return HttpResponse.json({ paneId: fixtureAgents[0]!.paneId, notify: false });
+    }));
+    const user = userEvent.setup();
+    renderChat({ agent: { ...fixtureAgents[0]!, notify: true } });
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    const row = within(screen.getByRole("dialog", { name: "Conversation actions" })).getByRole("button", { name: "Notifications" });
+    expect(row).toHaveAttribute("aria-pressed", "true");
+    await user.click(row);
+    await waitFor(() => expect(sent).toEqual({ paneId: fixtureAgents[0]!.paneId, on: false }));
+    expect(await screen.findByText("Notifications off for this agent")).toBeInTheDocument();
+  });
+
+  it("shows an agent that is off unchecked, and no row at all from a bridge without the switch", async () => {
+    const user = userEvent.setup();
+    renderChat({ agent: { ...fixtureAgents[0]!, notify: false } });
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.getByRole("button", { name: "Notifications" })).toHaveAttribute("aria-pressed", "false");
+    cleanup();
+    renderChat();
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.queryByRole("button", { name: "Notifications" })).toBeNull();
+  });
+});
+
 describe("AgentChat — reply flow", () => {
   it("sends a typed reply and clears the composer on success", async () => {
     const user = userEvent.setup();

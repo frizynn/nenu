@@ -893,6 +893,14 @@ export function setNotifyPrefs(patch: Partial<NotifyPrefs>): Promise<NotifyPrefs
   });
 }
 
+/** Turn one agent's notifications on or off (ADR 0134); bridge-wide, like the kinds above. */
+export function setAgentNotify(paneId: string, on: boolean, session?: string): Promise<{ paneId: string; notify: boolean }> {
+  return req<{ paneId: string; notify: boolean }>(withSession("/api/notifications/agent", session), {
+    method: "POST",
+    body: JSON.stringify({ paneId, on }),
+  });
+}
+
 /**
  * Force an immediate upstream update check and return the fresh UpdateInfo. Read-level gated (same
  * auth basis as the prefs/snooze POSTs) and takes no body. The bridge otherwise only checks every

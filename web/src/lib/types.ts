@@ -74,6 +74,8 @@ export interface AgentView {
   stateChangeSeq?: number;
   /** Bumps when an idle transition completed work. Absent when Herdr doesn't report it. */
   completionSeq?: number;
+  /** Whether this agent may push a notification at all (ADR 0134); absent from an older bridge. */
+  notify?: boolean;
   /** The turn as the CLI's own files record it (bridge/agent-state.ts, ADR 0067); absent when unknown. */
   turn?: TurnState;
 }
