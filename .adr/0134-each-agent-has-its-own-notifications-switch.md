@@ -73,6 +73,6 @@ arguments. It does hand an action its invocation context as `HERDR_PLUGIN_CONTEX
   lock is held the other writer waits up to two seconds, then fails loudly (the terminal command) or
   tries again on the next poll (the bridge).
 - A Herdr session first seen after the upgrade, such as a new named session, is seeded too: its first
-  agents start on whatever the rule says.
+  agents all start on, whatever the rule says.
 - Revisit if Herdr gains per-agent plugin metadata or a launcher field: either would identify a
   supervisor without a folder convention.

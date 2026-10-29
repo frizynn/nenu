@@ -188,10 +188,14 @@ export class AgentNotifyStore {
   private locked<T>(change: () => T): T {
     mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
     const lock = `${this.file}.lock`;
+    // Who holds it, so a writer that took over a stale lock never removes the next holder's.
+    const token = `${process.pid}:${Math.random()}`;
     const deadline = Date.now() + LOCK_WAIT_MS;
     for (;;) {
       try {
-        closeSync(openSync(lock, "wx", 0o600));
+        const fd = openSync(lock, "wx", 0o600);
+        writeFileSync(fd, token);
+        closeSync(fd);
         break;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
@@ -208,7 +212,11 @@ export class AgentNotifyStore {
       this.read();
       return change();
     } finally {
-      rmSync(lock, { force: true });
+      try {
+        if (readFileSync(lock, "utf8") === token) rmSync(lock, { force: true });
+      } catch {
+        /* already gone */
+      }
     }
   }
 
@@ -231,11 +239,16 @@ export class AgentNotifyStore {
 
   private write(): void {
     const tmp = `${this.file}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify({ agents: this.agents, seeded: this.seeded } satisfies AgentNotifyFile, null, 2), { mode: 0o600 });
-    // The temp file's stamp is the file's once renamed; a stat after the rename could read another writer's.
-    const stamp = stampOf(statSync(tmp));
-    renameSync(tmp, this.file);
-    this.stamp = stamp;
+    try {
+      writeFileSync(tmp, JSON.stringify({ agents: this.agents, seeded: this.seeded } satisfies AgentNotifyFile, null, 2), { mode: 0o600 });
+      // The temp file's stamp is the file's once renamed; a stat after the rename could read another writer's.
+      const stamp = stampOf(statSync(tmp));
+      renameSync(tmp, this.file);
+      this.stamp = stamp;
+    } catch (error) {
+      rmSync(tmp, { force: true });
+      throw error;
+    }
   }
 }
 
