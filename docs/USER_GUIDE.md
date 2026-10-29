@@ -811,6 +811,9 @@ bash scripts/collie-ctl.sh notify on  default/w1:p3
 ```
 
 The menu and the terminal change the same setting and take effect at once, with no restart.
+Agents of the Herdr desktop app shown through herdr-core (`COLLIE_HC_CORE=1`) have the same switch, in
+their own session: from the terminal, name one by its pane id (`t6`, or `hc/t6` when Herdr has a pane
+with that id too).
 
 **How a new agent starts.** An agent first seen in a supervisor's folder starts on; every other new
 agent starts off. Supervisors are matched by the folder their pane was launched in, against

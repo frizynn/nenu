@@ -36,6 +36,8 @@ arguments. It does hand an action its invocation context as `HERDR_PLUGIN_CONTEX
    like the activity ledger. The notification coordinator reads the switch when a transition arrives
    and again when the debounced alert is decided, so an agent turned off mid-debounce sends nothing.
    An agent that is off never pushes; one that is on follows the kind switches and Snooze as before.
+   herdr-core's agents (`COLLIE_HC_CORE`, its own session `hc`) go through the same session factory,
+   so they get the same switch, rule and decision point, keyed apart from Herdr's panes.
 2. **A new agent's folder decides how it starts.** On its first sighting an agent is on when its pane
    folder matches one of `COLLIE_NOTIFY_SUPERVISORS` (comma-separated, whole-path patterns: `~/`,
    `*` for one folder name, `**` for any depth), off otherwise. The default is this host's Firstmate
