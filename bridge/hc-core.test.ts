@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { hcAddress, hcAgentStatus, hcCounters, hcPaneId, hcProcessInfo, hcSnapshot, type HcAppDoc, type HcTerminal } from "./hc-core.ts";
+import { hcAddress, hcAgentStatus, hcClaudeSession, hcCounters, hcPaneId, hcProcessInfo, hcSnapshot, type HcAppDoc, type HcTerminal } from "./hc-core.ts";
 
 // Shapes as `hc connect` returned them on hc 0.1.13 (terminal.list, doc.get "herdr-app"), trimmed.
 const claude: HcTerminal = {
@@ -112,4 +112,31 @@ test("process info names the foreground leader the way pane.process_info does", 
     foreground_process_group_id: 80390,
     foreground_processes: [{ pid: 80390, name: "2.1.312", argv0: "claude", argv: ["claude", "--resume"], cmdline: "claude --resume", cwd: "/Users/u/repo" }],
   });
+});
+
+describe("hcClaudeSession", () => {
+  const files = (map: Record<number, string>) => async (pid: number) => map[pid] ?? null;
+
+  test("the --session-id Nenu starts Claude with names it, through any wrapper, without a read", async () => {
+    const wrapped = { ...claude, foreground: { pid: 5, name: "hats", argv: ["hats", "run", "--", "--session-id", "u-1"], cwd: "/" } };
+    let reads = 0;
+    expect(await hcClaudeSession(wrapped, async () => { reads++; return null; })).toBe("u-1");
+    expect(await hcClaudeSession({ ...wrapped, foreground: { ...wrapped.foreground, argv: ["claude", "--session-id=u-2"] } }, files({}))).toBe("u-2");
+    expect(reads).toBe(0);
+  });
+
+  test("else the session file of the leader, or of another process of its group", async () => {
+    expect(await hcClaudeSession(claude, files({ 80390: '{"sessionId":"u-3"}' }))).toBe("u-3");
+    expect(await hcClaudeSession(claude, files({ 81000: '{"sessionId":"u-4"}' }), [80390, 81000])).toBe("u-4");
+  });
+
+  test("nothing for a terminal that is not Claude, or whose files say nothing", async () => {
+    expect(await hcClaudeSession({ ...claude, status: { app: "codex", state: "idle" } }, files({ 80390: '{"sessionId":"x"}' }))).toBeNull();
+    expect(await hcClaudeSession(claude, files({ 80390: "not json" }))).toBeNull();
+  });
+});
+
+test("process info lists the rest of the foreground group after its leader", () => {
+  const info = hcProcessInfo(claude, [80390, 81000]) as { foreground_processes: Array<{ pid: number }> };
+  expect(info.foreground_processes.map((p) => p.pid)).toEqual([80390, 81000]);
 });

@@ -186,15 +186,19 @@ export function hcCounters(t: HcTerminal): WireAgent {
 
 const scoped = (machine: string, id: string): string => (machine ? `${machine}:${id}` : id);
 
-/** `pane.process_info` from what hc knows: the shell it started and the foreground group's leader. */
-export function hcProcessInfo(t: HcTerminal): unknown {
+/**
+ * `pane.process_info` from what hc knows: the shell it started, the foreground group's leader, and
+ * the group's other pids when the caller could list them (a wrapper's child is the agent itself).
+ */
+export function hcProcessInfo(t: HcTerminal, group: number[] = []): unknown {
   const fg = t.foreground;
+  const others = fg ? group.filter((pid) => pid !== fg.pid).map((pid) => ({ pid })) : [];
   return {
     pane_id: hcPaneId(t.address),
     shell_pid: t.pid ?? null,
     foreground_process_group_id: fg?.pid ?? null,
     foreground_processes: fg
-      ? [{ pid: fg.pid, name: fg.name, argv0: fg.argv[0] ?? fg.name, argv: fg.argv, cmdline: fg.argv.join(" "), cwd: fg.cwd }]
+      ? [{ pid: fg.pid, name: fg.name, argv0: fg.argv[0] ?? fg.name, argv: fg.argv, cmdline: fg.argv.join(" "), cwd: fg.cwd }, ...others]
       : [],
   };
 }
@@ -213,3 +217,70 @@ export const isSubmitKey = (key: string): boolean => hcKey(key) === "enter";
 
 /** hc pastes on its own (`terminal.send`): Nenu's bracketed-paste markers come off. */
 export const unbracket = (text: string): string => text.replaceAll("\x1b[200~", "").replaceAll("\x1b[201~", "");
+
+// ── Where a new terminal goes ──────────────────────────────────────────────────────────────────
+
+/** A workspace id back into its machine and Herdr.app space id (`hc` is the space of unplaced ones). */
+export function hcSpace(workspaceId: string): { machine: string; space: string } {
+  const at = workspaceId.indexOf(":");
+  return at < 0 ? { machine: "", space: workspaceId } : { machine: workspaceId.slice(0, at), space: workspaceId.slice(at + 1) };
+}
+
+/** A fresh Herdr.app-shaped id: `sp` or `tb` and 32 hex digits. */
+export const hcNewId = (prefix: "sp" | "tb"): string => prefix + crypto.randomUUID().replaceAll("-", "");
+
+/**
+ * The labels that place a terminal the way Herdr.app places its own: its space, its tab and the
+ * `where` it shows ("space / tab"), which names both until Herdr.app's document does. The space of
+ * unplaced terminals gets no labels, so a terminal started there stays there.
+ */
+export function hcPlacement(space: string, tab: string, where: string): Record<string, string> {
+  return space === "hc" ? {} : { "herdr.space": space, "herdr.tab": tab, where };
+}
+
+const SHELLS = new Set(["sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "nu"]);
+
+/** Whether a terminal's foreground is a shell at rest (a login shell's argv0 starts with `-`). */
+export function hcAtShell(t: HcTerminal): boolean {
+  const fg = t.foreground;
+  if (!fg || t.status) return false;
+  const name = (fg.argv[0] ?? fg.name).replace(/^-/, "").split("/").pop() ?? "";
+  return SHELLS.has(name) || SHELLS.has(fg.name);
+}
+
+/** One POSIX shell line for an argv: words outside `[A-Za-z0-9_./=:@%+-]` go single-quoted. */
+export function hcShellLine(argv: string[]): string {
+  return argv.map((a) => (/^[A-Za-z0-9_./=:@%+-]+$/.test(a) ? a : `'${a.replaceAll("'", `'\\''`)}'`)).join(" ");
+}
+
+// ── An agent's own conversation id ──────────────────────────────────────────────────────────────
+
+/** What reads a Claude Code session file on the terminal's machine: its text, or null. */
+export type SessionFileReader = (pid: number) => Promise<string | null>;
+
+/**
+ * Claude Code's conversation id for a terminal, which hc does not report: the `--session-id` its
+ * command line names (Nenu starts every Claude with one), else the `sessions/<pid>.json` Claude keeps
+ * for a process of the foreground group. The group's leader can be a wrapper that runs Claude as its
+ * child, so `pids` may name the rest of the group too.
+ */
+export async function hcClaudeSession(t: HcTerminal, read: SessionFileReader, pids: number[] = []): Promise<string | null> {
+  if (t.status?.app !== "claude-code" || !t.foreground) return null;
+  const argv = t.foreground.argv;
+  for (let i = 0; i < argv.length; i++) {
+    const flag = argv[i]!;
+    if (flag === "--session-id" && argv[i + 1]) return argv[i + 1]!;
+    if (flag.startsWith("--session-id=")) return flag.slice("--session-id=".length) || null;
+  }
+  for (const pid of [t.foreground.pid, ...pids.filter((p) => p !== t.foreground!.pid)]) {
+    const text = await read(pid).catch(() => null);
+    if (text === null) continue;
+    try {
+      const { sessionId } = JSON.parse(text) as { sessionId?: unknown };
+      if (typeof sessionId === "string" && sessionId) return sessionId;
+    } catch {
+      /* not a session file */
+    }
+  }
+  return null;
+}

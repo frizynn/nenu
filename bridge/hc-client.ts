@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import type { GuardedSendResult, SendTrace } from "./guarded-send.ts";
-import type { HerdrApi, PaneRead, ReadSource, ServerInfo, WireSnapshot } from "./herdr-client.ts";
+import type { CreatedShell, HerdrApi, PaneRead, ReadSource, ServerInfo, WireSnapshot } from "./herdr-client.ts";
 import type { SendRequest } from "./types.ts";
 import {
-  hcAddress, hcKey, hcMachine, hcProcessInfo, hcSnapshot, isSubmitKey, unbracket, type HcAppDoc, type HcTerminal,
+  hcAddress, hcAtShell, hcClaudeSession, hcKey, hcNewId, hcPaneId, hcPlacement, hcShellLine, hcSpace, hcMachine, hcProcessInfo, hcSnapshot, isSubmitKey, unbracket, type HcAppDoc, type HcTerminal, type SessionFileReader,
 } from "./hc-core.ts";
 
 // herdr-core behind COLLIE_HC_CORE (off by default). It implements HerdrApi, so the session runtime,
@@ -20,7 +20,7 @@ import {
 // Each call is one `hc connect`: hello, the request, its reply, exit, the same one-shot shape as
 // Herdr's socket. Only events.subscribe keeps its connection.
 
-const READ_ONLY = "herdr-core is read only in Nenu";
+const READ_ONLY = "Nenu cannot do this on herdr-core yet: it closes, renames and moves only Herdr panes and tabs";
 /** Typed text not followed by its Enter within this long is dropped, never sent later. */
 const PENDING_MS = 20_000;
 /** How long a read with history may take before the screen alone answers instead. */
@@ -73,6 +73,8 @@ export class HcClient implements HerdrApi {
     private readonly hcTimeoutMs = 5000,
     rpc?: HcRpc,
     private readonly now: () => number = Date.now,
+    private readonly group: (pgid: number) => number[] = localGroup,
+    private readonly claudeSessionDir = join(homedir(), ".claude", "sessions"),
   ) {
     if (rpc) this.call = rpc;
   }
@@ -113,9 +115,27 @@ export class HcClient implements HerdrApi {
         .then((r) => r.value, () => null);
     docs.set("", await doc());
     for (const m of machines ?? []) if (m.state === "connected") docs.set(m.name, await doc(m.name));
-    const snapshot = hcSnapshot(terminals, docs, claudeSessions(terminals));
+    const snapshot = hcSnapshot(terminals, docs, await this.claudeSessions(terminals));
     this.agentPanes = new Set(snapshot.panes.filter((p) => p.agent).map((p) => p.pane_id));
     return snapshot;
+  }
+
+  /**
+   * Each Claude terminal's conversation id. Here: its session file under ~/.claude/sessions for any
+   * process of the foreground group. On another machine: the leader's file there, read through hc's
+   * file.read (hc lists no process group remotely, so a wrapper hides the id there).
+   */
+  private async claudeSessions(terminals: HcTerminal[]): Promise<Map<string, string>> {
+    const ids = new Map<string, string>();
+    await Promise.all(terminals.map(async (t) => {
+      const machine = hcMachine(t.address);
+      const read: SessionFileReader = machine
+        ? (pid) => this.call<{ text: string }>("file.read", { path: `.claude/sessions/${pid}.json`, on: machine }).then((r) => r.text)
+        : async (pid) => readFileSync(join(this.claudeSessionDir, `${pid}.json`), "utf8");
+      const id = await hcClaudeSession(t, read, machine || !t.foreground ? [] : this.group(t.foreground.pid));
+      if (id) ids.set(t.address, id);
+    }));
+    return ids;
   }
 
   async listWorkspaces() {
@@ -164,7 +184,8 @@ export class HcClient implements HerdrApi {
   }
 
   async processInfo(paneId: string): Promise<unknown> {
-    return hcProcessInfo(await this.call<HcTerminal>("terminal.get", { terminal: hcAddress(paneId) }));
+    const t = await this.call<HcTerminal>("terminal.get", { terminal: hcAddress(paneId) });
+    return hcProcessInfo(t, hcMachine(t.address) || !t.foreground ? [] : this.group(t.foreground.pid));
   }
 
   /** Any hc event is a poke; Nenu re-reads the snapshot, as it does for Herdr's. */
@@ -239,17 +260,51 @@ export class HcClient implements HerdrApi {
   async waitForOutput(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  async createTab(..._args: unknown[]): Promise<never> {
-    throw new Error(READ_ONLY);
+  /** A new shell in its own new space, placed the way Herdr.app places one. */
+  async createWorkspace(opts: { cwd: string; label?: string }): Promise<CreatedShell> {
+    const space = hcNewId("sp");
+    const tab = hcNewId("tb");
+    const label = opts.label?.trim() || basename(opts.cwd) || opts.cwd;
+    const shell = await this.run("", opts.cwd, hcPlacement(space, tab, `${label} / 1`));
+    return { ...shell, workspaceLabel: label };
   }
-  async createWorkspace(..._args: unknown[]): Promise<never> {
-    throw new Error(READ_ONLY);
+
+  /** A new shell in a new tab of a space; with no folder asked, the space's first terminal's folder. */
+  async createTab(workspaceId: string, opts: { label?: string; cwd?: string } = {}): Promise<CreatedShell> {
+    const snapshot = await this.sessionSnapshot();
+    const ws = snapshot.workspaces.find((w) => w.workspace_id === workspaceId);
+    const first = snapshot.panes.find((p) => p.workspace_id === workspaceId);
+    if (!ws || !first) throw new Error("That workspace is gone.");
+    const { machine, space } = hcSpace(workspaceId);
+    const where = `${ws.label} / ${opts.label?.trim() || ws.tab_count + 1}`;
+    return this.run(machine, opts.cwd || first.cwd, hcPlacement(space, hcNewId("tb"), where));
   }
-  async splitTab(..._args: unknown[]): Promise<never> {
-    throw new Error(READ_ONLY);
+
+  /** A new shell in the tab `paneId` sits in, in its folder unless another is asked. */
+  async splitTab(paneId: string, opts: { cwd?: string } = {}): Promise<CreatedShell> {
+    const t = await this.call<HcTerminal>("terminal.get", { terminal: hcAddress(paneId) });
+    const { "herdr.space": space, "herdr.tab": tab, where } = t.labels ?? {};
+    const labels = space && tab ? hcPlacement(space, tab, where ?? "") : {};
+    return this.run(hcMachine(t.address), opts.cwd || t.cwd, labels);
   }
-  async startAgent(..._args: unknown[]): Promise<never> {
-    throw new Error(READ_ONLY);
+
+  /**
+   * Types the agent's command line into a shell at rest, as one terminal.send. Herdr refuses a busy
+   * foreground atomically; hc has no such check, so the shell is looked at just before, and the
+   * window between that look and the paste is hc's quiet rule (~3 s with nobody typing).
+   */
+  async startAgent(paneId: string, kind: "codex" | "claude", args: string[] = []): Promise<void> {
+    const terminal = hcAddress(paneId);
+    const t = await this.call<HcTerminal>("terminal.get", { terminal });
+    if (!hcAtShell(t)) throw new Error("That terminal is not at a shell prompt.");
+    await this.call("terminal.send", { terminal, text: hcShellLine([kind, ...args]) }, SEND_TIMEOUT_MS);
+  }
+
+  private async run(machine: string, cwd: string, labels: Record<string, string>): Promise<CreatedShell> {
+    const r = await this.call<HcTerminal>("terminal.run", { cwd, labels, no_parent: true, ...(machine ? { on: machine } : {}) });
+    const address = machine && !r.address.includes("/") ? `${machine}/${r.address}` : r.address;
+    const pane = hcSnapshot([{ ...r, address, state: "live" }], new Map()).panes[0]!;
+    return { paneId: hcPaneId(address), workspaceId: pane.workspace_id, tabId: pane.tab_id, cwd: r.cwd };
   }
   async closePane(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
@@ -268,22 +323,10 @@ export class HcClient implements HerdrApi {
   }
 }
 
-/**
- * hc reports no agent conversation id. On this machine, Claude Code names it in
- * `~/.claude/sessions/<pid>.json`, keyed by the foreground pid hc does report.
- */
-function claudeSessions(terminals: HcTerminal[], dir = join(homedir(), ".claude", "sessions")): Map<string, string> {
-  const ids = new Map<string, string>();
-  for (const t of terminals) {
-    if (hcMachine(t.address) || t.status?.app !== "claude-code" || !t.foreground) continue;
-    try {
-      const { sessionId } = JSON.parse(readFileSync(join(dir, `${t.foreground.pid}.json`), "utf8")) as { sessionId?: unknown };
-      if (typeof sessionId === "string" && sessionId) ids.set(t.address, sessionId);
-    } catch {
-      /* no file for that pid */
-    }
-  }
-  return ids;
+/** The pids of a local process group, from `pgrep -g` (none when it cannot tell). */
+function localGroup(pgid: number): number[] {
+  const out = Bun.spawnSync(["pgrep", "-g", String(pgid)], { stdout: "pipe", stderr: "ignore" });
+  return out.success ? out.stdout.toString().split("\n").map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : [];
 }
 
 /**

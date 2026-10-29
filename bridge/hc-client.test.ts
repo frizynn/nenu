@@ -56,12 +56,12 @@ describe("HcClient chat writes", () => {
   });
 });
 
-// The writes the chat does not need still refuse before anything runs.
+// Closing, renaming and moving still refuse before anything runs.
 test("structural writes refuse without calling hc", async () => {
   const { hc, calls } = client();
-  await expect(hc.closePane("t1")).rejects.toThrow("read only");
-  await expect(hc.startAgent("t1", "claude")).rejects.toThrow("read only");
-  await expect(hc.createWorkspace({ cwd: "/" })).rejects.toThrow("read only");
+  await expect(hc.closePane("t1")).rejects.toThrow("cannot do this on herdr-core");
+  await expect(hc.renameTab("tb1", "x")).rejects.toThrow("cannot do this on herdr-core");
+  await expect(hc.moveTab("tb1", 0)).rejects.toThrow("cannot do this on herdr-core");
   expect(calls).toEqual([]);
 });
 
@@ -116,4 +116,75 @@ describe("HcClient reads", () => {
     expect(await hc.readPane("t2", "recent", 200)).toEqual({ pane_id: "t2", text: "screen", truncated: true, revision: 0 });
     expect(asked).toEqual([200, 0]);
   });
+});
+
+describe("HcClient new terminals", () => {
+  function fake(terminals: Record<string, unknown>[] = []) {
+    const calls: Array<[string, Record<string, unknown>]> = [];
+    const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => {
+      calls.push([method, params]);
+      if (method === "terminal.list") return { terminals } as T;
+      if (method === "doc.get") return { value: null } as T;
+      if (method === "terminal.get") return terminals.find((t) => t.address === params.terminal) as T;
+      if (method === "terminal.run") {
+        const on = params.on as string | undefined;
+        return { address: on ? "t9" : "t8", state: "live", cwd: params.cwd, labels: params.labels } as T;
+      }
+      return { turn: 1 } as T;
+    };
+    return { hc: new HcClient("/nonexistent/hc", 5000, rpc), calls };
+  }
+  const placed = { address: "box/t2", state: "live", cwd: "/w", labels: { "herdr.space": "sp1", "herdr.tab": "tb1", where: "app / 1" }, status: { app: "claude-code", state: "idle" } };
+
+  test("a new space gets Herdr.app's labels and its name in `where`", async () => {
+    const { hc, calls } = fake();
+    const shell = await hc.createWorkspace({ cwd: "/Users/u/repo" });
+    const [, params] = calls.find(([m]) => m === "terminal.run")!;
+    const labels = params.labels as Record<string, string>;
+    expect(labels["herdr.space"]).toMatch(/^sp[0-9a-f]{32}$/);
+    expect(labels["herdr.tab"]).toMatch(/^tb[0-9a-f]{32}$/);
+    expect(labels.where).toBe("repo / 1");
+    expect(shell).toEqual({ paneId: "t8", workspaceId: labels["herdr.space"]!, workspaceLabel: "repo", tabId: labels["herdr.tab"]!, cwd: "/Users/u/repo" });
+  });
+
+  test("a new tab lands in its space, on that space's machine, in its folder", async () => {
+    const { hc, calls } = fake([placed]);
+    const shell = await hc.createTab("box:sp1", { label: "tests" });
+    const [, params] = calls.find(([m]) => m === "terminal.run")!;
+    expect(params).toMatchObject({ on: "box", cwd: "/w", labels: { "herdr.space": "sp1", where: "app / tests" } });
+    expect((params.labels as Record<string, string>)["herdr.tab"]).not.toBe("tb1");
+    expect(shell).toMatchObject({ paneId: "box:t9", workspaceId: "box:sp1" });
+  });
+
+  test("a split stays in the pane's tab", async () => {
+    const { hc, calls } = fake([placed]);
+    await hc.splitTab("box:t2");
+    expect(calls.find(([m]) => m === "terminal.run")![1]).toMatchObject({ on: "box", labels: { "herdr.space": "sp1", "herdr.tab": "tb1" } });
+  });
+
+  test("an agent starts only in a shell at rest, typed as one quoted line", async () => {
+    const shell = { address: "t3", state: "live", cwd: "/", status: null, foreground: { pid: 1, name: "zsh", argv: ["-zsh"], cwd: "/" } };
+    const busy = { ...shell, address: "t4", foreground: { pid: 2, name: "vim", argv: ["vim"], cwd: "/" } };
+    const { hc, calls } = fake([shell, busy]);
+    await hc.startAgent("t3", "claude", ["--session-id", "abc", "--model", "it's"]);
+    expect(calls.find(([m]) => m === "terminal.send")![1]).toEqual({ terminal: "t3", text: "claude --session-id abc --model 'it'\\''s'" });
+    await expect(hc.startAgent("t4", "claude")).rejects.toThrow("not at a shell prompt");
+  });
+});
+
+test("a Claude on another machine gets its conversation id from that machine's session file", async () => {
+  const remote = { address: "box/t2", state: "live", cwd: "/w", status: { app: "claude-code", state: "idle" }, foreground: { pid: 42, name: "claude", argv: ["claude"], cwd: "/w" } };
+  const reads: Array<Record<string, unknown>> = [];
+  const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => {
+    if (method === "terminal.list") return { terminals: [remote], machines: [{ name: "box", state: "connected" }] } as T;
+    if (method === "doc.get") return { value: null } as T;
+    if (method === "file.read") {
+      reads.push(params);
+      return { text: '{"sessionId":"remote-1"}' } as T;
+    }
+    throw new Error(`unexpected ${method}`);
+  };
+  const snap = await new HcClient("/nonexistent/hc", 5000, rpc, Date.now, () => { throw new Error("no local group for a remote pid"); }).sessionSnapshot();
+  expect(reads).toEqual([{ path: ".claude/sessions/42.json", on: "box" }]);
+  expect(snap.panes[0]!.agent_session).toEqual({ agent: "claude", kind: "id", value: "remote-1" });
 });
