@@ -788,6 +788,39 @@ Nothing is pushed while Nenu is open on a screen, and the app closes the notific
 handled when it opens. Settings → **Notify when** has Needs input, Replies to you, Agents started by an
 agent, Subagent results and App updates.
 
+### Which agents notify
+
+Each agent also has its own switch, in front of the kinds above: an agent that is off never pushes,
+one that is on follows them. On a phone or a desk it is the **Notifications** row of the agent's ⋯
+menu, checked while the agent may push. From a terminal:
+
+```bash
+herdr plugin action invoke notify-list --plugin herdr.nenu   # every agent: on/off, pane, folder, why
+herdr plugin action invoke notify-off  --plugin herdr.nenu   # the pane focused in Herdr
+herdr plugin action invoke notify-on   --plugin herdr.nenu
+```
+
+`notify-on` and `notify-off` act on the pane Herdr reports as focused, so run them from Herdr's
+command palette on the agent's pane. To name an agent instead, by pane id or by its name (its pane
+label, Herdr name or Claude session name), use the shell verb from the plugin checkout:
+
+```bash
+bash scripts/collie-ctl.sh notify list
+bash scripts/collie-ctl.sh notify off w1:p3        # or: notify off reviewer
+bash scripts/collie-ctl.sh notify on  default/w1:p3
+```
+
+The menu and the terminal change the same setting and take effect at once, with no restart.
+
+**How a new agent starts.** An agent first seen in a supervisor's folder starts on; every other new
+agent starts off. Supervisors are matched by the folder their pane was launched in, against
+`COLLIE_NOTIFY_SUPERVISORS` in the plugin `.env` (comma-separated, the whole path; `~/` is your home,
+`*` one folder name, `**` any depth). The default, `~/.firstmate/*,~/Developer/firstmate`, matches a
+Firstmate home and the Firstmate checkout but not the projects their workers run in. Set it to `**`
+for every new agent on, or to your own supervisors' folders, then restart the bridge. Agents that
+were already running when you upgraded keep notifying. The reasoning and the limits of matching by
+folder: [ADR 0134](../.adr/0134-each-agent-has-its-own-notifications-switch.md).
+
 ## Troubleshooting
 
 Symptoms below, in order — search the page for yours. **`Os { NotFound }` from `herdr plugin`** ·

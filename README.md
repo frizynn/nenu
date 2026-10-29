@@ -37,7 +37,7 @@ and no hosted relay.
 | Workspaces | Herdr's workspaces, tabs and panes as Home's lists and the sidebar's tree, each opening on its pane, with the open pull requests from GitHub on each session's branch. |
 | Rendering | Markdown, tables with Copy, LaTeX math, images, PDFs and sandboxed offline HTML previews. A `file://` path in an answer opens the file. |
 | Phone | An installable PWA built for one hand: native navigation, a folder picker for new agents, a composer that leaves room for the keyboard. |
-| Notifications | Optional Web Push that says who finished, what it answered and where, with one switch per kind: needs input, replies to you, agents another agent started, subagent results and app updates. |
+| Notifications | Optional Web Push that says who finished, what it answered and where, with one switch per kind (needs input, replies to you, agents another agent started, subagent results, app updates) and one per agent, set from its ⋯ menu or a terminal. |
 | Access | Loopback bind behind `tailscale serve` or a conforming reverse proxy, identity and per-device gates, strict CSP. |
 
 Nenu preserves Herdr and the underlying agent CLIs. It does not replace their runtime, permissions,
@@ -106,6 +106,20 @@ herdr plugin action invoke stop    --plugin herdr.nenu
 
 A routine update stays within the installed major version. Read the release notes before crossing a
 major version, then use the explicit `update-major` action.
+
+Choose which agents send notifications. A new agent starts on only when its pane runs in a
+supervisor's folder (`COLLIE_NOTIFY_SUPERVISORS`, by default `~/.firstmate/*,~/Developer/firstmate`);
+the agent's ⋯ menu has the same switch:
+
+```bash
+herdr plugin action invoke notify-list --plugin herdr.nenu   # every agent, on or off, and why
+herdr plugin action invoke notify-off  --plugin herdr.nenu   # the pane focused in Herdr
+herdr plugin action invoke notify-on   --plugin herdr.nenu
+ROOT="$(herdr plugin list --json | jq -r '.result.plugins[] | select(.plugin_id == "herdr.nenu") | .plugin_root')"
+bash "$ROOT/scripts/collie-ctl.sh" notify off <pane-id-or-name>   # any agent, by pane id or name
+```
+
+See [Which agents notify](docs/USER_GUIDE.md#which-agents-notify) for the rule and its limits.
 
 ## Documentation
 

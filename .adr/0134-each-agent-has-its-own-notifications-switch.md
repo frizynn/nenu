@@ -1,0 +1,71 @@
+# 0134. Each agent has its own notifications switch, and a new one starts on only in a supervisor's folder
+
+- **Status:** Accepted (2026-10-29). Builds on [ADR 0072](./0072-a-push-always-shows-and-says-only-what-answers-a-person.md):
+  the kind switches and Snooze stay as they are; this adds a switch per agent in front of them.
+- **Trail:** `bridge/agent-notify.ts` · `bridge/notifications.ts` (`agentOn`) · `bridge/routes/settings.ts`
+  (`/api/notifications/agent`) · `bridge/routes/snapshot.ts` (`notify`) · `scripts/notify.ts` ·
+  `herdr-plugin.toml` (`notify-list`, `notify-on`, `notify-off`) · `web/src/components/agent-chat.tsx`
+
+## Context
+
+The operator runs a herd where a few supervisor agents (a Firstmate and its second mates) each
+launch many short-lived workers. The workers' finishes are for their supervisor, not for a person;
+the kind switches cannot tell them apart, because a worker's turn and a supervisor's turn look the
+same to Nenu (a person-started finish of a named or unnamed Claude). The operator asked to choose
+which agents push, from the phone and from a terminal, with new agents off unless they are a
+supervisor, and without the rule being tied to Firstmate's names.
+
+What Nenu can observe about an agent, measured on the live herd (Herdr 0.9.5, 2026-10-29, 28 agents):
+
+| Signal | Supervisors | Workers | Verdict |
+| --- | --- | --- | --- |
+| Pane folder (Herdr `cwd`) | `~/.firstmate/<home>`, `~/Developer/firstmate` | `~/.firstmate/<home>/projects/<repo>` | Separates every one; reported by Herdr for every pane, on Linux and macOS |
+| Launch arguments (`pane process-info`) | `--settings …secondmate…` on some, bare `--resume <id>` on the main one | `--add-dir …inbox` | A resumed supervisor loses its launch arguments: not stable |
+| Process environment | `FM_HOME` set | `FM_TASK_ID` set | Linux `/proc` only, reads another process's environment, and is Firstmate's own vocabulary |
+| Herdr agent name | none | a few | Most agents are unnamed |
+| Terminal title | "Firstmate operational inbox message" on both | same | Says what the turn is about, not who the agent is |
+
+Herdr offers no per-agent setting a plugin can keep, and `herdr plugin action invoke` takes no
+arguments. It does hand an action its invocation context as `HERDR_PLUGIN_CONTEXT_JSON`, whose
+`focused_pane_id` names the pane focused when the action was invoked; an action may declare the
+`pane` context to be offered on a pane.
+
+## Decision
+
+1. **A switch per agent, in front of every push.** An agent is a pane, keyed `<session>/<paneId>`
+   like the activity ledger. The notification coordinator reads the switch when a transition arrives
+   and again when the debounced alert is decided, so an agent turned off mid-debounce sends nothing.
+   An agent that is off never pushes; one that is on follows the kind switches and Snooze as before.
+2. **A new agent's folder decides how it starts.** On its first sighting an agent is on when its pane
+   folder matches one of `COLLIE_NOTIFY_SUPERVISORS` (comma-separated, whole-path patterns: `~/`,
+   `*` for one folder name, `**` for any depth), off otherwise. The default is this host's Firstmate
+   layout, `~/.firstmate/*,~/Developer/firstmate`: a home matches, a project inside it does not.
+   `**` puts every new agent on; an empty value puts every new agent off.
+3. **An upgrade silences nobody.** When the switches file does not exist yet, every agent in each
+   session's first herd starts on ("existing"). Afterwards only agents first seen later follow the rule.
+4. **One file, two writers.** `<stateDir>/agent-notify.json` is read by the bridge and by
+   `scripts/notify.ts`. Every read checks the file's stamp first; every write is a fresh temp file
+   and a rename. The ⋯ menu's row and the terminal change the same entry, and neither needs a restart.
+   A closed agent is kept for a week, so a pane Herdr restores under the same id keeps its switch.
+5. **The terminal is three plugin actions and one shell verb.** `notify-list` prints every agent with
+   its switch and why; `notify-on`/`notify-off` act on the pane in the action's context (Herdr's focused
+   pane); `collie-ctl.sh notify on|off <pane id | session/pane id | name>` names any agent.
+
+## Consequences
+
+- The folder is a convention, not an identity. A worker launched directly in a supervisor's folder
+  starts on, and a supervisor launched elsewhere starts off; either is one tap or one command to
+  fix, and the choice then sticks. Another operator's supervisors need their own patterns, and with
+  the default an operator without Firstmate homes gets every new agent off until they set `**`.
+- The rule reads Herdr's `cwd`, the folder the pane was launched in, not the agent's current folder
+  (`foreground_cwd`, which a worker moves into its worktree).
+- A pane id is per Herdr server. If a Herdr restart gives a restored agent a new id, it is a new agent
+  to Nenu and the rule decides again.
+- `notify-on`/`notify-off` from a plain shell act on whatever pane Herdr reports as focused, which is
+  the agent's only when invoked from its pane in Herdr's palette; naming the agent through
+  `collie-ctl.sh` is the reliable path from a script.
+- The two writers can lose an update that lands in the same instant (a new agent seen while the
+  terminal writes); the bridge sees the agent again on its next poll and applies the rule, so what is
+  lost is at worst the "existing" mark of the first run.
+- Revisit if Herdr gains per-agent plugin metadata or a launcher field: either would identify a
+  supervisor without a folder convention.
