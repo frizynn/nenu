@@ -2,16 +2,31 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import type { GuardedSendResult, SendTrace } from "./guarded-send.ts";
 import { HerdrClient, type PaneRead, type ReadSource, type ServerInfo, type WireSnapshot } from "./herdr-client.ts";
-import { hcAddress, hcMachine, hcProcessInfo, hcSnapshot, type HcAppDoc, type HcTerminal } from "./hc-core.ts";
+import type { SendRequest } from "./types.ts";
+import {
+  hcAddress, hcKey, hcMachine, hcProcessInfo, hcSnapshot, isSubmitKey, unbracket, type HcAppDoc, type HcTerminal,
+} from "./hc-core.ts";
 
-// herdr-core read only, behind COLLIE_HC_CORE (off by default). A HerdrClient so the session
-// runtime, the state engine and the routes take it unchanged; every write refuses.
+// herdr-core behind COLLIE_HC_CORE (off by default). A HerdrClient so the session runtime, the state
+// engine and the routes take it unchanged. Reads, a chat's send and keys map; every other write refuses.
+//
+// hc has no "type without Enter": `terminal.send` pastes and submits in one call. So typed text waits
+// here, per pane, and goes with the submit key that follows it. A send path that reads the screen to
+// see its text in the box before Enter therefore never sees it and stops; the idle-Claude path, whose
+// witness is Claude's log (ADR 0117), goes through.
 //
 // Each call is one `hc connect`: hello, the request, its reply, exit, the same one-shot shape as
 // Herdr's socket. Only events.subscribe keeps its connection.
 
 const READ_ONLY = "herdr-core is read only in Nenu";
+/** Typed text not followed by its Enter within this long is dropped, never sent later. */
+const PENDING_MS = 20_000;
+/** `terminal.send` waits for ~3 s of quiet, then for the program to start working. */
+const SEND_TIMEOUT_MS = 20_000;
+
+export type HcRpc = <T>(method: string, params: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
 
 /** `hc`: COLLIE_HC_BIN, else on PATH, else where hc installs itself. */
 export function hcBinary(env: Record<string, string | undefined> = process.env, home = homedir()): string | null {
@@ -54,13 +69,18 @@ export class HcClient extends HerdrClient {
   constructor(
     private readonly binary: string,
     private readonly hcTimeoutMs = 5000,
+    rpc?: HcRpc,
+    private readonly now: () => number = Date.now,
   ) {
     super("hc-core", hcTimeoutMs);
+    if (rpc) this.call = rpc;
   }
 
-  private async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  private readonly pending = new Map<string, { text: string; at: number }>();
+
+  private call: HcRpc = async <T>(method: string, params: Record<string, unknown> = {}, timeoutMs = this.hcTimeoutMs): Promise<T> => {
     const child = Bun.spawn([this.binary, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
-    const timer = setTimeout(() => child.kill(), this.hcTimeoutMs);
+    const timer = setTimeout(() => child.kill(), timeoutMs);
     try {
       child.stdin.write(HELLO() + line(method, params));
       await child.stdin.flush();
@@ -76,10 +96,10 @@ export class HcClient extends HerdrClient {
       child.stdin.end();
       child.kill();
     }
-  }
+  };
 
-  private async terminals(): Promise<{ terminals: HcTerminal[]; machines: Array<{ name: string; state: string }> }> {
-    return this.call("terminal.list", {});
+  private async terminals(): Promise<{ terminals: HcTerminal[]; machines?: Array<{ name: string; state: string }> }> {
+    return this.call<{ terminals: HcTerminal[]; machines?: Array<{ name: string; state: string }> }>("terminal.list", {});
   }
 
   override async sessionSnapshot(): Promise<WireSnapshot> {
@@ -89,7 +109,7 @@ export class HcClient extends HerdrClient {
       this.call<{ value: HcAppDoc | null }>("doc.get", on ? { name: "herdr-app", on } : { name: "herdr-app" })
         .then((r) => r.value, () => null);
     docs.set("", await doc());
-    for (const m of machines) if (m.state === "connected") docs.set(m.name, await doc(m.name));
+    for (const m of machines ?? []) if (m.state === "connected") docs.set(m.name, await doc(m.name));
     return hcSnapshot(terminals, docs, claudeSessions(terminals));
   }
 
@@ -106,7 +126,7 @@ export class HcClient extends HerdrClient {
   }
 
   override async serverInfo(): Promise<ServerInfo> {
-    const r = await this.call<{ version?: string }>("server.status");
+    const r = await this.call<{ version?: string }>("server.status", {});
     return { version: r.version ?? "", protocol: 0 };
   }
 
@@ -168,6 +188,40 @@ export class HcClient extends HerdrClient {
     return { close: () => fireDown("closed") };
   }
 
+  /** One message, pasted and submitted by hc itself: `terminal.send`. */
+  async sendMessage(paneId: string, text: string): Promise<{ started?: boolean | null; status?: string | null; turn: number }> {
+    return this.call("terminal.send", { terminal: hcAddress(paneId), text: unbracket(text) }, SEND_TIMEOUT_MS);
+  }
+
+  /** Held until its submit key: hc cannot type without submitting. */
+  override async sendPaneText(paneId: string, text: string): Promise<void> {
+    const held = this.held(paneId);
+    this.pending.set(paneId, { text: (held ?? "") + unbracket(text), at: this.now() });
+  }
+
+  /**
+   * The submit key sends the held text as one `terminal.send` (paste + Enter); keys after it, or any
+   * keys with nothing held, go as `terminal.keys`. Keys other than a submit drop held text: it was
+   * never typed, so whatever they were meant to edit is not there.
+   */
+  override async sendPaneKeys(paneId: string, keys: string[]): Promise<void> {
+    const terminal = hcAddress(paneId);
+    const held = this.held(paneId);
+    this.pending.delete(paneId);
+    let rest = keys;
+    if (held !== null && keys.length > 0 && isSubmitKey(keys[0]!)) {
+      await this.call("terminal.send", { terminal, text: held }, SEND_TIMEOUT_MS);
+      rest = keys.slice(1);
+    }
+    if (rest.length) await this.call("terminal.keys", { terminal, keys: rest.map(hcKey) }, SEND_TIMEOUT_MS);
+  }
+
+  private held(paneId: string): string | null {
+    const held = this.pending.get(paneId);
+    if (!held || this.now() - held.at > PENDING_MS) return null;
+    return held.text;
+  }
+
   override async waitForOutput(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
@@ -181,12 +235,6 @@ export class HcClient extends HerdrClient {
     throw new Error(READ_ONLY);
   }
   override async startAgent(..._args: unknown[]): Promise<never> {
-    throw new Error(READ_ONLY);
-  }
-  override async sendPaneText(..._args: unknown[]): Promise<never> {
-    throw new Error(READ_ONLY);
-  }
-  override async sendPaneKeys(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
   override async closePane(..._args: unknown[]): Promise<never> {
@@ -222,4 +270,30 @@ function claudeSessions(terminals: HcTerminal[], dir = join(homedir(), ".claude"
     }
   }
   return ids;
+}
+
+/**
+ * Nenu's chat send on herdr-core. hc types nothing until Enter, so the screen can never show the text
+ * in the box first (guarded-send.ts's witness): hc's own send is the whole step. It waits for the
+ * terminal to be quiet, refuses a blocked program, pastes and presses Enter, and says whether the turn
+ * started. A retry of a request id that already reached hc types nothing.
+ */
+export async function hcSend(hc: Pick<HcClient, "sendMessage">, paneId: string, request: SendRequest, prior?: Pick<SendTrace, "typeAttempted">, now = Date.now): Promise<GuardedSendResult> {
+  const trace: SendTrace = { phase: "type", preflight: "skipped", attempts: [], typeAttempted: true, noEcho: false, draft: null, screen: null, unverified: true, typedAt: now() };
+  const fail = (error: string, textDelivered: boolean, code?: "not_ready"): GuardedSendResult => ({
+    outcome: { ok: false, requestId: request.requestId, stage: "type", error, textDelivered, ...(code ? { code } : {}) },
+    trace,
+  });
+  if (prior?.typeAttempted) return fail("An earlier try of this message reached herdr-core and may have been sent. Nothing was typed; check Terminal.", true);
+  try {
+    await hc.sendMessage(paneId, request.text);
+  } catch (err) {
+    const blocked = /"kind":"blocked"/.test((err as Error).message);
+    // Any other failure may have come after hc typed: say so rather than invite a duplicate.
+    return blocked
+      ? fail("The agent is waiting on a question or permission, so herdr-core typed nothing. Answer it first.", false, "not_ready")
+      : fail(`herdr-core send failed: ${(err as Error).message}`, true);
+  }
+  trace.phase = "confirm";
+  return { outcome: { ok: true, requestId: request.requestId, ack: "submitted" }, trace };
 }

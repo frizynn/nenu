@@ -178,3 +178,18 @@ export function hcProcessInfo(t: HcTerminal): unknown {
       : [],
   };
 }
+
+// Herdr's key names (HERDR_API.md: `Enter`, `Escape`, `shift+tab`, `ctrl+c`) onto hc's (`enter`,
+// `esc`, `shift+tab`, `ctrl+c`). A modifier chord keeps its `+` grammar; only the case differs.
+const HC_KEY: Record<string, string> = { escape: "esc", return: "enter" };
+
+export function hcKey(key: string): string {
+  const lower = key.toLowerCase();
+  return HC_KEY[lower] ?? lower;
+}
+
+/** Whether a key submits what was typed. */
+export const isSubmitKey = (key: string): boolean => hcKey(key) === "enter";
+
+/** hc pastes on its own (`terminal.send`): Nenu's bracketed-paste markers come off. */
+export const unbracket = (text: string): string => text.replaceAll("\x1b[200~", "").replaceAll("\x1b[201~", "");

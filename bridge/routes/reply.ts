@@ -15,6 +15,7 @@ import { guardedSend, pasteFile, settleDraft, settleAfterType, takeBackQueue, tr
 import { adapterFor as journalFor } from "../journal/registry.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import { InterruptLedger, interruptTurn } from "../interrupt.ts";
+import { HcClient, hcSend } from "../hc-client.ts";
 import type { AgentStates } from "../agent-state.ts";
 import type { QueueService } from "../queue-service.ts";
 import type { SessionRuntime } from "../sessions.ts";
@@ -409,7 +410,7 @@ export async function sendPane(
     const started = Date.now();
     const delivered = prior !== null && !prior.outcome.ok && prior.outcome.textDelivered;
     const received = log?.();
-    const locked = await input.run(rt.name, paneId, () =>
+    const locked = await input.run(rt.name, paneId, () => rt.herdr instanceof HcClient ? hcSend(rt.herdr, paneId, send, prior?.trace) :
       guardedSend(
         { herdr: rt.herdr, paneId, readLines: cfg.readLines, submitKeys: cfg.submitKeys, trigger: triggerFor(rt.poker), ...(received ? { received } : {}), ...(turn ? { turn } : {}) },
         send,
