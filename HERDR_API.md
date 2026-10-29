@@ -219,6 +219,20 @@ unknown method's error lists the server's 105 methods; `pane.get`, `pane.wait_fo
 - **No image API on the socket.** Neither the 0.9.1 method list nor the 0.9.3 schema has an image
   method; pictures in chat come from the journal, uploads or files.
 
+## Plugin actions: contexts and the invocation context (0.9.5, schema-checked 2026-10-29)
+
+Read from `herdr api schema --json` and the 0.9.5 binary, not from a live invocation (running a plugin
+action against the operator's install was out of bounds).
+
+- **`contexts`** in a manifest `[[actions]]` entry takes `global`, `workspace`, `tab`, `pane` or
+  `selection` (`PluginActionContext`): where Herdr offers the action.
+- **`herdr plugin action invoke <id> --plugin <plugin>`** takes no arguments. Herdr hands the command
+  its invocation context as JSON in **`HERDR_PLUGIN_CONTEXT_JSON`** (`PluginInvocationContext`:
+  `focused_pane_id`, `focused_pane_agent`, `focused_pane_cwd`, `focused_pane_status`, `workspace_id`,
+  `tab_id`, `selected_text`, `invocation_source`, …), plus `HERDR_PLUGIN_ACTION_ID`. Nenu's `notify-on`
+  and `notify-off` read `focused_pane_id` (ADR 0134). Which pane that is when the action is invoked from
+  a shell rather than from Herdr's palette is unverified.
+
 ## `pane.send_keys` key grammar (verified)
 
 The server **validates** every key and rejects unknown names with

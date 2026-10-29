@@ -82,6 +82,7 @@ function setup(
   const policy = {
     maybe: (s: AgentStatus): boolean => (s === "blocked" ? live.blocked : s === "done" ? live.done || live.subagents : false),
     wants: (d: AlertDetail): boolean => (d.status === "blocked" ? live.blocked : d.startedBy === "subagent" ? live.subagents : live.done),
+    agentOn: () => true,
   };
   let now = 1_000;
   const coord = new NotificationCoordinator(clock, sink, 30_000, policy, describe, (paneId) => seen[paneId], () => now);
@@ -169,7 +170,7 @@ describe("NotificationCoordinator — one notification per agent, sent once", ()
     }
     const clock = new FakeClock();
     const sink = new OpenScreenSink();
-    const policy = { maybe: () => true, wants: () => true };
+    const policy = { maybe: () => true, wants: () => true, agentOn: () => true };
     let now = 1_000;
     const coord = new NotificationCoordinator(clock, sink, 30_000, policy, undefined, () => undefined, () => now);
     coord.onTransition(agent("p1", "done"), "working", "done");
@@ -265,7 +266,7 @@ describe("NotificationCoordinator — every decision is logged", () => {
     let open = true;
     const sink: NotifySink = { render: () => (open ? "open" : "sent") };
     // Settings as shipped: an agent another agent launched does not push.
-    const policy = { maybe: () => true, wants: (d: AlertDetail) => !d.launched };
+    const policy = { maybe: () => true, wants: (d: AlertDetail) => !d.launched, agentOn: () => true };
     const describe = (view: AgentView, status: "blocked" | "done"): AlertDetail =>
       ({ status, name: view.paneLabel ?? "", where: "", startedBy: "person", requested: false, launched: view.paneId === "p2", summary: "secret words" });
     let now = 1_000;

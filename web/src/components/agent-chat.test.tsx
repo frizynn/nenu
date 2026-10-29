@@ -110,7 +110,7 @@ describe("AgentChat — the agent's notifications", () => {
     const user = userEvent.setup();
     renderChat({ agent: { ...fixtureAgents[0]!, notify: true } });
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    const row = within(screen.getByRole("dialog", { name: "Conversation actions" })).getByRole("button", { name: "Notifications" });
+    const row = within(screen.getByRole("dialog", { name: "Conversation actions" })).getByRole("button", { name: "Notify about this agent" });
     expect(row).toHaveAttribute("aria-pressed", "true");
     await user.click(row);
     await waitFor(() => expect(sent).toEqual({ paneId: fixtureAgents[0]!.paneId, on: false }));
@@ -121,11 +121,11 @@ describe("AgentChat — the agent's notifications", () => {
     const user = userEvent.setup();
     renderChat({ agent: { ...fixtureAgents[0]!, notify: false } });
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.getByRole("button", { name: "Notifications" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Notify about this agent" })).toHaveAttribute("aria-pressed", "false");
     cleanup();
     renderChat();
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.queryByRole("button", { name: "Notifications" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Notify about this agent" })).toBeNull();
   });
 });
 

@@ -118,7 +118,7 @@ export function interactionAlert(msg: PushMessage, interaction: Interaction): Pu
 export interface NotifyPolicy {
   maybe(status: AgentStatus): boolean;
   wants(alert: AlertDetail): boolean;
-  agentOn?(paneId: string): boolean;
+  agentOn(paneId: string): boolean;
 }
 
 /** Who an alert is about; may answer later (it reads the pane's journal). */
@@ -194,9 +194,9 @@ export class NotificationCoordinator<H = unknown> {
   /** Wire to `StateEngine.onTransition`. */
   onTransition(agent: AgentView, _from: AgentStatus, to: AgentStatus): void {
     const id = agent.paneId;
-    if (!this.policy.maybe(to) || !this.agentOn(id)) {
-      // Resolved to a non-notifiable (or preference-disabled) state: drop a still-pending alert,
-      // retract a delivered one.
+    if (!this.policy.maybe(to) || !this.policy.agentOn(id)) {
+      // Resolved to a non-notifiable (or preference-disabled) state, or an agent that is off: drop a
+      // still-pending alert, retract a delivered one.
       this.resolve(id);
       return;
     }
@@ -217,7 +217,7 @@ export class NotificationCoordinator<H = unknown> {
       if (this.pending.get(id) !== entry) return;
       this.pending.delete(id);
       // The agent's switch is read again here: it may have been turned off during the debounce.
-      const outcome = !this.agentOn(id) ? "agent" : !this.policy.wants(alert) ? "rule" : this.alreadyTold(id, alert.status) ? "told" : this.sink.render(notice(id, alert));
+      const outcome = !this.policy.agentOn(id) ? "agent" : !this.policy.wants(alert) ? "rule" : this.alreadyTold(id, alert.status) ? "told" : this.sink.render(notice(id, alert));
       this.decided({ paneId: id, alert, outcome });
       // Only a notice that went out counts as told: one held back reached nobody.
       if (outcome !== "sent") return;
@@ -243,11 +243,11 @@ export class NotificationCoordinator<H = unknown> {
     // Drop pending alerts no kind of their status would push — nothing was shown yet. One that may
     // still push is re-checked against `wants` when it is described.
     for (const [id, p] of [...this.pending]) {
-      if (!this.policy.maybe(p.status) || !this.agentOn(id)) this.cancelPending(id);
+      if (!this.policy.maybe(p.status) || !this.policy.agentOn(id)) this.cancelPending(id);
     }
     // Forget delivered alerts of a now-disabled kind; the app closes their notifications when it opens.
     for (const [id, a] of [...this.outstanding]) {
-      if (!this.policy.wants(a) || !this.agentOn(id)) this.outstanding.delete(id);
+      if (!this.policy.wants(a) || !this.policy.agentOn(id)) this.outstanding.delete(id);
     }
   }
 
@@ -259,10 +259,6 @@ export class NotificationCoordinator<H = unknown> {
   clearAll(): void {
     for (const id of [...this.pending.keys()]) this.cancelPending(id);
     this.outstanding.clear();
-  }
-
-  private agentOn(id: string): boolean {
-    return this.policy.agentOn?.(id) ?? true;
   }
 
   private resolve(id: string): void {

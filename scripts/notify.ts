@@ -67,7 +67,7 @@ export function formatList(rows: readonly AgentNotifyRow[], patterns: readonly s
   const gone = rows.filter((r) => r.gone !== undefined);
   return [
     `New agents start with notifications on in: ${patterns.length ? patterns.join(", ") : "(no folder: every new agent starts off)"}`,
-    "  (COLLIE_NOTIFY_SUPERVISORS in the plugin .env; restart the bridge after changing it)",
+    "  (COLLIE_NOTIFY_SUPERVISORS in the plugin .env; then: herdr plugin action invoke restart --plugin herdr.nenu)",
     "",
     here.length ? table(here) : "  no agents seen yet",
     ...(gone.length ? ["", "Closed, kept for a week in case Herdr restores them:", table(gone)] : []),
@@ -85,6 +85,8 @@ if (import.meta.main) {
     } else if (verb === "on" || verb === "off") {
       const rows = store.list();
       const target = resolveTarget(arg, rows, session, process.env);
+      // A session the bridge never saw would keep its entry forever: nothing reconciles it.
+      if (target.session !== session && !store.sessions().includes(target.session)) throw new Error(`no Herdr session "${target.session}" seen by the bridge`);
       const known = rows.find((r) => r.session === target.session && r.paneId === target.paneId);
       const row = store.set(target.session, target.paneId, verb === "on");
       const label = known?.name ?? known?.workspace ?? "";

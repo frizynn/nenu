@@ -40,12 +40,17 @@ arguments. It does hand an action its invocation context as `HERDR_PLUGIN_CONTEX
    folder matches one of `COLLIE_NOTIFY_SUPERVISORS` (comma-separated, whole-path patterns: `~/`,
    `*` for one folder name, `**` for any depth), off otherwise. The default is this host's Firstmate
    layout, `~/.firstmate/*,~/Developer/firstmate`: a home matches, a project inside it does not.
+   A supervisor run from another folder (a Firstmate in a worktree, for one) needs its folder added.
    `**` puts every new agent on; an empty value puts every new agent off.
-3. **An upgrade silences nobody.** When the switches file does not exist yet, every agent in each
-   session's first herd starts on ("existing"). Afterwards only agents first seen later follow the rule.
+3. **An upgrade silences nobody.** The file records which Herdr sessions it has seen. A session's
+   first herd ever starts every agent in it on ("existing"); afterwards only agents first seen later
+   follow the rule. Recording sessions, not the file's existence, keeps a terminal command run before
+   the bridge's first start from costing the upgrade its seeding.
 4. **One file, two writers.** `<stateDir>/agent-notify.json` is read by the bridge and by
-   `scripts/notify.ts`. Every read checks the file's stamp first; every write is a fresh temp file
-   and a rename. The ⋯ menu's row and the terminal change the same entry, and neither needs a restart.
+   `scripts/notify.ts`. Every read checks the file's stamp first; every change is read, made and
+   written (a temp file and a rename) under a short exclusive lock file, so neither writer overwrites
+   the other's change. The ⋯ menu's row and the terminal change the same entry, and neither needs a
+   restart.
    A closed agent is kept for a week, so a pane Herdr restores under the same id keeps its switch.
 5. **The terminal is three plugin actions and one shell verb.** `notify-list` prints every agent with
    its switch and why; `notify-on`/`notify-off` act on the pane in the action's context (Herdr's focused
@@ -64,8 +69,10 @@ arguments. It does hand an action its invocation context as `HERDR_PLUGIN_CONTEX
 - `notify-on`/`notify-off` from a plain shell act on whatever pane Herdr reports as focused, which is
   the agent's only when invoked from its pane in Herdr's palette; naming the agent through
   `collie-ctl.sh` is the reliable path from a script.
-- The two writers can lose an update that lands in the same instant (a new agent seen while the
-  terminal writes); the bridge sees the agent again on its next poll and applies the rule, so what is
-  lost is at worst the "existing" mark of the first run.
+- A writer that dies holding the lock leaves it behind; it is taken over after ten seconds. While the
+  lock is held the other writer waits up to two seconds, then fails loudly (the terminal command) or
+  tries again on the next poll (the bridge).
+- A Herdr session first seen after the upgrade, such as a new named session, is seeded too: its first
+  agents start on whatever the rule says.
 - Revisit if Herdr gains per-agent plugin metadata or a launcher field: either would identify a
   supervisor without a folder convention.

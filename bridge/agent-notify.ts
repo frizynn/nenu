@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, type Stats } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentView } from "./types.ts";
@@ -8,12 +8,12 @@ import type { AgentView } from "./types.ts";
 //
 // An agent is a pane, keyed `<session>/<paneId>` like the activity ledger: Herdr never reuses a pane
 // id. Its first sighting decides how it starts: on when its folder matches one of the operator's
-// supervisor patterns (COLLIE_NOTIFY_SUPERVISORS), off otherwise. Agents already present when this
-// file did not exist yet keep pushing, so an upgrade silences nobody.
+// supervisor patterns (COLLIE_NOTIFY_SUPERVISORS), off otherwise. The agents in a session's first
+// herd ever keep pushing, so an upgrade silences nobody.
 //
 // The file is shared with `scripts/notify.ts`, which the operator runs from a terminal: every read
-// checks the file's stamp first and every write goes through a fresh temp file and a rename, so
-// either side picks up the other's change on its next look.
+// checks the file's stamp first, and every change is read, made and written (a temp file and a
+// rename) under a short lock, so neither side writes over the other's change.
 
 /** How an agent got its switch: there before the feature, the supervisor rule, or the operator. */
 export type AgentNotifyWhy = "existing" | "supervisor" | "new" | "set";
@@ -38,6 +38,7 @@ export interface AgentNotifyRow extends AgentNotifyEntry {
 
 interface AgentNotifyFile {
   agents: Record<string, AgentNotifyEntry>;
+  seeded: string[];
 }
 
 /** An agent that left the herd this long ago is forgotten. */
@@ -80,19 +81,16 @@ function nameOf(agent: AgentView): string | undefined {
 
 export class AgentNotifyStore {
   private agents: Record<string, AgentNotifyEntry> = {};
+  /** Sessions whose first herd was already seeded (decision 3 of ADR 0134). */
+  private seeded: string[] = [];
   private stamp = "";
-  /** The file did not exist when this process started: each session's first herd is seeded on. */
-  private readonly seeding: boolean;
-  private readonly seeded = new Set<string>();
 
   constructor(
     private readonly file: string,
     private readonly patterns: readonly string[],
     private readonly now: () => number = Date.now,
     private readonly home: string = homedir(),
-  ) {
-    this.seeding = this.read() === "missing";
-  }
+  ) {}
 
   static at(stateDir: string, patterns: readonly string[]): AgentNotifyStore {
     return new AgentNotifyStore(join(stateDir, "agent-notify.json"), patterns);
@@ -100,8 +98,14 @@ export class AgentNotifyStore {
 
   /** Whether this agent may push. One the bridge has not seen yet may: the herd's next read decides it. */
   on(session: string, paneId: string): boolean {
+    return this.switches(session)(paneId);
+  }
+
+  /** {@link on} for many agents of one session, reading the file once. */
+  switches(session: string): (paneId: string) => boolean {
     this.read();
-    return this.agents[key(session, paneId)]?.on ?? true;
+    const agents = this.agents;
+    return (paneId) => agents[key(session, paneId)]?.on ?? true;
   }
 
   /** Every agent the file knows, present ones first. */
@@ -112,87 +116,143 @@ export class AgentNotifyStore {
       .sort((a, b) => Number(a.gone !== undefined) - Number(b.gone !== undefined) || a.session.localeCompare(b.session) || a.paneId.localeCompare(b.paneId, undefined, { numeric: true }));
   }
 
+  /** The sessions the file has seen, so a terminal command can refuse one that does not exist. */
+  sessions(): string[] {
+    this.read();
+    return [...this.seeded];
+  }
+
   /** The operator's choice for one agent; one never seen yet is remembered for when it shows up. */
   set(session: string, paneId: string, on: boolean): AgentNotifyRow {
-    this.read();
-    const k = key(session, paneId);
-    const entry: AgentNotifyEntry = { ...(this.agents[k] ?? { firstSeen: this.now() }), on, why: "set" };
-    this.agents = { ...this.agents, [k]: entry };
-    this.write();
-    return { ...entry, session, paneId };
+    return this.locked(() => {
+      const k = key(session, paneId);
+      const entry: AgentNotifyEntry = { ...(this.agents[k] ?? { firstSeen: this.now() }), on, why: "set" };
+      this.agents = { ...this.agents, [k]: entry };
+      this.write();
+      return { ...entry, session, paneId };
+    });
   }
 
   /**
    * Bring the file in line with a session's herd, read from Herdr just now: a new agent gets its
-   * switch, one that left is marked gone, one gone long enough is forgotten.
+   * switch, one that left is marked gone, one gone long enough is forgotten. A session's first herd
+   * ever is seeded on, so the agents already running when this ships keep pushing.
    */
   reconcile(session: string, herd: readonly AgentView[]): void {
     this.read();
-    const now = this.now();
-    const seed = this.seeding && !this.seeded.has(session);
-    this.seeded.add(session);
-    const next = { ...this.agents };
-    let changed = false;
-    const present = new Set<string>();
-    for (const agent of herd) {
-      const k = key(session, agent.paneId);
-      present.add(k);
-      const was = next[k];
-      const facts = { name: nameOf(agent), workspace: agent.workspaceLabel, cwd: agent.cwd || undefined, agent: agent.agent };
-      if (!was) {
-        const supervisor = isSupervisor(agent, this.patterns, this.home);
-        next[k] = { on: seed || supervisor, why: seed ? "existing" : supervisor ? "supervisor" : "new", ...defined(facts), firstSeen: now };
-        changed = true;
-        continue;
+    if (this.seeded.includes(session) && !this.differs(session, herd)) return;
+    this.locked(() => {
+      const now = this.now();
+      const seed = !this.seeded.includes(session);
+      const next = { ...this.agents };
+      const present = new Set<string>();
+      for (const agent of herd) {
+        const k = key(session, agent.paneId);
+        present.add(k);
+        const was = next[k];
+        const facts = factsOf(agent);
+        if (!was) {
+          const supervisor = isSupervisor(agent, this.patterns, this.home);
+          next[k] = { on: seed || supervisor, why: seed ? "existing" : supervisor ? "supervisor" : "new", ...facts, firstSeen: now };
+        } else if (was.gone !== undefined || moved(was, facts)) {
+          const { gone: _gone, ...kept } = was;
+          next[k] = { ...kept, ...facts };
+        }
       }
-      if (was.gone !== undefined || (Object.keys(facts) as Array<keyof typeof facts>).some((f) => facts[f] !== undefined && facts[f] !== was[f])) {
-        const { gone: _gone, ...kept } = was;
-        next[k] = { ...kept, ...defined(facts) };
-        changed = true;
+      for (const [k, entry] of Object.entries(next)) {
+        if (split(k).session !== session || present.has(k)) continue;
+        if (entry.gone === undefined) next[k] = { ...entry, gone: now };
+        else if (now - entry.gone > AGENT_NOTIFY_FORGET_MS) delete next[k];
       }
-    }
-    for (const [k, entry] of Object.entries(next)) {
-      if (split(k).session !== session || present.has(k)) continue;
-      if (entry.gone === undefined) {
-        next[k] = { ...entry, gone: now };
-        changed = true;
-      } else if (now - entry.gone > AGENT_NOTIFY_FORGET_MS) {
-        delete next[k];
-        changed = true;
-      }
-    }
-    if (!changed) return;
-    this.agents = next;
-    this.write();
+      this.agents = next;
+      if (seed) this.seeded = [...this.seeded, session];
+      this.write();
+    });
   }
 
-  /** Re-read the file when it changed since the last look; "missing" when there is none. */
-  private read(): "missing" | "read" | "same" {
+  /** Whether the herd says anything the file does not hold yet, so a quiet poll neither locks nor writes. */
+  private differs(session: string, herd: readonly AgentView[]): boolean {
+    const present = new Set(herd.map((a) => key(session, a.paneId)));
+    for (const agent of herd) {
+      const was = this.agents[key(session, agent.paneId)];
+      if (!was || was.gone !== undefined || moved(was, factsOf(agent))) return true;
+    }
+    const now = this.now();
+    return Object.entries(this.agents).some(([k, e]) => split(k).session === session && !present.has(k) && (e.gone === undefined || now - e.gone > AGENT_NOTIFY_FORGET_MS));
+  }
+
+  /**
+   * Read, change and write under a short exclusive lock, so the bridge and the terminal command never
+   * write over each other's change. A lock older than {@link LOCK_STALE_MS} is a writer that died.
+   */
+  private locked<T>(change: () => T): T {
+    mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
+    const lock = `${this.file}.lock`;
+    const deadline = Date.now() + LOCK_WAIT_MS;
+    for (;;) {
+      try {
+        closeSync(openSync(lock, "wx", 0o600));
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { force: true });
+      } catch {
+        /* released meanwhile */
+      }
+      if (Date.now() > deadline) throw new Error(`${lock} is held by another writer`);
+      Atomics.wait(PAUSE, 0, 0, 10);
+    }
+    try {
+      this.read();
+      return change();
+    } finally {
+      rmSync(lock, { force: true });
+    }
+  }
+
+  /** Re-read the file when it changed since the last look. */
+  private read(): void {
     let stamp: string;
     try {
-      const st = statSync(this.file);
-      stamp = `${st.mtimeMs}:${st.size}:${st.ino}`;
+      stamp = stampOf(statSync(this.file));
     } catch {
-      return "missing";
+      return;
     }
-    if (stamp === this.stamp) return "same";
+    if (stamp === this.stamp) return;
     try {
-      this.agents = coerce(JSON.parse(readFileSync(this.file, "utf8"))).agents;
+      ({ agents: this.agents, seeded: this.seeded } = coerce(JSON.parse(readFileSync(this.file, "utf8"))));
     } catch {
       /* unreadable: keep what we had */
     }
     this.stamp = stamp;
-    return "read";
   }
 
   private write(): void {
-    mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
     const tmp = `${this.file}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify({ agents: this.agents } satisfies AgentNotifyFile, null, 2), { mode: 0o600 });
+    writeFileSync(tmp, JSON.stringify({ agents: this.agents, seeded: this.seeded } satisfies AgentNotifyFile, null, 2), { mode: 0o600 });
+    // The temp file's stamp is the file's once renamed; a stat after the rename could read another writer's.
+    const stamp = stampOf(statSync(tmp));
     renameSync(tmp, this.file);
-    const st = statSync(this.file);
-    this.stamp = `${st.mtimeMs}:${st.size}:${st.ino}`;
+    this.stamp = stamp;
   }
+}
+
+const LOCK_WAIT_MS = 2_000;
+const LOCK_STALE_MS = 10_000;
+const PAUSE = new Int32Array(new SharedArrayBuffer(4));
+
+function stampOf(st: Stats): string {
+  return `${st.mtimeMs}:${st.size}:${st.ino}`;
+}
+
+function factsOf(agent: AgentView): Partial<Pick<AgentNotifyEntry, "name" | "workspace" | "cwd" | "agent">> {
+  return defined({ name: nameOf(agent), workspace: agent.workspaceLabel, cwd: agent.cwd || undefined, agent: agent.agent });
+}
+
+function moved(was: AgentNotifyEntry, facts: ReturnType<typeof factsOf>): boolean {
+  return (Object.keys(facts) as Array<keyof typeof facts>).some((f) => facts[f] !== was[f]);
 }
 
 function key(session: string, paneId: string): string {
@@ -213,8 +273,10 @@ const WHYS: readonly AgentNotifyWhy[] = ["existing", "supervisor", "new", "set"]
 /** Whatever the file holds, as entries that have at least a switch and a reason; anything else is dropped. */
 export function coerce(raw: unknown): AgentNotifyFile {
   const agents: Record<string, AgentNotifyEntry> = {};
+  const seen = (raw as { seeded?: unknown } | null)?.seeded;
+  const seeded = Array.isArray(seen) ? seen.filter((s): s is string => typeof s === "string" && s !== "") : [];
   const rows = (raw as { agents?: unknown } | null)?.agents;
-  if (typeof rows !== "object" || rows === null) return { agents };
+  if (typeof rows !== "object" || rows === null) return { agents, seeded };
   for (const [k, v] of Object.entries(rows as Record<string, unknown>)) {
     const e = v as Partial<AgentNotifyEntry> | null;
     if (!k.includes("/") || typeof e !== "object" || e === null || typeof e.on !== "boolean" || !WHYS.includes(e.why as AgentNotifyWhy)) continue;
@@ -227,5 +289,5 @@ export function coerce(raw: unknown): AgentNotifyFile {
       ...(typeof e.gone === "number" ? { gone: e.gone } : {}),
     };
   }
-  return { agents };
+  return { agents, seeded };
 }

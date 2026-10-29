@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,9 +23,9 @@ function pane(paneId: string, cwd: string, extra: Partial<AgentView> = {}): Agen
   return { paneId, workspaceId: "w1", workspaceLabel: "demo", workspaceNumber: 1, tabId: "w1:t1", agent: "claude", status: "idle", cwd, focused: false, ...extra };
 }
 
-/** A store whose file already exists (not a first run), at a clock the test moves. */
+/** A store whose sessions were already seeded (not a first run), at a clock the test moves. */
 function store(file = fileIn(), patterns = DEFAULT_SUPERVISOR_PATTERNS, clock = { now: 1_000 }) {
-  if (!existsSync(file)) writeFileSync(file, JSON.stringify({ agents: {} }));
+  if (!existsSync(file)) writeFileSync(file, JSON.stringify({ agents: {}, seeded: ["default", "a", "b"] }));
   return { s: new AgentNotifyStore(file, patterns, () => clock.now, HOME), file, clock };
 }
 
@@ -87,6 +87,28 @@ describe("AgentNotifyStore", () => {
     again.reconcile("default", [pane("w1:p1", "/work/shop"), pane("w1:p3", "/work/shop")]);
     expect(again.on("default", "w1:p3")).toBe(false);
     expect(again.on("default", "w1:p1")).toBe(true);
+  });
+
+  test("a terminal command run before the bridge's first start does not cost the upgrade its seeding", () => {
+    const file = fileIn();
+    new AgentNotifyStore(file, DEFAULT_SUPERVISOR_PATTERNS, () => 1, HOME).set("default", "w1:p9", false);
+    const bridge = new AgentNotifyStore(file, DEFAULT_SUPERVISOR_PATTERNS, () => 2, HOME);
+    bridge.reconcile("default", [pane("w1:p1", "/work/shop"), pane("w1:p9", "/work/shop")]);
+    expect(bridge.on("default", "w1:p1")).toBe(true);
+    expect(bridge.on("default", "w1:p9")).toBe(false);
+    expect(bridge.sessions()).toEqual(["default"]);
+  });
+
+  test("a lock left by a writer that died is taken over; a live one makes the write fail, not clobber", () => {
+    const { s, file } = store();
+    writeFileSync(`${file}.lock`, "");
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(`${file}.lock`, old, old);
+    s.set("default", "w1:p1", true);
+    expect(existsSync(`${file}.lock`)).toBe(false);
+    writeFileSync(`${file}.lock`, "");
+    expect(() => s.set("default", "w1:p1", false)).toThrow(/held by another writer/);
+    expect(s.on("default", "w1:p1")).toBe(true);
   });
 
   test("the operator's choice survives a restart and is never overwritten by the rule", () => {
@@ -156,7 +178,7 @@ describe("AgentNotifyStore", () => {
     writeFileSync(file, "{not json");
     expect(s.on("default", "w1:p1")).toBe(true);
     expect(coerce({ agents: { "nokey": { on: true, why: "set" }, "s/p": { on: "yes", why: "set" }, "s/q": { on: false, why: "set", firstSeen: 3 } } }))
-      .toEqual({ agents: { "s/q": { on: false, why: "set", firstSeen: 3 } } });
+      .toEqual({ agents: { "s/q": { on: false, why: "set", firstSeen: 3 } }, seeded: [] });
   });
 });
 

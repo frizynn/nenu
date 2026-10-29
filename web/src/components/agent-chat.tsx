@@ -887,7 +887,7 @@ export const AgentChat = memo(function AgentChat({
   ];
   // Whether this agent may push at all (ADR 0134), bridge-wide like the kinds in Settings. Absent when
   // the bridge predates the switch, and then the row is too.
-  const notifyActions: ConversationAction[] = agent && agent.notify !== undefined ? [{ id: "notify", label: "Notifications", icon: Bell, on: agent.notify,
+  const notifyActions: ConversationAction[] = agent && agent.notify !== undefined ? [{ id: "notify", label: "Notify about this agent", icon: Bell, on: agent.notify,
     run: () => void setAgentNotify(paneId, !agent.notify, session).then(
       (r) => { setStatus(r.notify ? "Notifications on for this agent" : "Notifications off for this agent", "success"); revalidate(); },
       () => setStatus("Could not change this agent's notifications", "error"),

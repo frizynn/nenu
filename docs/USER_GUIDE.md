@@ -791,8 +791,8 @@ agent, Subagent results and App updates.
 ### Which agents notify
 
 Each agent also has its own switch, in front of the kinds above: an agent that is off never pushes,
-one that is on follows them. On a phone or a desk it is the **Notifications** row of the agent's ⋯
-menu, checked while the agent may push. From a terminal:
+one that is on follows them. On a phone or a desk it is a row of the agent's ⋯
+menu, **Notify about this agent**, checked while the agent may push. From a terminal:
 
 ```bash
 herdr plugin action invoke notify-list --plugin herdr.nenu   # every agent: on/off, pane, folder, why
@@ -817,8 +817,9 @@ agent starts off. Supervisors are matched by the folder their pane was launched 
 `COLLIE_NOTIFY_SUPERVISORS` in the plugin `.env` (comma-separated, the whole path; `~/` is your home,
 `*` one folder name, `**` any depth). The default, `~/.firstmate/*,~/Developer/firstmate`, matches a
 Firstmate home and the Firstmate checkout but not the projects their workers run in. Set it to `**`
-for every new agent on, or to your own supervisors' folders, then restart the bridge. Agents that
-were already running when you upgraded keep notifying. The reasoning and the limits of matching by
+for every new agent on, or to your own supervisors' folders, then run
+`herdr plugin action invoke restart --plugin herdr.nenu`. Agents that were already running when you
+upgraded keep notifying. A change from the terminal reaches an open ⋯ menu within about ten seconds. The reasoning and the limits of matching by
 folder: [ADR 0134](../.adr/0134-each-agent-has-its-own-notifications-switch.md).
 
 ## Troubleshooting

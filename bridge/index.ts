@@ -181,9 +181,8 @@ const startSession = (name: string, herdr: HerdrApi, isPrimary: boolean): Sessio
   // a push the service worker then hid would count against iOS's silent-push quota (ADR 0072).
   const quiet: MuteGate = { muted: () => snooze.isMuted() ? "snoozed" : live.watching() ? "open" : null };
   const sink = makeNotifySink(push, quiet, herdTagFor(isPrimary, name), isPrimary ? undefined : name);
-  // Each decision goes to the journal, so a missing push is read there instead of deduced.
-  // A new agent gets its own switch on the first herd it shows up in.
-  // A failed write must not stop the poll: the switches already decided stay in memory.
+  // A new agent gets its own switch on the first herd it shows up in. A failed write (or a lock the
+  // terminal holds) must not stop the poll: the next poll tries again.
   engine.onUpdate((s) => {
     try {
       agentNotify.reconcile(name, s.agents);
@@ -196,6 +195,7 @@ const startSession = (name: string, herdr: HerdrApi, isPrimary: boolean): Sessio
     wants: (alert) => notifyPrefs.wants(alert),
     agentOn: (paneId) => agentNotify.on(name, paneId),
   };
+  // Each decision goes to the journal, so a missing push is read there instead of deduced.
   const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, policy, alerts.for(name),
     (paneId) => activity.get(name, paneId)?.seenAt, Date.now, (decision) => console.log(decisionLine(name, decision)));
   engine.onTransition((agent, from, to) => notifications.onTransition(agent, from, to));

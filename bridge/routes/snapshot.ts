@@ -79,7 +79,8 @@ function herdOf({ activity, agentStates, agentNotify, hasJournal, interactions }
     return a ? { ...withTurn, status, lastActiveAt: a.activeAt, lastSeenAt: a.seenAt } : { ...withTurn, status };
   };
   // Only an agent pushes, so only an agent carries its notifications switch.
-  const withNotify = (p: AgentView): AgentView => agentNotify ? { ...p, notify: agentNotify.on(rt.name, p.paneId) } : p;
+  const notify = agentNotify?.switches(rt.name);
+  const withNotify = (p: AgentView): AgentView => notify ? { ...p, notify: notify(p.paneId) } : p;
   const shown = { agents: agents.map((p) => withNotify(withActivity(p))), shellPanes: shellPanes.map(withActivity) };
   // The one place a pane leaves the bridge: the session ref is stripped to a presence flag here, so
   // an agent-reported filesystem path never reaches a browser (see toPaneWire). The flag is computed
