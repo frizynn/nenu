@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 
-import type { WireSnapshot } from "./herdr-client.ts";
+import type { WireAgent, WireSnapshot } from "./herdr-client.ts";
 import type { AgentStatus } from "./types.ts";
 
 // herdr-core (`hc`) seen as a Herdr session, read only. Pure: hc's own records in, the Herdr wire
@@ -44,9 +44,11 @@ const HC_STATUS: Record<string, AgentStatus> = {
   working: "working",
   blocked: "blocked",
   done: "done",
+  // A program that stopped on an error waits for a person, as a blocked one does.
+  error: "blocked",
 };
 
-/** hc's state words onto Herdr's. `error` has no Herdr word, so it reads as unknown. */
+/** hc's state words onto Herdr's; a word hc adds later reads as unknown. */
 export function hcAgentStatus(status: HcStatus | null | undefined): AgentStatus {
   return (status && HC_STATUS[status.state]) ?? "unknown";
 }
@@ -161,7 +163,25 @@ export function hcSnapshot(
         agent_status: "unknown" as AgentStatus,
       })),
   );
-  return { version, protocol: 0, workspaces, tabs, panes };
+  const agents = live.flatMap((t) => (hcAgentName(t.status) ? [hcCounters(t)] : []));
+  return { version, protocol: 0, workspaces, tabs, panes, agents };
+}
+
+/**
+ * Herdr's transition counters from hc's turn number, which counts the turns a program started: each
+ * turn moves the state twice (into working, out of it), so a turn that started and ended between
+ * two polls still moves `state_change_seq`. A dialog inside a turn (working, blocked, working) does
+ * not count: hc reports no counter for it.
+ */
+export function hcCounters(t: HcTerminal): WireAgent {
+  const turn = t.turn ?? 0;
+  const working = t.status?.state === "working" || t.status?.state === "blocked";
+  return {
+    pane_id: hcPaneId(t.address),
+    state_change_seq: 2 * turn - (working ? 1 : 0),
+    completion_seq: working ? Math.max(0, turn - 1) : turn,
+    ...(t.name ? { name: t.name } : {}),
+  };
 }
 
 const scoped = (machine: string, id: string): string => (machine ? `${machine}:${id}` : id);
