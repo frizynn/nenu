@@ -103,6 +103,27 @@ title = "Send a test notification"
 contexts = ["workspace"]
 command = ["bash", "scripts/collie-ctl.sh", "push-test"]
 
+# Which agents may push (ADR 0134). A plugin action takes no arguments, so on/off act on the pane
+# Herdr names in the action's context: the one focused when it is invoked from Herdr's palette.
+# Naming an agent from a shell is `collie-ctl.sh notify on|off <pane id or name>`.
+[[actions]]
+id = "notify-list"
+title = "List agent notifications"
+contexts = ["workspace"]
+command = ["bash", "scripts/collie-ctl.sh", "notify", "list"]
+
+[[actions]]
+id = "notify-on"
+title = "Notifications on for this agent"
+contexts = ["pane", "workspace"]
+command = ["bash", "scripts/collie-ctl.sh", "notify", "on"]
+
+[[actions]]
+id = "notify-off"
+title = "Notifications off for this agent"
+contexts = ["pane", "workspace"]
+command = ["bash", "scripts/collie-ctl.sh", "notify", "off"]
+
 [[actions]]
 id = "subagent-hooks"
 title = "Enable Claude subagent activity"

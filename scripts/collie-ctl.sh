@@ -1468,6 +1468,16 @@ cmd_push_test() {
   "$BUN" run "${PLUGIN_ROOT}/scripts/push-test.ts" "$@"
 }
 
+# Which agents may push (ADR 0134): `notify list`, `notify on|off [agent]`. With no agent, Herdr's
+# focused pane when invoked as a plugin action. scripts/notify.ts writes the supervised bridge's state
+# file, which the bridge re-reads on its next look; no restart.
+cmd_notify() {
+  [ -n "$BUN" ] || { echo "error: bun not found on PATH" >&2; exit 1; }
+  export_bridge_env
+  drop_action_state_dir
+  HERDR_SOCKET_PATH="$SOCKET" "$BUN" run "${PLUGIN_ROOT}/scripts/notify.ts" "$@"
+}
+
 # Run one Claude settings installer with the supervised bridge's environment (its port and state
 # dir), not Herdr's action-only state directory. Each installer is opt-in: nothing calls these
 # verbs except the operator, through the plugin action or the shell.
@@ -1517,8 +1527,9 @@ case "${1:-}" in
   version) cmd_version ;;
   push-keys) shift || true; cmd_push_keys "$@" ;;
   push-test) shift || true; cmd_push_test "$@" ;;
+  notify) shift || true; cmd_notify "$@" ;;
   subagent-hooks) shift || true; cmd_subagent_hooks "$@" ;;
   claude-hooks) shift || true; cmd_claude_hooks "$@" ;;
   logs)    cmd_logs "${2:-50}" ;;
-  *) echo "usage: collie-ctl.sh {start|stop|restart|uninstall|update|version|push-keys|push-test|subagent-hooks|claude-hooks|build|serve|unserve|status|url|qr|logs}" >&2; exit 2 ;;
+  *) echo "usage: collie-ctl.sh {start|stop|restart|uninstall|update|version|push-keys|push-test|notify|subagent-hooks|claude-hooks|build|serve|unserve|status|url|qr|logs}" >&2; exit 2 ;;
 esac
