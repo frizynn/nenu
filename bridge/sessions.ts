@@ -114,6 +114,8 @@ interface SessionRegistryOpts {
   listSessionDirs: (dir: string) => string[];
   /** Whether a path exists (real fs in the bridge). */
   exists: (p: string) => boolean;
+  /** Sessions that are not Herdr sockets (herdr-core): started at construction, never disposed by refresh. */
+  extraSessions?: Array<{ name: string; socketPath: string }>;
 }
 
 /**
@@ -129,6 +131,7 @@ export class SessionRegistry {
   private readonly listSessionDirs: (dir: string) => string[];
   private readonly exists: (p: string) => boolean;
   private readonly primaryName: string;
+  private readonly extraNames: Set<string>;
 
   constructor(opts: SessionRegistryOpts) {
     this.configRoot = opts.configRoot;
@@ -139,6 +142,12 @@ export class SessionRegistry {
     this.primaryName = sessionNameFor(opts.primarySocketPath, opts.configRoot);
     // The primary comes up eagerly — it's the fallback for every session-less request.
     this.runtimes.set(this.primaryName, this.spawn(this.primaryName, opts.primarySocketPath, true));
+    this.extraNames = new Set();
+    for (const { name, socketPath } of opts.extraSessions ?? []) {
+      if (this.runtimes.has(name)) continue;
+      this.extraNames.add(name);
+      this.runtimes.set(name, this.spawn(name, socketPath, false));
+    }
   }
 
   /** The primary session's registry name (`"default"` unless HERDR_SOCKET_PATH names a session). */
@@ -195,8 +204,9 @@ export class SessionRegistry {
   async refresh(): Promise<void> {
     if (!this.multiSession) return;
     const discovered = discoverSessionSockets(this.configRoot, this.listSessionDirs, this.exists);
-    const seen = new Set<string>([this.primaryName]);
+    const seen = new Set<string>([this.primaryName, ...this.extraNames]);
     for (const { name, socketPath } of discovered) {
+      if (this.extraNames.has(name)) continue; // an extra session owns its name
       seen.add(name);
       if (this.runtimes.has(name)) continue;
       this.runtimes.set(name, this.spawn(name, socketPath, false));

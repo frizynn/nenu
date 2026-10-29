@@ -142,6 +142,7 @@ function makeRegistry(opts: {
   sessionDirs?: string[];
   present?: string[];
   snapshots?: Record<string, { bridge: "connected" | "disconnected"; agents: AgentView[] }>;
+  extraSessions?: Array<{ name: string; socketPath: string }>;
 } = {}): Harness {
   const configRoot = opts.configRoot ?? "/cfg/herdr";
   const primarySocketPath = opts.primarySocketPath ?? `${configRoot}/herdr.sock`;
@@ -165,6 +166,7 @@ function makeRegistry(opts: {
     multiSession: opts.multiSession ?? true,
     listSessionDirs: () => dirs,
     exists: (p) => present.has(p),
+    ...(opts.extraSessions ? { extraSessions: opts.extraSessions } : {}),
   });
 
   return {
@@ -315,5 +317,31 @@ describe("SessionRegistry — refresh() lifecycle", () => {
     expect(primaryFake.disposed).toEqual({ engine: 1, poker: 1, notifications: 1 });
     expect(demoFake.disposed).toEqual({ engine: 1, poker: 1, notifications: 1 });
     expect(h.registry.get()).toBeUndefined();
+  });
+});
+
+describe("SessionRegistry — extra sessions (herdr-core)", () => {
+  test("an extra session starts with the primary and survives every refresh", async () => {
+    const h = makeRegistry({ extraSessions: [{ name: "hc", socketPath: "hc-core:" }], present: ["/cfg/herdr/herdr.sock"] });
+    expect(h.spawns).toEqual(["default", "hc"]);
+    await h.registry.refresh();
+    await h.registry.refresh();
+    expect(h.registry.get("hc")?.socketPath).toBe("hc-core:");
+    expect(h.fakes.get("hc")!.disposed).toEqual({ engine: 0, poker: 0, notifications: 0 });
+  });
+
+  test("a Herdr session of the same name is not started over it", async () => {
+    const h = makeRegistry({
+      extraSessions: [{ name: "hc", socketPath: "hc-core:" }],
+      sessionDirs: ["hc"],
+      present: ["/cfg/herdr/herdr.sock", "/cfg/herdr/sessions/hc/herdr.sock"],
+    });
+    await h.registry.refresh();
+    expect(h.spawns).toEqual(["default", "hc"]);
+    expect(h.registry.get("hc")?.socketPath).toBe("hc-core:");
+  });
+
+  test("without extras nothing else is spawned", () => {
+    expect(makeRegistry().spawns).toEqual(["default"]);
   });
 });

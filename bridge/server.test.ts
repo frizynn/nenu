@@ -76,6 +76,7 @@ function cfg(overrides: Partial<Config> = {}): Config {
     vapidSubject: "mailto:admin@example.com",
     stateDir: "/tmp/state",
     multiSession: true,
+    hcCore: false,
     skipServe: false,
     ...overrides,
   };
