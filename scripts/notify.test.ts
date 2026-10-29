@@ -28,6 +28,15 @@ describe("resolveTarget", () => {
     expect(() => resolveTarget("old", rows, "default", {})).toThrow(/no agent named/);
   });
 
+  test("a herdr-core pane id is found in its own session; one in two sessions asks which", () => {
+    const both = [...rows, row("t6", { session: "hc", name: "desk claude" }), row("box:t2", { session: "hc" })];
+    expect(resolveTarget("t6", both, "default", {})).toEqual({ session: "hc", paneId: "t6" });
+    expect(resolveTarget("box:t2", both, "default", {})).toEqual({ session: "hc", paneId: "box:t2" });
+    expect(resolveTarget("desk claude", both, "default", {})).toEqual({ session: "hc", paneId: "t6" });
+    expect(resolveTarget("hc/t6", both, "default", {})).toEqual({ session: "hc", paneId: "t6" });
+    expect(() => resolveTarget("w1:p1", [...both, row("w1:p1", { session: "hc" })], "default", {})).toThrow(/several sessions/);
+  });
+
   test("no argument takes Herdr's pane, and with none it asks for one", () => {
     expect(resolveTarget(undefined, rows, "default", { HERDR_PANE_ID: "w1:p1" })).toEqual({ session: "default", paneId: "w1:p1" });
     expect(() => resolveTarget(undefined, rows, "default", {})).toThrow(/name an agent/);

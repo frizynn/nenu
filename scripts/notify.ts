@@ -38,15 +38,18 @@ export function herdrPane(env: Record<string, string | undefined>): string | und
 }
 
 /**
- * Which agent `arg` names: `session/pane`, a pane id in `session`, or an agent's name (its pane
- * label, Herdr name or Claude session name, any case). Throws with the reason when it names none or
- * several.
+ * Which agent `arg` names: `session/pane`, a pane id the bridge has seen in any session (herdr-core's
+ * look like `t6`), a Herdr pane id in `session`, or an agent's name (its pane label, Herdr name or
+ * Claude session name, any case). Throws with the reason when it names none or several.
  */
 export function resolveTarget(arg: string | undefined, rows: readonly AgentNotifyRow[], session: string, env: Record<string, string | undefined>): Target {
   const wanted = arg ?? herdrPane(env);
   if (!wanted) throw new Error("name an agent: a pane id (w1:p2) or its name; `notify list` shows them");
   const slash = wanted.indexOf("/");
   if (slash > 0) return { session: wanted.slice(0, slash), paneId: wanted.slice(slash + 1) };
+  const panes = rows.filter((r) => r.paneId === wanted);
+  if (panes.length === 1) return { session: panes[0]!.session, paneId: wanted };
+  if (panes.length > 1) throw new Error(`pane ${wanted} is in several sessions (${panes.map((r) => r.session).join(", ")}); write session/${wanted}`);
   if (/^[^\s:]+:[^\s:]+$/.test(wanted)) return { session, paneId: wanted };
   const named = rows.filter((r) => r.gone === undefined && r.name?.toLowerCase() === wanted.toLowerCase());
   if (named.length === 1) return { session: named[0]!.session, paneId: named[0]!.paneId };

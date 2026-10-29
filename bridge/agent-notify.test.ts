@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { AGENT_NOTIFY_FORGET_MS, AgentNotifyStore, coerce, DEFAULT_SUPERVISOR_PATTERNS, isSupervisor, matchesFolder } from "./agent-notify.ts";
+import { hcSnapshot, type HcTerminal } from "./hc-core.ts";
 import { NotificationCoordinator, type AgentNotice, type NotifyClock } from "./notifications.ts";
 import { parseAgentNotify } from "./routes/settings.ts";
 import type { AgentView } from "./types.ts";
@@ -25,7 +26,7 @@ function pane(paneId: string, cwd: string, extra: Partial<AgentView> = {}): Agen
 
 /** A store whose sessions were already seeded (not a first run), at a clock the test moves. */
 function store(file = fileIn(), patterns = DEFAULT_SUPERVISOR_PATTERNS, clock = { now: 1_000 }) {
-  if (!existsSync(file)) writeFileSync(file, JSON.stringify({ agents: {}, seeded: ["default", "a", "b"] }));
+  if (!existsSync(file)) writeFileSync(file, JSON.stringify({ agents: {}, seeded: ["default", "a", "b", "hc"] }));
   return { s: new AgentNotifyStore(file, patterns, () => clock.now, HOME), file, clock };
 }
 
@@ -211,5 +212,60 @@ describe("parseAgentNotify", () => {
     expect(parseAgentNotify({ paneId: "", on: true })).toBeNull();
     expect(parseAgentNotify({ paneId: "x".repeat(129), on: true })).toBeNull();
     expect(parseAgentNotify(null)).toBeNull();
+  });
+});
+
+// herdr-core (COLLIE_HC_CORE) runs as its own session, `hc`, through the same startSession: its
+// agents get the same switch, keyed by that session, so a pane id that also exists in Herdr 1 never
+// shares one. The panes here come from hcSnapshot, the shapes `hc connect` returns.
+describe("herdr-core agents", () => {
+  const terminal = (address: string, cwd: string): HcTerminal =>
+    ({ address, state: "live", cwd, status: { app: "claude-code", state: "idle" }, foreground: null });
+  const hcHerd = hcSnapshot([terminal("t6", "/home/you/.firstmate/awam"), terminal("box:t2", "/home/you/.firstmate/awam/projects/shop")], new Map())
+    .panes.map((p) => pane(p.pane_id, p.cwd!, { workspaceId: p.workspace_id, agent: p.agent ?? "claude" }));
+
+  test("the folder rule decides a new herdr-core agent, keyed apart from a Herdr pane with the same id", () => {
+    const { s } = store(undefined, DEFAULT_SUPERVISOR_PATTERNS, { now: 1_000 });
+    s.reconcile("hc", hcHerd);
+    s.reconcile("default", [pane("t6", "/work/shop")]);
+    expect(hcHerd.map((a) => a.paneId)).toEqual(["t6", "box:t2"]);
+    expect(s.on("hc", "t6")).toBe(true);
+    expect(s.on("hc", "box:t2")).toBe(false);
+    expect(s.on("default", "t6")).toBe(false);
+    s.set("hc", "t6", false);
+    expect(s.on("hc", "t6")).toBe(false);
+    expect(s.list().find((r) => r.session === "default" && r.paneId === "t6")?.why).toBe("new");
+  });
+
+  test("turning herdr-core on later seeds its first herd on, like an upgrade", () => {
+    const file = fileIn();
+    writeFileSync(file, JSON.stringify({ agents: {}, seeded: ["default"] }));
+    const s = new AgentNotifyStore(file, DEFAULT_SUPERVISOR_PATTERNS, () => 1, HOME);
+    s.reconcile("hc", hcHerd);
+    expect(s.on("hc", "box:t2")).toBe(true);
+    expect(s.list().every((r) => r.why === "existing")).toBe(true);
+  });
+
+  test("a muted herdr-core agent never reaches the sink, unmuted it does, and Herdr 1's pane is untouched", () => {
+    const { s } = store(undefined, ["**"]);
+    s.reconcile("hc", hcHerd);
+    s.reconcile("default", [pane("t6", "/work/shop")]);
+    s.set("hc", "t6", false);
+    const timers: Array<() => void> = [];
+    const clock: NotifyClock<number> = { schedule: (fn) => timers.push(fn), cancel: () => {} };
+    const sent: string[] = [];
+    const coordinator = (session: string) => new NotificationCoordinator(clock, { render: (n) => (sent.push(`${session}/${n.paneId}`), "sent") }, 0,
+      { maybe: () => true, wants: () => true, agentOn: (paneId) => s.on(session, paneId) });
+    const hc = coordinator("hc");
+    const herdr = coordinator("default");
+    const done = (a: AgentView) => ({ ...a, status: "done" as const });
+    hc.onTransition(done(hcHerd[0]!), "working", "done");
+    herdr.onTransition(done(pane("t6", "/work/shop")), "working", "done");
+    for (const fire of timers.splice(0)) fire();
+    expect(sent).toEqual(["default/t6"]);
+    s.set("hc", "t6", true);
+    hc.onTransition({ ...hcHerd[0]!, status: "blocked" }, "working", "blocked");
+    for (const fire of timers.splice(0)) fire();
+    expect(sent).toEqual(["default/t6", "hc/t6"]);
   });
 });
