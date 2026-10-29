@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-10-29
+
+### Added
+
+- Opt-in herdr-core session (`COLLIE_HC_CORE=1`): the agents of the Herdr desktop app show up next to Herdr 1's, and from the phone you can read their chat, send, approve a dialog, stop a turn, and start a new space or tab with an agent (9bfb594f, 7855b585, 7b3e8791, 95bf8274, d65b5328, 9c4e7df7, 774465e4).
+  Not there yet on herdr-core: colour in the terminal view, history for agents on other machines, close, rename and move, and the send paths that type without pressing Enter.
+
+### Changed
+
+- On a herdr-core session an answer re-reads the screen up to four times before saying the question changed, because its text blinks; a Herdr 1 session still refuses on the first read (67107e62).
+
 ## [2.11.0] - 2026-10-28
 
 ### Added
