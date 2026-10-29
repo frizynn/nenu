@@ -40,6 +40,8 @@ export interface PaneIO {
   readPane(paneId: string, source: "recent", lines: number, format: "ansi"): Promise<PaneRead>;
   sendPaneKeys(paneId: string, keys: string[]): Promise<void>;
   sendPaneText(paneId: string, text: string): Promise<void>;
+  /** The session's screen text blinks between reads (herdr-core), so an answer re-reads before refusing. */
+  readonly screenBlinks?: boolean;
 }
 
 /** How one option is answered, kept bridge-side: the wire only names the option by index. */
@@ -95,7 +97,7 @@ export type AnswerResult = { status: 200 | 400 | 409 | 422 | 502; outcome: Answe
 
 /** Settle time between the multi-select walk's pointer moves (multi-select-action.ts). */
 const NAV_SETTLE_MS = 250;
-/** Reads an answer may take to find the dialog it was tapped on, and the wait between them. */
+/** Reads an answer may take to find the dialog it was tapped on on a blinking screen, and the wait between them. */
 const ANSWER_READS = 4;
 const ANSWER_REREAD_MS = 350;
 /** A matched dialog regex keeps a pane eligible for detection this long even before Herdr says blocked. */
@@ -658,7 +660,8 @@ export class Interactions {
     // A screen that blinks (Claude's pending-tool bullet comes and goes about every half second,
     // measured on herdr-core) can read as another dialog for a moment. A few re-reads inside one blink
     // period find the dialog the operator saw again; one that really changed never matches.
-    for (let attempt = 0; attempt < ANSWER_READS; attempt++) {
+    const reads = io.screenBlinks ? ANSWER_READS : 1;
+    for (let attempt = 0; attempt < reads; attempt++) {
       if (attempt > 0) await this.sleep(ANSWER_REREAD_MS);
       let read: PaneRead;
       try {

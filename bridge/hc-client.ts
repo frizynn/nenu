@@ -68,6 +68,8 @@ function lines(stream: ReadableStream<Uint8Array>) {
 }
 
 export class HcClient implements HerdrApi {
+  /** Claude's pending-tool bullet comes and goes in hc's text about twice a second. */
+  readonly screenBlinks = true;
   constructor(
     private readonly binary: string,
     private readonly hcTimeoutMs = 5000,

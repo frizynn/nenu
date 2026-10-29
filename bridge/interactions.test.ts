@@ -689,7 +689,7 @@ describe("Interactions.answer", () => {
     const bullet = "\x1b[38;2;153;153;153m● \x1b[0m\x1b[1mWrite";
     expect(shown).toContain(bullet);
     pane.show(shown.replace(bullet, "\x1b[38;2;153;153;153m  \x1b[0m\x1b[1mWrite"));
-    const io = { ...pane.io, readPane: async (...args: Parameters<typeof pane.io.readPane>) => {
+    const io = { ...pane.io, screenBlinks: true, readPane: async (...args: Parameters<typeof pane.io.readPane>) => {
       const read = await pane.io.readPane(...args);
       pane.show(shown);
       return read;
@@ -701,10 +701,18 @@ describe("Interactions.answer", () => {
     expect(pane.log).toMatchObject({ reads: 2, keys: [["1"]] });
   });
 
-  test("a dialog that really changed is refused after a bounded number of reads", async () => {
+  test("a dialog that really changed is refused after one read on a steady screen", async () => {
     const { pane, card, answer } = await ready("claude--permission-edit.txt");
     pane.show(fixture("claude--permission-bash.txt"));
     expect((await answer({ signature: card.signature, optionIndex: 0 })).outcome).toMatchObject({ code: "interaction_changed" });
+    expect(pane.log).toMatchObject({ reads: 1, keys: [] });
+  });
+
+  test("a dialog that really changed is refused after a bounded number of reads on a blinking screen", async () => {
+    const { pane, card, interactions } = await ready("claude--permission-edit.txt");
+    pane.show(fixture("claude--permission-bash.txt"));
+    const result = await interactions.answer("s", { ...pane.io, screenBlinks: true }, blocked("p"), { signature: card.signature, optionIndex: 0 });
+    expect(result.outcome).toMatchObject({ code: "interaction_changed" });
     expect(pane.log).toMatchObject({ reads: 4, keys: [] });
   });
 
