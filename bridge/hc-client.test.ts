@@ -89,3 +89,31 @@ describe("hcSend", () => {
     expect(calls).toBe(1);
   });
 });
+
+describe("HcClient reads", () => {
+  function reader(terminals: unknown[]) {
+    const asked: number[] = [];
+    const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => {
+      if (method === "terminal.list") return { terminals } as T;
+      if (method === "doc.get") return { value: null } as T;
+      asked.push(params.lines as number);
+      if ((params.lines as number) > 0) throw new Error("hc terminal.read: connection closed before reply");
+      return { text: "screen", complete: true } as T;
+    };
+    return { hc: new HcClient("/nonexistent/hc", 5000, rpc), asked };
+  }
+
+  test("an agent's screen is read without history", async () => {
+    const { hc, asked } = reader([{ address: "t1", state: "live", cwd: "/", status: { app: "claude-code", state: "blocked" } }]);
+    await hc.sessionSnapshot();
+    expect(await hc.readPane("t1", "recent", 200)).toEqual({ pane_id: "t1", text: "screen", truncated: false, revision: 0 });
+    expect(asked).toEqual([0]);
+  });
+
+  test("a shell's history read that hc never answers falls back to the screen, marked truncated", async () => {
+    const { hc, asked } = reader([{ address: "t2", state: "live", cwd: "/", status: null }]);
+    await hc.sessionSnapshot();
+    expect(await hc.readPane("t2", "recent", 200)).toEqual({ pane_id: "t2", text: "screen", truncated: true, revision: 0 });
+    expect(asked).toEqual([200, 0]);
+  });
+});

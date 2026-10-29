@@ -23,6 +23,8 @@ import {
 const READ_ONLY = "herdr-core is read only in Nenu";
 /** Typed text not followed by its Enter within this long is dropped, never sent later. */
 const PENDING_MS = 20_000;
+/** How long a read with history may take before the screen alone answers instead. */
+const HISTORY_READ_MS = 2500;
 /** `terminal.send` waits for ~3 s of quiet, then for the program to start working. */
 const SEND_TIMEOUT_MS = 20_000;
 
@@ -76,6 +78,8 @@ export class HcClient implements HerdrApi {
   }
 
   private readonly pending = new Map<string, { text: string; at: number }>();
+  /** The panes the last snapshot named as agents: their screen is read without history. */
+  private agentPanes = new Set<string>();
 
   private call: HcRpc = async <T>(method: string, params: Record<string, unknown> = {}, timeoutMs = this.hcTimeoutMs): Promise<T> => {
     const child = Bun.spawn([this.binary, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
@@ -109,7 +113,9 @@ export class HcClient implements HerdrApi {
         .then((r) => r.value, () => null);
     docs.set("", await doc());
     for (const m of machines ?? []) if (m.state === "connected") docs.set(m.name, await doc(m.name));
-    return hcSnapshot(terminals, docs, claudeSessions(terminals));
+    const snapshot = hcSnapshot(terminals, docs, claudeSessions(terminals));
+    this.agentPanes = new Set(snapshot.panes.filter((p) => p.agent).map((p) => p.pane_id));
+    return snapshot;
   }
 
   async listWorkspaces() {
@@ -139,13 +145,22 @@ export class HcClient implements HerdrApi {
     return pane;
   }
 
-  /** hc reads text only: `ansi` gets the same plain text, which the mirror renders uncoloured. */
+  /**
+   * hc reads text only: `ansi` gets the same plain text, which the mirror renders uncoloured.
+   *
+   * An agent's screen is read without history. hc reads a full-screen program's history by scrolling
+   * it ("stitched"), and on hc 0.1.13 that read never answers while Claude shows a permission dialog,
+   * and leaves the terminal refusing keys after it (measured on an isolated core). An agent's history
+   * is its journal anyway. A shell's history is read, with a short budget and the screen as fallback.
+   */
   async readPane(paneId: string, source: ReadSource, lines: number): Promise<PaneRead> {
-    const r = await this.call<{ text: string; complete: boolean }>("terminal.read", {
-      terminal: hcAddress(paneId),
-      lines: source === "visible" ? 0 : lines,
-    });
-    return { pane_id: paneId, text: r.text, truncated: !r.complete, revision: 0 };
+    const terminal = hcAddress(paneId);
+    const read = (n: number, timeoutMs?: number) =>
+      this.call<{ text: string; complete: boolean }>("terminal.read", { terminal, lines: n }, timeoutMs);
+    const wantsHistory = source !== "visible" && lines > 0 && !this.agentPanes.has(paneId);
+    const history = wantsHistory ? await read(lines, HISTORY_READ_MS).catch(() => null) : null;
+    const r = history ?? (await read(0));
+    return { pane_id: paneId, text: r.text, truncated: !r.complete || (wantsHistory && !history), revision: 0 };
   }
 
   async processInfo(paneId: string): Promise<unknown> {
