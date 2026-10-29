@@ -214,6 +214,12 @@ function requestTimeout(onTimeout: () => void, ms: number): () => void {
   return () => clearTimeout(timer);
 }
 
+/**
+ * What the bridge needs from a session's terminals: HerdrClient's public surface. herdr-core's
+ * HcClient (hc-client.ts) is the other implementation, so nothing past index.ts names a class.
+ */
+export type HerdrApi = { [K in keyof HerdrClient]: HerdrClient[K] };
+
 export class HerdrClient {
   constructor(
     private readonly socketPath: string,

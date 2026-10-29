@@ -1,5 +1,5 @@
 import { meaningfulTabLabel, meaningfulTerminalTitle } from "./activity.ts";
-import type { HerdrClient } from "./herdr-client.ts";
+import type { HerdrApi } from "./herdr-client.ts";
 import { ProjectCache } from "./pane-project.ts";
 import {
   type AgentStatus,
@@ -137,7 +137,7 @@ export class StateEngine {
   private supportsSnapshot = true;
 
   constructor(
-    private readonly herdr: HerdrClient,
+    private readonly herdr: HerdrApi,
     private readonly pollMs: number,
     private readonly now: () => number = Date.now,
     private readonly snapshotTimeoutMs = SNAPSHOT_TIMEOUT_MS,

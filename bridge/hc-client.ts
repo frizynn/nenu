@@ -3,14 +3,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { GuardedSendResult, SendTrace } from "./guarded-send.ts";
-import { HerdrClient, type PaneRead, type ReadSource, type ServerInfo, type WireSnapshot } from "./herdr-client.ts";
+import type { HerdrApi, PaneRead, ReadSource, ServerInfo, WireSnapshot } from "./herdr-client.ts";
 import type { SendRequest } from "./types.ts";
 import {
   hcAddress, hcKey, hcMachine, hcProcessInfo, hcSnapshot, isSubmitKey, unbracket, type HcAppDoc, type HcTerminal,
 } from "./hc-core.ts";
 
-// herdr-core behind COLLIE_HC_CORE (off by default). A HerdrClient so the session runtime, the state
-// engine and the routes take it unchanged. Reads, a chat's send and keys map; every other write refuses.
+// herdr-core behind COLLIE_HC_CORE (off by default). It implements HerdrApi, so the session runtime,
+// the state engine and the routes take it unchanged. Reads, a chat's send and keys map; every other write refuses.
 //
 // hc has no "type without Enter": `terminal.send` pastes and submits in one call. So typed text waits
 // here, per pane, and goes with the submit key that follows it. A send path that reads the screen to
@@ -65,14 +65,13 @@ function lines(stream: ReadableStream<Uint8Array>) {
   };
 }
 
-export class HcClient extends HerdrClient {
+export class HcClient implements HerdrApi {
   constructor(
     private readonly binary: string,
     private readonly hcTimeoutMs = 5000,
     rpc?: HcRpc,
     private readonly now: () => number = Date.now,
   ) {
-    super("hc-core", hcTimeoutMs);
     if (rpc) this.call = rpc;
   }
 
@@ -102,7 +101,7 @@ export class HcClient extends HerdrClient {
     return this.call<{ terminals: HcTerminal[]; machines?: Array<{ name: string; state: string }> }>("terminal.list", {});
   }
 
-  override async sessionSnapshot(): Promise<WireSnapshot> {
+  async sessionSnapshot(): Promise<WireSnapshot> {
     const { terminals, machines } = await this.terminals();
     const docs = new Map<string, HcAppDoc | null>();
     const doc = (on?: string) =>
@@ -113,35 +112,35 @@ export class HcClient extends HerdrClient {
     return hcSnapshot(terminals, docs, claudeSessions(terminals));
   }
 
-  override async listWorkspaces() {
+  async listWorkspaces() {
     return (await this.sessionSnapshot()).workspaces;
   }
 
-  override async listPanes() {
+  async listPanes() {
     return (await this.sessionSnapshot()).panes;
   }
 
-  override async listTabs() {
+  async listTabs() {
     return (await this.sessionSnapshot()).tabs;
   }
 
-  override async serverInfo(): Promise<ServerInfo> {
+  async serverInfo(): Promise<ServerInfo> {
     const r = await this.call<{ version?: string }>("server.status", {});
     return { version: r.version ?? "", protocol: 0 };
   }
 
-  override async ping(): Promise<boolean> {
+  async ping(): Promise<boolean> {
     return this.serverInfo().then(() => true, () => false);
   }
 
-  override async getPane(paneId: string) {
+  async getPane(paneId: string) {
     const pane = (await this.sessionSnapshot()).panes.find((p) => p.pane_id === paneId);
     if (!pane) throw new Error(`herdr pane.get: pane_not_found: ${paneId}`);
     return pane;
   }
 
   /** hc reads text only: `ansi` gets the same plain text, which the mirror renders uncoloured. */
-  override async readPane(paneId: string, source: ReadSource, lines: number): Promise<PaneRead> {
+  async readPane(paneId: string, source: ReadSource, lines: number): Promise<PaneRead> {
     const r = await this.call<{ text: string; complete: boolean }>("terminal.read", {
       terminal: hcAddress(paneId),
       lines: source === "visible" ? 0 : lines,
@@ -149,12 +148,12 @@ export class HcClient extends HerdrClient {
     return { pane_id: paneId, text: r.text, truncated: !r.complete, revision: 0 };
   }
 
-  override async processInfo(paneId: string): Promise<unknown> {
+  async processInfo(paneId: string): Promise<unknown> {
     return hcProcessInfo(await this.call<HcTerminal>("terminal.get", { terminal: hcAddress(paneId) }));
   }
 
   /** Any hc event is a poke; Nenu re-reads the snapshot, as it does for Herdr's. */
-  override subscribeEvents(opts: Parameters<HerdrClient["subscribeEvents"]>[0]): { close(): void } {
+  subscribeEvents(opts: Parameters<HerdrApi["subscribeEvents"]>[0]): { close(): void } {
     const child = Bun.spawn([this.binary, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
     let down = false;
     const fireDown = (reason: string) => {
@@ -194,7 +193,7 @@ export class HcClient extends HerdrClient {
   }
 
   /** Held until its submit key: hc cannot type without submitting. */
-  override async sendPaneText(paneId: string, text: string): Promise<void> {
+  async sendPaneText(paneId: string, text: string): Promise<void> {
     const held = this.held(paneId);
     this.pending.set(paneId, { text: (held ?? "") + unbracket(text), at: this.now() });
   }
@@ -204,7 +203,7 @@ export class HcClient extends HerdrClient {
    * keys with nothing held, go as `terminal.keys`. Keys other than a submit drop held text: it was
    * never typed, so whatever they were meant to edit is not there.
    */
-  override async sendPaneKeys(paneId: string, keys: string[]): Promise<void> {
+  async sendPaneKeys(paneId: string, keys: string[]): Promise<void> {
     const terminal = hcAddress(paneId);
     const held = this.held(paneId);
     this.pending.delete(paneId);
@@ -222,34 +221,34 @@ export class HcClient extends HerdrClient {
     return held.text;
   }
 
-  override async waitForOutput(..._args: unknown[]): Promise<never> {
+  async waitForOutput(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async createTab(..._args: unknown[]): Promise<never> {
+  async createTab(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async createWorkspace(..._args: unknown[]): Promise<never> {
+  async createWorkspace(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async splitTab(..._args: unknown[]): Promise<never> {
+  async splitTab(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async startAgent(..._args: unknown[]): Promise<never> {
+  async startAgent(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async closePane(..._args: unknown[]): Promise<never> {
+  async closePane(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async renamePane(..._args: unknown[]): Promise<never> {
+  async renamePane(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async renameTab(..._args: unknown[]): Promise<never> {
+  async renameTab(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async closeTab(..._args: unknown[]): Promise<never> {
+  async closeTab(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  override async moveTab(..._args: unknown[]): Promise<never> {
+  async moveTab(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
 }

@@ -7,12 +7,12 @@ import { DELIVERY_MODES, effectiveMode, nativeSettled, nativeState, normalizeMod
 import { computeEtag } from "./http-cache.ts";
 import { object } from "./subagent-files.ts";
 import type { ActionResponse, AgentView, DeliveryMode, TurnState } from "./types.ts";
-import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
+import { herdrErrorCode, type HerdrApi } from "./herdr-client.ts";
 import type { JournalFacts } from "./journal/types.ts";
 import type { AuditLog } from "./audit.ts";
 import type { GuardedSendDeps, SendHerdr } from "./guarded-send.ts";
 
-type Context = { pane: AgentView; herdr: HerdrClient; connected: boolean };
+type Context = { pane: AgentView; herdr: HerdrApi; connected: boolean };
 /** A row ready to go: how to submit it, and whether the agent was mid-turn when it was assessed. */
 type Ready = { context: Context; submit: "enter" | "tab"; busy: boolean };
 /** The journal facts of a pane's conversation (journal/store.ts), when the bridge reads journals. */
@@ -57,7 +57,7 @@ type TurnMark = { seq?: number; status: string; at: number };
  * reported. Null when the pane is gone or another agent runs in it. One `pane.get`, not the whole
  * herd: the queue asks this on every read and delivery check.
  */
-export async function freshAgentView(herdr: Pick<HerdrClient, "getPane">, original: AgentView): Promise<AgentView | null> {
+export async function freshAgentView(herdr: Pick<HerdrApi, "getPane">, original: AgentView): Promise<AgentView | null> {
   let live;
   try {
     live = await herdr.getPane(original.paneId);
@@ -229,7 +229,7 @@ export class QueueService {
    * The pane's client with every key the queue presses on its own (not through the reply route,
    * which audits itself) recorded in the audit trail, sent or not.
    */
-  private audited(row: QueuedMessage, herdr: HerdrClient, action: string): SendHerdr {
+  private audited(row: QueuedMessage, herdr: HerdrApi, action: string): SendHerdr {
     const audit = this.extras.audit;
     return {
       getPane: (id) => herdr.getPane(id),

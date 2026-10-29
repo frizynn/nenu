@@ -19,7 +19,7 @@ import {
   type ClaudeGoal,
   type ClaudeSessionFile,
 } from "./agent-state-sources.ts";
-import type { HerdrClient } from "./herdr-client.ts";
+import type { HerdrApi } from "./herdr-client.ts";
 import { containedRealpathIn } from "./journal/files.ts";
 import { readAppended, type TailState } from "./journal/lines.ts";
 import type { AgentSessionRef } from "./journal/types.ts";
@@ -60,7 +60,7 @@ const TRANSCRIPT_RETRIES = 5;
 /** How often a session file of an unknown pid may send an unmapped Claude pane back to Herdr. */
 const WATCH_RESOLVE_GAP_MS = 3_000;
 
-type ProcessInfo = Pick<HerdrClient, "processInfo">;
+type ProcessInfo = Pick<HerdrApi, "processInfo">;
 type Watcher = { close(): void };
 export type WatchFn = (path: string, onChange: (event: string, filename: string | null) => void) => Watcher;
 

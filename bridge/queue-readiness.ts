@@ -1,5 +1,5 @@
 import type { AgentView, DeliveryMode, QueueWaitReason } from "./types.ts";
-import type { HerdrClient } from "./herdr-client.ts";
+import type { HerdrApi } from "./herdr-client.ts";
 import { adapterFor } from "../web/src/lib/harness/index.ts";
 import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { splitLines } from "../web/src/lib/blocks.ts";
@@ -18,7 +18,7 @@ export type Readiness = { ready: true; busy: boolean } | { ready: false; reason:
  */
 export async function queueReadiness(
   pane: Pick<AgentView, "paneId" | "agent" | "status" | "turn">,
-  herdr: Pick<HerdrClient, "readPane">,
+  herdr: Pick<HerdrApi, "readPane">,
   mode: DeliveryMode,
 ): Promise<Readiness> {
   const adapter = adapterFor(pane.agent);

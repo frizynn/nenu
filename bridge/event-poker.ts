@@ -1,4 +1,4 @@
-import type { HerdrClient, OutputMatch, PaneRead, ReadSource } from "./herdr-client.ts";
+import type { HerdrApi, OutputMatch, PaneRead, ReadSource } from "./herdr-client.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Event-poked polling. A long-lived events.subscribe stream whose ONLY job is to
@@ -148,7 +148,7 @@ export class EventPoker {
   private subscribed: Set<string> | null = null;
 
   constructor(
-    private readonly client: HerdrClient,
+    private readonly client: HerdrApi,
     opts: EventPokerOpts = {},
   ) {
     this.debounceMs = opts.debounceMs ?? EVENT_DEBOUNCE_MS;

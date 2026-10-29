@@ -1,6 +1,6 @@
 import { launchAgent, startPaneAgent } from "../agent-start.ts";
 import type { Config } from "../config.ts";
-import type { HerdrClient, PaneRead } from "../herdr-client.ts";
+import type { HerdrApi, PaneRead } from "../herdr-client.ts";
 import { JsonBody, notModified, notModifiedResponse, SharedLoads } from "../http-cache.ts";
 import { discoverPaneModels, startCatalog } from "../models.ts";
 import { discoverPaneSkills } from "../skills.ts";
@@ -141,7 +141,7 @@ async function subagentRead(
 }
 
 async function readPane(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   cfg: Config,
   paneId: string,
   url: URL,

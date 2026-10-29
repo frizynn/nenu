@@ -1,4 +1,4 @@
-import type { HerdrClient } from "./herdr-client.ts";
+import type { HerdrApi } from "./herdr-client.ts";
 import type { AgentView } from "./types.ts";
 
 export type LaunchAgent = "codex" | "claude";
@@ -98,7 +98,7 @@ export async function startPaneAgent(
   pane: AgentView | undefined,
   { kind, permission, model }: Launch,
   models: StartModels,
-  herdr: Pick<HerdrClient, "startAgent">,
+  herdr: Pick<HerdrApi, "startAgent">,
 ): Promise<void> {
   if (!pane || pane.kind !== "shell") throw new Error("Open an empty terminal before starting an agent.");
   // Shared Codex daemon hooks can inherit another pane's context. A native runtime

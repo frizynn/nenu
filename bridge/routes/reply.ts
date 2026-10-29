@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 
 import type { AuditLog } from "../audit.ts";
 import type { Config } from "../config.ts";
-import type { HerdrClient, PaneRead } from "../herdr-client.ts";
+import type { HerdrApi, PaneRead } from "../herdr-client.ts";
 import {
   DEFAULT_PROMPT_TAIL_LINES,
   verifyExpectedPrompt,
@@ -122,7 +122,7 @@ export const replyPaneActions: Record<string, PaneAction> = {
   },
 };
 
-/** Just the two one-shot RPCs a reply needs — real HerdrClient in the bridge, fake in tests. */
+/** Just the two one-shot RPCs a reply needs — real HerdrApi in the bridge, fake in tests. */
 export interface ReplySender {
   sendPaneText(paneId: string, text: string): Promise<void>;
   sendPaneKeys(paneId: string, keys: string[]): Promise<void>;
@@ -245,7 +245,7 @@ export async function interruptPane(
 const AGENT_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex" };
 
 export async function replyPane(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   cfg: Config,
   paneId: string,
   req: Request,
@@ -337,7 +337,7 @@ const replyLedger = new WriteLedger<ReplyOutcome>((outcome) => outcome.ok);
  * Whether the pane's input box already holds `txt`, as its adapter reads it. A pane with no adapter
  * cannot be read back, which is "unknown", the same as a read that fails.
  */
-async function boxCarries(herdr: HerdrClient, cfg: Config, paneId: string, txt: string): Promise<"carries" | "absent" | "unknown"> {
+async function boxCarries(herdr: HerdrApi, cfg: Config, paneId: string, txt: string): Promise<"carries" | "absent" | "unknown"> {
   try {
     const adapter = adapterFor((await herdr.getPane(paneId)).agent ?? undefined);
     if (!adapter) return "unknown";
@@ -475,7 +475,7 @@ function auditSend(audit: AuditLog, run: SendRun, txt: string, paneId: string, s
 
 /** POST `{ draft, action? }`: take over, discard or send the box's draft while it holds exactly `draft` (guarded-send.ts settleDraft). */
 export async function clearDraftPane(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   cfg: Config,
   paneId: string,
   req: Request,
@@ -504,7 +504,7 @@ export async function clearDraftPane(
  * Nenu's own uploads, not text of the client's choosing.
  */
 export async function pasteFilePane(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   cfg: Config,
   paneId: string,
   req: Request,
@@ -526,7 +526,7 @@ export async function pasteFilePane(
 }
 
 export async function keysPane(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   cfg: Config,
   paneId: string,
   req: Request,
@@ -621,7 +621,7 @@ type PromptBindingCheck =
 // window this feature exists to shrink. The region check already subsumes it: if the exact prompt
 // text is still on screen, that prompt is still what the pane is showing.
 async function checkPromptBinding(
-  herdr: HerdrClient,
+  herdr: HerdrApi,
   cfg: Config,
   paneId: string,
   expected: string,

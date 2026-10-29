@@ -22,11 +22,11 @@ import { detectNoEchoPrompt } from "../web/src/lib/no-echo.ts";
 import { isPicturePath } from "../web/src/lib/upload-path.ts";
 import { deliveryVerdict, hasWords, type LogLook, type LogReader } from "./delivery-check.ts";
 import type { EventPoker } from "./event-poker.ts";
-import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
+import { herdrErrorCode, type HerdrApi } from "./herdr-client.ts";
 import { verifyExpectedPrompt } from "./prompt-binding.ts";
 import type { SendOutcome, SendRequest, SendStage, TurnState } from "./types.ts";
 
-export type SendHerdr = Pick<HerdrClient, "getPane" | "readPane" | "sendPaneText" | "sendPaneKeys" | "waitForOutput">;
+export type SendHerdr = Pick<HerdrApi, "getPane" | "readPane" | "sendPaneText" | "sendPaneKeys" | "waitForOutput">;
 
 export interface GuardedSendDeps {
   herdr: SendHerdr;
