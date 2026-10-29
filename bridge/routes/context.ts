@@ -1,3 +1,4 @@
+import type { AgentNotifyStore } from "../agent-notify.ts";
 import type { AgentStates } from "../agent-state.ts";
 import type { ActivityLedger } from "../activity.ts";
 import type { AuditLog } from "../audit.ts";
@@ -37,6 +38,8 @@ export interface ServerDeps {
   push: Push;
   snooze: Snooze;
   notifyPrefs: NotifyPrefsStore;
+  /** Each agent's own notifications switch (agent-notify.ts). Absent in-process: every agent may push. */
+  agentNotify?: AgentNotifyStore;
   /** Names each push alert from the pane and its journal (filled by startServer). */
   alerts: AlertDescriber;
   updateMonitor: UpdateMonitor;

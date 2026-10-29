@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { DEFAULT_SUPERVISOR_PATTERNS } from "./agent-notify.ts";
 import type { AuditContent } from "./audit.ts";
 import type { DialMode } from "./dial.ts";
 import type { JournalRoots } from "./journal/registry.ts";
@@ -127,6 +128,12 @@ export interface Config {
    * when it later resolves. See NotificationCoordinator. 0 = notify on the next tick (no debounce).
    */
   notifyDelayMs: number;
+  /**
+   * Folders whose agents start with notifications on when first seen (`COLLIE_NOTIFY_SUPERVISORS`,
+   * comma-separated; `~/`, `*` for one folder name, `**` for any). Every other new agent starts off.
+   * Unset → {@link DEFAULT_SUPERVISOR_PATTERNS}; `**` puts every new agent on. ADR 0134.
+   */
+  notifySupervisors: string[];
   /** How many lines of scrollback to pull for the agent detail view. */
   readLines: number;
   /**
@@ -319,6 +326,8 @@ export function loadConfig(): Config {
     pollMs: envInt("COLLIE_POLL_MS", 1500, { min: 250 }),
     pollIdleMs: envInt("COLLIE_POLL_IDLE_MS", 12_000, { min: 1000 }),
     notifyDelayMs: envInt("COLLIE_NOTIFY_DELAY_MS", 30_000, { min: 0 }),
+    // Set but empty is a choice too: no folder is a supervisor's, so every new agent starts off.
+    notifySupervisors: process.env.COLLIE_NOTIFY_SUPERVISORS === undefined ? [...DEFAULT_SUPERVISOR_PATTERNS] : envList("COLLIE_NOTIFY_SUPERVISORS"),
     readLines: envInt("COLLIE_READ_LINES", 200, { min: 1 }),
     transcript: envBool("COLLIE_TRANSCRIPT", true),
     htmlInlineAssets: envBool("COLLIE_HTML_INLINE_ASSETS", true),

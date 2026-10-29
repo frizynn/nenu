@@ -69,7 +69,7 @@ function pullRequestBody({ pullRequests }: Services, rt: SessionRuntime): JsonBo
  * engine stays a pure Herdr poller and the numbers are as fresh as the request. A dialog Herdr's
  * manifest does not name leaves the pane `unknown`; the bridge's card says it asks.
  */
-function herdOf({ activity, agentStates, hasJournal, interactions }: Services, rt: SessionRuntime): MachineHerd {
+function herdOf({ activity, agentStates, agentNotify, hasJournal, interactions }: Services, rt: SessionRuntime): MachineHerd {
   const { agents, shellPanes, workspaces, tabs, bridge } = rt.engine.current();
   agentStates.sync(rt.name, rt.herdr, agents);
   const withActivity = (p: AgentView): AgentView => {
@@ -78,7 +78,9 @@ function herdOf({ activity, agentStates, hasJournal, interactions }: Services, r
     const status = shownStatus(p.status, a, interactions.current(rt.name, p.paneId) !== null);
     return a ? { ...withTurn, status, lastActiveAt: a.activeAt, lastSeenAt: a.seenAt } : { ...withTurn, status };
   };
-  const shown = { agents: agents.map(withActivity), shellPanes: shellPanes.map(withActivity) };
+  // Only an agent pushes, so only an agent carries its notifications switch.
+  const withNotify = (p: AgentView): AgentView => agentNotify ? { ...p, notify: agentNotify.on(rt.name, p.paneId) } : p;
+  const shown = { agents: agents.map((p) => withNotify(withActivity(p))), shellPanes: shellPanes.map(withActivity) };
   // The one place a pane leaves the bridge: the session ref is stripped to a presence flag here, so
   // an agent-reported filesystem path never reaches a browser (see toPaneWire). The flag is computed
   // against the registry, so a harness Herdr detects but Nenu has no journal for doesn't advertise a
