@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import type { AuditContent } from "./audit.ts";
 import type { DialMode } from "./dial.ts";
+import { hcJournalRoot } from "./hc-journal.ts";
 import type { JournalRoots } from "./journal/registry.ts";
 
 // All bridge configuration, resolved once at startup. Env-driven so the systemd unit and the
@@ -327,7 +328,8 @@ export function loadConfig(): Config {
       // meaning exactly that — an existing deployment's env keeps working untouched. It takes SEVERAL
       // roots (comma-separated) because `CLAUDE_CONFIG_DIR` gives each Claude profile its own
       // projects tree, and a herd routinely mixes them (issue #92); one value is still one root.
-      claude: envRoots("COLLIE_TRANSCRIPT_ROOT", join(homedir(), ".claude", "projects")),
+      // With herdr-core, one more: the copies of other machines' logs (hc-journal.ts).
+      claude: [...envRoots("COLLIE_TRANSCRIPT_ROOT", join(homedir(), ".claude", "projects")), ...(envBool("COLLIE_HC_CORE", false) ? [hcJournalRoot(stateDir)] : [])],
       // Each harness's own home var is honoured first, so relocating the agent relocates its journal
       // without a second Nenu setting to keep in sync. The Nenu override takes a list too — the
       // multi-home case isn't Claude's alone, and one setting shouldn't behave differently per agent.

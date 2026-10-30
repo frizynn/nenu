@@ -1,9 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
+import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import type { GuardedSendResult, SendTrace } from "./guarded-send.ts";
 import type { CreatedShell, HerdrApi, PaneRead, ReadSource, ServerInfo, WireSnapshot } from "./herdr-client.ts";
+import type { AgentSessionRef } from "./journal/types.ts";
 import type { SendRequest } from "./types.ts";
 import {
   hcAddress, hcAtShell, hcClaudeSession, hcKey, hcNewId, hcPaneId, hcPlacement, hcShellLine, hcSpace, hcMachine, hcProcessInfo, hcSnapshot, isSubmitKey, unbracket, type HcAppDoc, type HcTerminal, type SessionFileReader,
@@ -67,6 +69,18 @@ function lines(stream: ReadableStream<Uint8Array>) {
   };
 }
 
+/** How one client of hc is placed: which machine it shows, and what reaches another machine's files. */
+export interface HcClientOptions {
+  /** The machine this client shows, "" for this one; absent, every machine hc lists. */
+  scope?: string;
+  /** Folders whose files a message may name; one going to another machine travels first. */
+  uploads?: readonly string[];
+  /** Sends a local file beside a terminal, and says where it landed. */
+  put?: (terminal: string, path: string) => Promise<string>;
+  /** Keeps a copy of another machine's agent log here (hc-journal.ts). */
+  mirror?: { follow(machine: string, sessionId: string): Promise<void> };
+}
+
 export class HcClient implements HerdrApi {
   /** Claude's pending-tool bullet comes and goes in hc's text about twice a second. */
   readonly screenBlinks = true;
@@ -77,6 +91,7 @@ export class HcClient implements HerdrApi {
     private readonly now: () => number = Date.now,
     private readonly group: (pgid: number) => Promise<number[]> = localGroup,
     private readonly claudeSessionDir = join(homedir(), ".claude", "sessions"),
+    private readonly opts: HcClientOptions = {},
   ) {
     if (rpc) this.call = rpc;
   }
@@ -110,13 +125,20 @@ export class HcClient implements HerdrApi {
   }
 
   async sessionSnapshot(): Promise<WireSnapshot> {
-    const { terminals, machines } = await this.terminals();
+    const { terminals: all, machines } = await this.terminals();
+    const { scope } = this.opts;
+    // A machine out of reach fails the read, as a Herdr that is down does: its session reads unreachable.
+    if (scope && machines?.find((m) => m.name === scope)?.state !== "connected") throw new Error(`hc machine ${scope} is not connected`);
+    const terminals = scope === undefined ? all : all.filter((t) => hcMachine(t.address) === scope);
     const docs = new Map<string, HcAppDoc | null>();
     const doc = (on?: string) =>
       this.call<{ value: HcAppDoc | null }>("doc.get", on ? { name: "herdr-app", on } : { name: "herdr-app" })
         .then((r) => r.value, () => null);
-    docs.set("", await doc());
-    for (const m of machines ?? []) if (m.state === "connected") docs.set(m.name, await doc(m.name));
+    if (scope !== undefined) docs.set(scope, await doc(scope || undefined));
+    else {
+      docs.set("", await doc());
+      for (const m of machines ?? []) if (m.state === "connected") docs.set(m.name, await doc(m.name));
+    }
     const snapshot = hcSnapshot(terminals, docs, await this.claudeSessions(terminals));
     this.agentPanes = new Set(snapshot.panes.filter((p) => p.agent).map((p) => p.pane_id));
     return snapshot;
@@ -138,6 +160,17 @@ export class HcClient implements HerdrApi {
       if (id) ids.set(t.address, id);
     }));
     return ids;
+  }
+
+  /** The other machines hc knows, connected or not. */
+  async machines(): Promise<string[]> {
+    return ((await this.terminals()).machines ?? []).map((m) => m.name);
+  }
+
+  /** Before a journal read: another machine's log is copied here first (hc-journal.ts). */
+  async prepareJournal(paneId: string, ref: AgentSessionRef): Promise<void> {
+    const machine = hcMachine(hcAddress(paneId));
+    if (machine && ref.kind === "id") await this.opts.mirror?.follow(machine, ref.value);
   }
 
   async listWorkspaces() {
@@ -227,7 +260,25 @@ export class HcClient implements HerdrApi {
 
   /** One message, pasted and submitted by hc itself: `terminal.send`. */
   async sendMessage(paneId: string, text: string): Promise<{ started?: boolean | null; status?: string | null; turn: number }> {
-    return this.call("terminal.send", { terminal: hcAddress(paneId), text: unbracket(text) }, SEND_TIMEOUT_MS);
+    const terminal = hcAddress(paneId);
+    return this.call("terminal.send", { terminal, text: await this.carryUploads(terminal, unbracket(text)) }, SEND_TIMEOUT_MS);
+  }
+
+  /**
+   * A message to another machine names a file there: each upload it names goes first and the message
+   * names where it landed. Only a regular file directly in an uploads folder ever travels; any other
+   * path is the sender's words. A file that cannot travel stops the send, with nothing typed.
+   */
+  private async carryUploads(terminal: string, text: string): Promise<string> {
+    const { uploads = [], put } = this.opts;
+    if (!hcMachine(terminal) || !put) return text;
+    const parts = text.split(/(\s+)/);
+    for (const [i, part] of parts.entries()) {
+      if (!uploads.includes(dirname(part))) continue;
+      if (!(await lstat(part).then((s) => s.isFile(), () => false))) continue;
+      parts[i] = await put(terminal, part);
+    }
+    return parts.join("");
   }
 
   /** Held until its submit key: hc cannot type without submitting. */
@@ -247,7 +298,7 @@ export class HcClient implements HerdrApi {
     this.pending.delete(paneId);
     let rest = keys;
     if (held !== null && keys.length > 0 && isSubmitKey(keys[0]!)) {
-      await this.call("terminal.send", { terminal, text: held }, SEND_TIMEOUT_MS);
+      await this.call("terminal.send", { terminal, text: await this.carryUploads(terminal, held) }, SEND_TIMEOUT_MS);
       rest = keys.slice(1);
     }
     if (rest.length) await this.call("terminal.keys", { terminal, keys: rest.map(hcKey) }, SEND_TIMEOUT_MS);
@@ -325,6 +376,17 @@ export class HcClient implements HerdrApi {
   }
 }
 
+/** `hc put`: a local file beside a terminal, on its machine. */
+export function hcPutCommand(binary: string): NonNullable<HcClientOptions["put"]> {
+  return async (terminal, path) => {
+    const child = Bun.spawn([binary, "put", "--json", terminal, path], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+    const timer = setTimeout(() => child.kill(), SEND_TIMEOUT_MS);
+    const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]).finally(() => clearTimeout(timer));
+    if (code !== 0) throw new Error(`hc put: ${err.trim() || `exit ${code}`}`);
+    return (JSON.parse(out) as { path: string }).path;
+  };
+}
+
 /** The pids of a local process group, from `pgrep -g` (none when it cannot tell). */
 async function localGroup(pgid: number): Promise<number[]> {
   const child = Bun.spawn(["pgrep", "-g", String(pgid)], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
@@ -349,6 +411,8 @@ export async function hcSend(hc: Pick<HcClient, "sendMessage">, paneId: string, 
     await hc.sendMessage(paneId, request.text);
   } catch (err) {
     const blocked = /"kind":"blocked"/.test((err as Error).message);
+    // An attachment that could not travel stopped the send before anything was typed.
+    if ((err as Error).message.startsWith("hc put")) return fail(`The attachment could not reach that machine, so nothing was typed. ${(err as Error).message}`, false);
     // Any other failure may have come after hc typed: say so rather than invite a duplicate.
     return blocked
       ? fail("The agent is waiting on a question or permission, so herdr-core typed nothing. Answer it first.", false, "not_ready")

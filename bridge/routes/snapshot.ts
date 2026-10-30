@@ -1,7 +1,8 @@
 import { shownStatus } from "../activity.ts";
+import { hcSessionName, isHcSession } from "../hc-core.ts";
 import { computeEtag, JsonBody, notModified, notModifiedResponse } from "../http-cache.ts";
 import type { SessionRuntime } from "../sessions.ts";
-import { toPaneWire, type AgentView, type MachineHerd, type SnapshotResponse } from "../types.ts";
+import { toPaneWire, type AgentView, type MachineHerd, type MachineView, type SnapshotResponse } from "../types.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services } from "./context.ts";
 import { buildId, secure, withBuildHeader } from "./http.ts";
@@ -18,7 +19,7 @@ export const snapshotRoutes: Route[] = [
       const herd = herdOf(ctx, rt);
       const device = deviceAuth(req, cfg);
       machines.refresh();
-      const others = machines.views(undefined, null);
+      const others = hcMachineViews(ctx, rt, machines.views(undefined, null));
       const view: Omit<SnapshotResponse, "ts"> = {
         bridge: herd.bridge,
         // Only report device state when the feature is on, so an off deployment sends nothing new.
@@ -53,6 +54,30 @@ export const snapshotRoutes: Route[] = [
     },
   },
 ];
+
+/** How a list names an hc session's machine: this one by its host, another by hc's name for it. */
+export const hcMachineLabel = (session: string, host: string): string => (session === hcSessionName("") ? host : session.slice(hcSessionName("").length + 1));
+
+/**
+ * The lists a page on one of hc's sessions shows its sibling machines in (ADR 0135): every hc session,
+ * each with its herd but the one on screen, then Herdr's own other machines. Any other session, or an
+ * hc with no other machine, keeps what it had.
+ */
+function hcMachineViews(ctx: Services, rt: SessionRuntime, herdrMachines: MachineView[] | undefined): MachineView[] | undefined {
+  if (!isHcSession(rt.name)) return herdrMachines;
+  const family = ctx.registry.all().filter((r) => isHcSession(r.name));
+  if (family.length < 2) return herdrMachines;
+  const views = family.map((r): MachineView => {
+    const connected = r.engine.current().bridge === "connected";
+    return {
+      session: r.name,
+      label: hcMachineLabel(r.name, ctx.machines.hostLabel),
+      state: connected ? "connected" : "offline",
+      ...(connected && r !== rt ? { herd: herdOf(ctx, r) } : {}),
+    };
+  });
+  return [...views, ...(herdrMachines ?? []).filter((m) => m.session)];
+}
 
 /**
  * The session's open pull requests with the panes on each branch; reading them asks for a refresh when

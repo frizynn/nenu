@@ -118,7 +118,14 @@ interface SessionRegistryOpts {
    * Sessions that are not Herdr sockets (herdr-core): each starts itself at construction, and refresh
    * never disposes it or starts a Herdr session over its name. `socketPath` is only what it reports.
    */
-  extraSessions?: Array<{ name: string; socketPath: string; start: () => SessionParts }>;
+  extraSessions?: readonly ExtraSession[];
+}
+
+/** A session that is not a Herdr socket: it starts itself. `socketPath` is only what it reports. */
+export interface ExtraSession {
+  name: string;
+  socketPath: string;
+  start: () => SessionParts;
 }
 
 /**
@@ -134,7 +141,7 @@ export class SessionRegistry {
   private readonly listSessionDirs: (dir: string) => string[];
   private readonly exists: (p: string) => boolean;
   private readonly primaryName: string;
-  private readonly extraNames: Set<string>;
+  private extraNames: Set<string> = new Set();
 
   constructor(opts: SessionRegistryOpts) {
     this.configRoot = opts.configRoot;
@@ -145,12 +152,28 @@ export class SessionRegistry {
     this.primaryName = sessionNameFor(opts.primarySocketPath, opts.configRoot);
     // The primary comes up eagerly — it's the fallback for every session-less request.
     this.runtimes.set(this.primaryName, this.spawn(this.primaryName, opts.primarySocketPath, true));
-    this.extraNames = new Set();
-    for (const { name, socketPath, start } of opts.extraSessions ?? []) {
-      if (this.runtimes.has(name)) continue;
-      this.extraNames.add(name);
-      this.runtimes.set(name, { name, isPrimary: false, socketPath, ...start() });
+    this.setExtras(opts.extraSessions ?? []);
+  }
+
+  /**
+   * The sessions that are not Herdr's, as they stand now: a new one starts, one no longer named stops,
+   * one still named keeps running (herdr-core's machines come and go).
+   */
+  setExtras(extras: readonly ExtraSession[]): void {
+    const named = new Set(extras.map((e) => e.name));
+    for (const name of this.extraNames) {
+      if (named.has(name)) continue;
+      const rt = this.runtimes.get(name);
+      if (rt) this.dispose(rt);
+      this.runtimes.delete(name);
     }
+    const kept = new Set<string>();
+    for (const { name, socketPath, start } of extras) {
+      if (this.runtimes.has(name) && !this.extraNames.has(name)) continue;
+      kept.add(name);
+      if (!this.runtimes.has(name)) this.runtimes.set(name, { name, isPrimary: false, socketPath, ...start() });
+    }
+    this.extraNames = kept;
   }
 
   /** The primary session's registry name (`"default"` unless HERDR_SOCKET_PATH names a session). */

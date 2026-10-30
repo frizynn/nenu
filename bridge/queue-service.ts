@@ -2,7 +2,8 @@ import { queueReadiness } from "./queue-readiness.ts";
 import { PaneWrites } from "./pane-writes.ts";
 import { join } from "node:path";
 import { MessageQueue, RECENT_MS, type Exclusive, type QueuedMessage, type Verdict } from "./message-queue.ts";
-import { deliverQueuedMessage, sendQueuedNow, type QueueWrite } from "./queue-delivery.ts";
+import { HcClient } from "./hc-client.ts";
+import { deliverQueuedMessage, deliverWhole, sendQueuedNow, type QueueWrite } from "./queue-delivery.ts";
 import { DELIVERY_MODES, effectiveMode, nativeSettled, nativeState, normalizeMode, sendNowKeys, submitKind } from "./queue-native.ts";
 import { computeEtag } from "./http-cache.ts";
 import { object } from "./subagent-files.ts";
@@ -213,10 +214,12 @@ export class QueueService {
     const { context } = ready;
     const write: QueueWrite = (text, submit, id, paste) => this.write(row, text, submit, id, paste);
     const { turn } = this.extras;
-    const outcome = await deliverQueuedMessage(row, this.audited(row, context.herdr, "queue.submit"), write, async () => {
+    const same = async () => {
       const next = await this.resolve(row.session, row.paneId, true);
       return !!next?.connected && identity(next.pane) === row.conversation;
-    }, ready.submit, { received: this.extras.log?.(row.session, row.paneId), ...(turn ? { turn: () => turn(row.session, row.paneId) } : {}) });
+    };
+    const outcome = context.herdr instanceof HcClient ? await deliverWhole(row, write, same) :
+      await deliverQueuedMessage(row, this.audited(row, context.herdr, "queue.submit"), write, same, ready.submit, { received: this.extras.log?.(row.session, row.paneId), ...(turn ? { turn: () => turn(row.session, row.paneId) } : {}) });
     // Only a delivery to a free agent starts a turn. A steer or a native-queue Tab into a working one
     // does not, and marking it would hold the next row for the whole TURN_START_CAP_MS.
     if (outcome.status === "sent" && !ready.busy) {

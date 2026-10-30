@@ -657,3 +657,37 @@ it("leaves out a row with no queue state once the journal stopped looking at it"
     await t.close();
   }
 });
+
+it("delivers a queued message on herdr-core as one send, which cannot wait for the box to show it", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { HcClient } = await import("./hc-client");
+  const { computeEtag } = await import("./http-cache");
+  const dir = await mkdtemp(join(tmpdir(), "nenu-queue-hc-"));
+  // hc types nothing until Enter, so the box on its screen stays empty for as long as anyone looks.
+  const box = ["────────", "❯ ", "────────", "  Haiku"].join("\n");
+  const hc = new HcClient("/nonexistent/hc", 5000, (async (method: string) => {
+    if (method === "terminal.read") return { text: box, complete: true };
+    return {};
+  }) as never);
+  const pane = { paneId: "t1", workspaceId: "w", workspaceLabel: "w", workspaceNumber: 1, tabId: "t", agent: "claude", status: "working" as const, cwd: "/tmp", focused: false, agentSession: { kind: "id" as const, value: "s" } };
+  const writes: Array<[string, boolean]> = [];
+  const service = new QueueService(
+    dir,
+    async () => ({ pane, herdr: hc, connected: true }),
+    async (_row, text, submit) => { writes.push([text, submit]); return { ok: true }; },
+  );
+  try {
+    const scope = computeEtag(JSON.stringify(["hc", "t1", "claude:s"]));
+    const response = await service.handle(new Request("http://localhost/queue", { method: "POST", body: JSON.stringify({ action: "add", id: "m1", scope, text: "hola", deliveryMode: "asap" }) }), "hc", "t1", null);
+    expect(response.status).toBe(200);
+    for (let i = 0; i < 100 && writes.length === 0; i++) await Bun.sleep(20);
+    await Bun.sleep(50);
+    expect(writes).toEqual([["hola", true]]);
+    const page = await (await service.handle(new Request("http://localhost/queue"), "hc", "t1", null)).json() as { messages: Array<{ id: string; state: string; error?: string }>; delivered: Array<{ id: string }> };
+    expect(page.messages.find((m) => m.id === "m1")?.error).toBeUndefined();
+  } finally {
+    service.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
