@@ -65,7 +65,7 @@ await snooze.load();
 
 const notifyPrefs = new NotifyPrefsStore(cfg);
 // Which agents may push at all, one switch each (ADR 0134); shared with `scripts/notify.ts`.
-const agentNotify = AgentNotifyStore.at(cfg.stateDir, cfg.notifySupervisors);
+const agentNotify = AgentNotifyStore.at(cfg.stateDir);
 // The sessions' coordinators exist before the server's projects and journals; startServer fills it in.
 const alerts = new AlertDescriber();
 await notifyPrefs.load();

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentNotifyRow } from "../bridge/agent-notify.ts";
-import { formatList, herdrPane, resolveTarget } from "./notify.ts";
+import { formatList, herdrPane, parsePatterns, resolveTarget } from "./notify.ts";
 
 const row = (paneId: string, extra: Partial<AgentNotifyRow> = {}): AgentNotifyRow =>
   ({ session: "default", paneId, on: false, why: "new", firstSeen: 1, ...extra });
@@ -50,10 +50,25 @@ describe("formatList", () => {
       row("w1:p2", { cwd: "/work/shop" }),
       row("w1:p3", { gone: 9, on: true, why: "set" }),
     ], ["~/.firstmate/*"], "/home/you");
-    expect(out).toContain("New agents start with notifications on in: ~/.firstmate/*");
+    expect(out).toContain("New agents start with notifications on only in: ~/.firstmate/*");
     expect(out).toMatch(/on +default\/w1:p1 +boss +~\/\.firstmate\/awam +supervisor folder/);
-    expect(out).toMatch(/off +default\/w1:p2 +\/work\/shop +new agent/);
+    expect(out).toMatch(/off +default\/w1:p2 +\/work\/shop +new agent outside the supervisor folders/);
     expect(out.split("Closed")[1]).toContain("default/w1:p3");
-    expect(formatList([], [], "/home/you")).toContain("every new agent starts off");
+  });
+
+  test("with no supervisor folders it says every new agent starts on", () => {
+    const out = formatList([row("w1:p1", { on: true, cwd: "/work/shop" })], [], "/home/you");
+    expect(out).toContain("Every new agent starts with notifications on");
+    expect(out).toMatch(/on +default\/w1:p1 +\/work\/shop +new agent$/m);
+  });
+});
+
+describe("parsePatterns", () => {
+  test("takes comma-separated whole paths, and refuses nothing or a relative one", () => {
+    expect(parsePatterns(" ~/.firstmate/* , ~/Developer/firstmate ")).toEqual(["~/.firstmate/*", "~/Developer/firstmate"]);
+    expect(parsePatterns("/srv/**/boss,**")).toEqual(["/srv/**/boss", "**"]);
+    expect(() => parsePatterns("")).toThrow(/use `clear`/);
+    expect(() => parsePatterns(undefined)).toThrow(/use `clear`/);
+    expect(() => parsePatterns("projects/*")).toThrow(/not a whole path/);
   });
 });

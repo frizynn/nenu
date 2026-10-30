@@ -7,15 +7,19 @@ import type { AgentView } from "./types.ts";
 // and Snooze still decide every alert an agent that is on would send; an agent that is off sends none.
 //
 // An agent is a pane, keyed `<session>/<paneId>` like the activity ledger: Herdr never reuses a pane
-// id. Its first sighting decides how it starts: on when its folder matches one of the operator's
-// supervisor patterns (COLLIE_NOTIFY_SUPERVISORS), off otherwise. The agents in a session's first
-// herd ever keep pushing, so an upgrade silences nobody.
+// id. With nothing configured every agent starts on, so the switch changes nothing until it is used.
+// Once the operator sets supervisor folders (`notify supervisors set`, kept in this same file), an
+// agent first seen afterwards starts on only when its folder matches one; the agents in a session's
+// first herd ever keep pushing whatever the rule says.
 //
 // The file is shared with `scripts/notify.ts`, which the operator runs from a terminal: every read
 // checks the file's stamp first, and every change is read, made and written (a temp file and a
 // rename) under a short lock, so neither side writes over the other's change.
 
-/** How an agent got its switch: there before the feature, the supervisor rule, or the operator. */
+/**
+ * How an agent got its switch: there before the feature, a supervisor's folder, new (on with no
+ * supervisor folders set, off outside them when there are), or the operator.
+ */
 export type AgentNotifyWhy = "existing" | "supervisor" | "new" | "set";
 
 export interface AgentNotifyEntry {
@@ -39,13 +43,12 @@ export interface AgentNotifyRow extends AgentNotifyEntry {
 interface AgentNotifyFile {
   agents: Record<string, AgentNotifyEntry>;
   seeded: string[];
+  /** The operator's supervisor folders; none (the default) means every new agent starts on. */
+  supervisors: string[];
 }
 
 /** An agent that left the herd this long ago is forgotten. */
 export const AGENT_NOTIFY_FORGET_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** The rule's default: Firstmate homes and the Firstmate checkout, as this host launches them. */
-export const DEFAULT_SUPERVISOR_PATTERNS = ["~/.firstmate/*", "~/Developer/firstmate"];
 
 /**
  * Whether `cwd` is the folder `pattern` names, the whole path: `~/` is the home folder, `*` one
@@ -83,17 +86,17 @@ export class AgentNotifyStore {
   private agents: Record<string, AgentNotifyEntry> = {};
   /** Sessions whose first herd was already seeded (decision 3 of ADR 0134). */
   private seeded: string[] = [];
+  private supervisorFolders: string[] = [];
   private stamp = "";
 
   constructor(
     private readonly file: string,
-    private readonly patterns: readonly string[],
     private readonly now: () => number = Date.now,
     private readonly home: string = homedir(),
   ) {}
 
-  static at(stateDir: string, patterns: readonly string[]): AgentNotifyStore {
-    return new AgentNotifyStore(join(stateDir, "agent-notify.json"), patterns);
+  static at(stateDir: string): AgentNotifyStore {
+    return new AgentNotifyStore(join(stateDir, "agent-notify.json"));
   }
 
   /** Whether this agent may push. One the bridge has not seen yet may: the herd's next read decides it. */
@@ -122,6 +125,25 @@ export class AgentNotifyStore {
     return [...this.seeded];
   }
 
+  /** The supervisor folders set; empty when the rule is off (the default). */
+  supervisors(): string[] {
+    this.read();
+    return [...this.supervisorFolders];
+  }
+
+  /**
+   * Set the supervisor folders (whole-path patterns, see {@link matchesFolder}); an empty list turns the
+   * rule off. Only agents first seen afterwards follow it: no switch already decided changes.
+   */
+  setSupervisors(patterns: readonly string[]): string[] {
+    const clean = [...new Set(patterns.map((p) => p.trim()).filter(Boolean))];
+    return this.locked(() => {
+      this.supervisorFolders = clean;
+      this.write();
+      return [...clean];
+    });
+  }
+
   /** The operator's choice for one agent; one never seen yet is remembered for when it shows up. */
   set(session: string, paneId: string, on: boolean): AgentNotifyRow {
     return this.locked(() => {
@@ -144,6 +166,7 @@ export class AgentNotifyStore {
     this.locked(() => {
       const now = this.now();
       const seed = !this.seeded.includes(session);
+      const rule = this.supervisorFolders;
       const next = { ...this.agents };
       const present = new Set<string>();
       for (const agent of herd) {
@@ -152,8 +175,8 @@ export class AgentNotifyStore {
         const was = next[k];
         const facts = factsOf(agent);
         if (!was) {
-          const supervisor = isSupervisor(agent, this.patterns, this.home);
-          next[k] = { on: seed || supervisor, why: seed ? "existing" : supervisor ? "supervisor" : "new", ...facts, firstSeen: now };
+          const supervisor = isSupervisor(agent, rule, this.home);
+          next[k] = { on: seed || supervisor || rule.length === 0, why: seed ? "existing" : supervisor ? "supervisor" : "new", ...facts, firstSeen: now };
         } else if (was.gone !== undefined || moved(was, facts)) {
           const { gone: _gone, ...kept } = was;
           next[k] = { ...kept, ...facts };
@@ -230,7 +253,7 @@ export class AgentNotifyStore {
     }
     if (stamp === this.stamp) return;
     try {
-      ({ agents: this.agents, seeded: this.seeded } = coerce(JSON.parse(readFileSync(this.file, "utf8"))));
+      ({ agents: this.agents, seeded: this.seeded, supervisors: this.supervisorFolders } = coerce(JSON.parse(readFileSync(this.file, "utf8"))));
     } catch {
       /* unreadable: keep what we had */
     }
@@ -240,7 +263,7 @@ export class AgentNotifyStore {
   private write(): void {
     const tmp = `${this.file}.${process.pid}.tmp`;
     try {
-      writeFileSync(tmp, JSON.stringify({ agents: this.agents, seeded: this.seeded } satisfies AgentNotifyFile, null, 2), { mode: 0o600 });
+      writeFileSync(tmp, JSON.stringify({ agents: this.agents, seeded: this.seeded, supervisors: this.supervisorFolders } satisfies AgentNotifyFile, null, 2), { mode: 0o600 });
       // The temp file's stamp is the file's once renamed; a stat after the rename could read another writer's.
       const stamp = stampOf(statSync(tmp));
       renameSync(tmp, this.file);
@@ -286,10 +309,11 @@ const WHYS: readonly AgentNotifyWhy[] = ["existing", "supervisor", "new", "set"]
 /** Whatever the file holds, as entries that have at least a switch and a reason; anything else is dropped. */
 export function coerce(raw: unknown): AgentNotifyFile {
   const agents: Record<string, AgentNotifyEntry> = {};
-  const seen = (raw as { seeded?: unknown } | null)?.seeded;
-  const seeded = Array.isArray(seen) ? seen.filter((s): s is string => typeof s === "string" && s !== "") : [];
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string" && s !== "") : []);
+  const seeded = strings((raw as { seeded?: unknown } | null)?.seeded);
+  const supervisors = strings((raw as { supervisors?: unknown } | null)?.supervisors);
   const rows = (raw as { agents?: unknown } | null)?.agents;
-  if (typeof rows !== "object" || rows === null) return { agents, seeded };
+  if (typeof rows !== "object" || rows === null) return { agents, seeded, supervisors };
   for (const [k, v] of Object.entries(rows as Record<string, unknown>)) {
     const e = v as Partial<AgentNotifyEntry> | null;
     if (!k.includes("/") || typeof e !== "object" || e === null || typeof e.on !== "boolean" || !WHYS.includes(e.why as AgentNotifyWhy)) continue;
@@ -302,5 +326,5 @@ export function coerce(raw: unknown): AgentNotifyFile {
       ...(typeof e.gone === "number" ? { gone: e.gone } : {}),
     };
   }
-  return { agents, seeded };
+  return { agents, seeded, supervisors };
 }

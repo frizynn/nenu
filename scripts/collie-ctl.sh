@@ -1468,7 +1468,8 @@ cmd_push_test() {
   "$BUN" run "${PLUGIN_ROOT}/scripts/push-test.ts" "$@"
 }
 
-# Which agents may push (ADR 0134): `notify list`, `notify on|off [agent]`. With no agent, Herdr's
+# Which agents may push (ADR 0134): `notify list`, `notify on|off [agent]`,
+# `notify supervisors [set '<folders>' | clear]`. With no agent, Herdr's
 # focused pane when invoked as a plugin action. scripts/notify.ts writes the supervised bridge's state
 # file, which the bridge re-reads on its next look; no restart.
 cmd_notify() {

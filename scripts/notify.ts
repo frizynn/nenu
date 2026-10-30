@@ -1,12 +1,13 @@
 // Which agents may push, from a terminal (ADR 0134). The same file and rules as the ⋯ menu's
-// "Notifications" row: the bridge reads a change on its next look, no restart.
+// "Notify about this agent" row: the bridge reads a change on its next look, no restart.
 //
 //   bash scripts/collie-ctl.sh notify list
 //   bash scripts/collie-ctl.sh notify on|off [pane id | session/pane id | name]
+//   bash scripts/collie-ctl.sh notify supervisors [set '<pattern>,<pattern>' | clear]
 //
 // With no target, `on`/`off` act on the pane Herdr names: the focused pane a plugin action is invoked
 // on (HERDR_PLUGIN_CONTEXT_JSON), else the pane this shell runs in (HERDR_PANE_ID). Run it through
-// collie-ctl.sh so the plugin .env (COLLIE_NOTIFY_SUPERVISORS, the state dir) is the bridge's.
+// collie-ctl.sh so the state dir is the supervised bridge's.
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -18,6 +19,7 @@ const WHY: Record<AgentNotifyRow["why"], string> = {
   existing: "was there before per-agent switches",
   supervisor: "supervisor folder",
   new: "new agent",
+  // Off and new can only mean the supervisor rule was on when it was first seen.
   set: "set by you",
 };
 
@@ -60,7 +62,7 @@ export function resolveTarget(arg: string | undefined, rows: readonly AgentNotif
 export function formatList(rows: readonly AgentNotifyRow[], patterns: readonly string[], home = homedir()): string {
   const short = (p?: string) => (p && (p === home || p.startsWith(`${home}/`)) ? `~${p.slice(home.length)}` : p ?? "");
   const line = (r: AgentNotifyRow) =>
-    [r.on ? "on " : "off", `${r.session}/${r.paneId}`, r.name ?? r.workspace ?? "", short(r.cwd), WHY[r.why]];
+    [r.on ? "on " : "off", `${r.session}/${r.paneId}`, r.name ?? r.workspace ?? "", short(r.cwd), r.why === "new" && !r.on ? "new agent outside the supervisor folders" : WHY[r.why]];
   const table = (list: readonly AgentNotifyRow[]) => {
     const cells = list.map(line);
     const widths = cells[0]?.map((_, i) => Math.max(...cells.map((c) => c[i]!.length))) ?? [];
@@ -69,22 +71,41 @@ export function formatList(rows: readonly AgentNotifyRow[], patterns: readonly s
   const here = rows.filter((r) => r.gone === undefined);
   const gone = rows.filter((r) => r.gone !== undefined);
   return [
-    `New agents start with notifications on in: ${patterns.length ? patterns.join(", ") : "(no folder: every new agent starts off)"}`,
-    "  (COLLIE_NOTIFY_SUPERVISORS in the plugin .env; then: herdr plugin action invoke restart --plugin herdr.nenu)",
+    supervisorsLine(patterns),
     "",
     here.length ? table(here) : "  no agents seen yet",
     ...(gone.length ? ["", "Closed, kept for a week in case Herdr restores them:", table(gone)] : []),
   ].join("\n");
 }
 
+export function supervisorsLine(patterns: readonly string[]): string {
+  return patterns.length
+    ? `New agents start with notifications on only in: ${patterns.join(", ")}  (\`notify supervisors clear\` turns this off)`
+    : "Every new agent starts with notifications on  (\`notify supervisors set '<folders>'\` starts new ones on only there)";
+}
+
+/** `set`'s argument: comma-separated whole-path patterns; nothing in it is an error, not a silent clear. */
+export function parsePatterns(arg: string | undefined): string[] {
+  const patterns = (arg ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+  if (patterns.length === 0) throw new Error("usage: notify supervisors set '~/folder/*,~/other'  (use `clear` to turn the rule off)");
+  for (const p of patterns) if (!p.startsWith("/") && !p.startsWith("~/") && p !== "~" && !p.startsWith("**")) throw new Error(`"${p}" is not a whole path: start it with /, ~/ or **`);
+  return patterns;
+}
+
 if (import.meta.main) {
-  const [verb = "list", arg] = process.argv.slice(2);
+  const [verb = "list", arg, more] = process.argv.slice(2);
   const cfg = loadConfig();
-  const store = AgentNotifyStore.at(cfg.stateDir, cfg.notifySupervisors);
+  const store = AgentNotifyStore.at(cfg.stateDir);
   const session = sessionNameFor(cfg.socketPath, deriveConfigRoot(cfg.socketPath));
   try {
     if (verb === "list") {
-      console.log(formatList(store.list(), cfg.notifySupervisors));
+      console.log(formatList(store.list(), store.supervisors()));
+    } else if (verb === "supervisors") {
+      if (arg === "set") store.setSupervisors(parsePatterns(more));
+      else if (arg === "clear") store.setSupervisors([]);
+      else if (arg !== undefined) throw new Error("usage: notify supervisors [set '<folders>' | clear]");
+      console.log(supervisorsLine(store.supervisors()));
+      if (arg) console.log("  Agents already known keep their switch; the rule decides agents first seen from now on.");
     } else if (verb === "on" || verb === "off") {
       const rows = store.list();
       const target = resolveTarget(arg, rows, session, process.env);
@@ -96,7 +117,7 @@ if (import.meta.main) {
       console.log(`✓ notifications ${row.on ? "on" : "off"} for ${target.session}/${target.paneId}${label ? ` (${label})` : ""}`);
       if (!known) console.log("  The bridge has not seen this pane yet; the choice waits for it.");
     } else {
-      throw new Error(`usage: notify {list | on [agent] | off [agent]}`);
+      throw new Error("usage: notify {list | on [agent] | off [agent] | supervisors [set '<folders>' | clear]}");
     }
   } catch (error) {
     console.error(`✗ ${(error as Error).message}`);

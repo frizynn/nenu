@@ -43,7 +43,6 @@ function cfg(overrides: Partial<Config> = {}): Config {
     port: 8787,
     host: "127.0.0.1",
     pollMs: 1500,
-    notifySupervisors: [],
     pollIdleMs: 12_000,
     notifyDelayMs: 30_000,
     readLines: 200,
