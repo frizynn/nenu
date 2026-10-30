@@ -107,9 +107,8 @@ herdr plugin action invoke stop    --plugin herdr.nenu
 A routine update stays within the installed major version. Read the release notes before crossing a
 major version, then use the explicit `update-major` action.
 
-Choose which agents send notifications. A new agent starts on only when its pane runs in a
-supervisor's folder (`COLLIE_NOTIFY_SUPERVISORS`, by default `~/.firstmate/*,~/Developer/firstmate`);
-the agent's ⋯ menu has the same switch:
+Choose which agents send notifications. By default every agent does, as before; each one's switch is
+in its ⋯ menu and in the terminal, and new agents can start on only in supervisor folders you set:
 
 ```bash
 herdr plugin action invoke notify-list --plugin herdr.nenu   # every agent, on or off, and why
@@ -117,6 +116,8 @@ herdr plugin action invoke notify-off  --plugin herdr.nenu   # the pane focused 
 herdr plugin action invoke notify-on   --plugin herdr.nenu
 ROOT="$(herdr plugin list --json | jq -r '.result.plugins[] | select(.plugin_id == "herdr.nenu") | .plugin_root')"
 bash "$ROOT/scripts/collie-ctl.sh" notify off <pane-id-or-name>   # any agent, by pane id or name
+bash "$ROOT/scripts/collie-ctl.sh" notify supervisors set '~/.firstmate/*,~/Developer/firstmate'
+bash "$ROOT/scripts/collie-ctl.sh" notify supervisors clear       # back to every new agent on
 ```
 
 See [Which agents notify](docs/USER_GUIDE.md#which-agents-notify) for the rule and its limits.

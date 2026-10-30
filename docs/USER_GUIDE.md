@@ -791,7 +791,7 @@ agent, Subagent results and App updates.
 ### Which agents notify
 
 Each agent also has its own switch, in front of the kinds above: an agent that is off never pushes,
-one that is on follows them. On a phone or a desk it is a row of the agent's ⋯
+one that is on follows them. Out of the box every agent is on, so nothing changes until you use it. On a phone or a desk it is a row of the agent's ⋯
 menu, **Notify about this agent**, checked while the agent may push. From a terminal:
 
 ```bash
@@ -815,15 +815,23 @@ Agents of the Herdr desktop app shown through herdr-core (`COLLIE_HC_CORE=1`) ha
 their own session: from the terminal, name one by its pane id (`t6`, or `hc/t6` when Herdr has a pane
 with that id too).
 
-**How a new agent starts.** An agent first seen in a supervisor's folder starts on; every other new
-agent starts off. Supervisors are matched by the folder their pane was launched in, against
-`COLLIE_NOTIFY_SUPERVISORS` in the plugin `.env` (comma-separated, the whole path; `~/` is your home,
-`*` one folder name, `**` any depth). The default, `~/.firstmate/*,~/Developer/firstmate`, matches a
-Firstmate home and the Firstmate checkout but not the projects their workers run in. Set it to `**`
-for every new agent on, or to your own supervisors' folders, then run
-`herdr plugin action invoke restart --plugin herdr.nenu`. Agents that were already running when you
-upgraded keep notifying. A change from the terminal reaches an open ⋯ menu within about ten seconds. The reasoning and the limits of matching by
-folder: [ADR 0134](../.adr/0134-each-agent-has-its-own-notifications-switch.md).
+**New agents only in supervisor folders (optional).** By default every new agent starts on. If most
+of your agents are workers whose finishes are for another agent, set the folders your supervisors run
+in, and a new agent then starts on only when its pane was launched in one of them:
+
+```bash
+bash scripts/collie-ctl.sh notify supervisors set '~/.firstmate/*,~/Developer/firstmate'
+bash scripts/collie-ctl.sh notify supervisors          # show them
+bash scripts/collie-ctl.sh notify supervisors clear    # every new agent on again
+```
+
+Patterns are comma-separated whole paths: `~/` is your home, `*` one folder name, `**` any depth. The
+example matches each Firstmate home and the Firstmate checkout, not the projects their workers run in.
+The bridge reads the change on its next look, with no restart, and it applies only to agents first
+seen afterwards: agents already running, and any you switched yourself, keep their switch.
+`herdr plugin action invoke notify-supervisors-clear --plugin herdr.nenu` also turns it off. A change
+from the terminal reaches an open ⋯ menu within about ten seconds. The reasoning and the limits of
+matching by folder: [ADR 0134](../.adr/0134-each-agent-has-its-own-notifications-switch.md).
 
 ## Troubleshooting
 
