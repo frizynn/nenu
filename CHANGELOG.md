@@ -11,7 +11,8 @@ All notable changes to Nenu are recorded here. The format follows
 ## [2.14.0] - 2026-10-30
 
 ### Added
-- herdr-core: each machine is its own session (`hc`, `hc@<machine>`) with its own counts; the others' chats listed by machine in Home, the bar and Search (0a361b39)
+- herdr-core: the lists show machines, not sessions: every machine's chats at once, or one picked in the machine picker; Herdr's and hc's sessions on one machine are one (0a361b39, 9a043847)
+- Desk bar: list by Spaces, Folders, Recent or State (9a043847)
 - herdr-core: a chat on another machine shows its history, copied in while read (0a361b39)
 
 ### Fixed
