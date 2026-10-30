@@ -10,8 +10,9 @@ import { LiveEvents, snapshotWatcher } from "./live-events.ts";
 import { startMachines } from "./machines-runtime.ts";
 import { DEFAULT_TIMEOUT_MS, HerdrClient, type HerdrApi } from "./herdr-client.ts";
 import { HcClient, hcBinary } from "./hc-client.ts";
-import { AlertDescriber, NotificationCoordinator, decisionLine, makeNotifySink, type MuteGate, type NotifyClock } from "./notifications.ts";
+import { AlertDescriber, NotificationCoordinator, decisionLine, makeNotifySink, type MuteGate, type NotifyClock, type NotifyPolicy } from "./notifications.ts";
 import { NotifyPrefsStore } from "./notify-prefs.ts";
+import { AgentNotifyStore } from "./agent-notify.ts";
 import { Push } from "./push.ts";
 import { startServer } from "./server.ts";
 import {
@@ -63,6 +64,8 @@ const snooze = new Snooze(cfg);
 await snooze.load();
 
 const notifyPrefs = new NotifyPrefsStore(cfg);
+// Which agents may push at all, one switch each (ADR 0134); shared with `scripts/notify.ts`.
+const agentNotify = AgentNotifyStore.at(cfg.stateDir);
 // The sessions' coordinators exist before the server's projects and journals; startServer fills it in.
 const alerts = new AlertDescriber();
 await notifyPrefs.load();
@@ -178,8 +181,22 @@ const startSession = (name: string, herdr: HerdrApi, isPrimary: boolean): Sessio
   // a push the service worker then hid would count against iOS's silent-push quota (ADR 0072).
   const quiet: MuteGate = { muted: () => snooze.isMuted() ? "snoozed" : live.watching() ? "open" : null };
   const sink = makeNotifySink(push, quiet, herdTagFor(isPrimary, name), isPrimary ? undefined : name);
+  // A new agent gets its own switch on the first herd it shows up in. A failed write (or a lock the
+  // terminal holds) must not stop the poll: the next poll tries again.
+  engine.onUpdate((s) => {
+    try {
+      agentNotify.reconcile(name, s.agents);
+    } catch (error) {
+      console.warn(`[notify] could not save agent switches: ${(error as Error).message}`);
+    }
+  });
+  const policy: NotifyPolicy = {
+    maybe: (status) => notifyPrefs.maybe(status),
+    wants: (alert) => notifyPrefs.wants(alert),
+    agentOn: (paneId) => agentNotify.on(name, paneId),
+  };
   // Each decision goes to the journal, so a missing push is read there instead of deduced.
-  const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, notifyPrefs, alerts.for(name),
+  const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, policy, alerts.for(name),
     (paneId) => activity.get(name, paneId)?.seenAt, Date.now, (decision) => console.log(decisionLine(name, decision)));
   engine.onTransition((agent, from, to) => notifications.onTransition(agent, from, to));
   // A finished turn is when new usage exists: a stale usage total catches up then (usage/runtime.ts).
@@ -255,7 +272,7 @@ const machines = await startMachines(cfg.stateDir, () => {
   for (const session of registry.list()) live.publish({ session: session.name, topic: "snapshot" });
 });
 
-const server = startServer({ cfg, registry, push, snooze, notifyPrefs, alerts, updateMonitor, audit, activity, live, machines, usage });
+const server = startServer({ cfg, registry, push, snooze, notifyPrefs, agentNotify, alerts, updateMonitor, audit, activity, live, machines, usage });
 
 const shutdown = async () => {
   console.log("\n[bridge] shutting down");

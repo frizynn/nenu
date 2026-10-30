@@ -96,6 +96,11 @@ export interface AgentView {
   /** Herdr's `agent.list` `completion_seq`: bumps when an idle transition completed work. */
   completionSeq?: number;
   /**
+   * Whether this agent may push a notification at all (bridge/agent-notify.ts, ADR 0134). Attached at
+   * serialise time to agent panes only; absent from a bridge that predates the switch.
+   */
+  notify?: boolean;
+  /**
    * The agent's turn as the CLI itself records it (ADR 0067): Claude's session file, Codex's rollout.
    * Attached at read time by bridge/agent-state.ts; absent when no structured source is known for the
    * pane, and then the screen and Herdr's status stay the fallback.

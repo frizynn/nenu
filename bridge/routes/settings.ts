@@ -119,6 +119,25 @@ export const settingsRoutes: Route[] = [
     },
   },
   { method: "*", path: "/api/notifications/prefs", access: "none", session: false, handle: () => text("method not allowed", 405) },
+  // One agent's own switch (ADR 0134). Read-level like the kinds above; a session route, so another
+  // machine's agent is switched by its own Nenu, which is the one that would push for it.
+  {
+    method: "POST",
+    path: "/api/notifications/agent",
+    access: "read",
+    session: true,
+    async handle({ agentNotify, live }, { req, rt }) {
+      if (!agentNotify) return text("not available", 404);
+      const body = parseAgentNotify(await req.json().catch(() => null));
+      if (!body) return text("bad request", 400);
+      if (!rt.engine.current().agents.some((a) => a.paneId === body.paneId)) return text("unknown pane", 404);
+      const row = agentNotify.set(rt.name, body.paneId, body.on);
+      // Turned off: a pending alert of this agent is dropped before it is sent.
+      rt.notifications.applyPrefs();
+      live.publish({ session: rt.name, topic: "snapshot" });
+      return json({ paneId: body.paneId, notify: row.on }, req.headers.get("accept-encoding"));
+    },
+  },
   // Settings → other machines (machines.ts). Reading it lists Herdr's machines then and only then.
   {
     method: "GET",
@@ -173,6 +192,14 @@ export function parseNotifyPrefsPatch(v: unknown): Partial<NotifyPrefs> | null {
     patch[key] = o[key] as boolean;
   }
   return patch;
+}
+
+/** Validate an untrusted /api/notifications/agent body: a pane id and a boolean. */
+export function parseAgentNotify(v: unknown): { paneId: string; on: boolean } | null {
+  const o = v as { paneId?: unknown; on?: unknown } | null;
+  if (typeof o !== "object" || o === null) return null;
+  if (typeof o.paneId !== "string" || o.paneId === "" || o.paneId.length > 128 || typeof o.on !== "boolean") return null;
+  return { paneId: o.paneId, on: o.on };
 }
 
 // Shape-check an untrusted /api/subscribe body before persisting it (a malformed sub would be

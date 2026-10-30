@@ -82,6 +82,7 @@ function setup(
   const policy = {
     maybe: (s: AgentStatus): boolean => (s === "blocked" ? live.blocked : s === "done" ? live.done || live.subagents : false),
     wants: (d: AlertDetail): boolean => (d.status === "blocked" ? live.blocked : d.startedBy === "subagent" ? live.subagents : live.done),
+    agentOn: () => true,
   };
   let now = 1_000;
   const coord = new NotificationCoordinator(clock, sink, 30_000, policy, describe, (paneId) => seen[paneId], () => now);
@@ -169,7 +170,7 @@ describe("NotificationCoordinator — one notification per agent, sent once", ()
     }
     const clock = new FakeClock();
     const sink = new OpenScreenSink();
-    const policy = { maybe: () => true, wants: () => true };
+    const policy = { maybe: () => true, wants: () => true, agentOn: () => true };
     let now = 1_000;
     const coord = new NotificationCoordinator(clock, sink, 30_000, policy, undefined, () => undefined, () => now);
     coord.onTransition(agent("p1", "done"), "working", "done");
@@ -265,7 +266,7 @@ describe("NotificationCoordinator — every decision is logged", () => {
     let open = true;
     const sink: NotifySink = { render: () => (open ? "open" : "sent") };
     // Settings as shipped: an agent another agent launched does not push.
-    const policy = { maybe: () => true, wants: (d: AlertDetail) => !d.launched };
+    const policy = { maybe: () => true, wants: (d: AlertDetail) => !d.launched, agentOn: () => true };
     const describe = (view: AgentView, status: "blocked" | "done"): AlertDetail =>
       ({ status, name: view.paneLabel ?? "", where: "", startedBy: "person", requested: false, launched: view.paneId === "p2", summary: "secret words" });
     let now = 1_000;
@@ -342,5 +343,70 @@ describe("interactionAlert", () => {
 
   test("an incomplete permission shows its question but offers no actions", () => {
     expect(interactionAlert(alert, card({ detailComplete: false })).interaction?.actions).toEqual([]);
+  });
+});
+
+// The agent's own switch (agent-notify.ts) is read at the push decision point: an agent that is off
+// never reaches the sink, whatever the kind switches say; one that is on follows them.
+describe("an agent's own notifications switch", () => {
+  function muted(off: Set<string>) {
+    const clock = new FakeClock();
+    const sink = new RecordingSink();
+    const decisions: NoticeDecision[] = [];
+    const policy = { maybe: () => true, wants: () => true, agentOn: (paneId: string) => !off.has(paneId) };
+    const coord = new NotificationCoordinator(clock, sink, 30_000, policy, undefined, () => undefined, () => 1_000, (d) => decisions.push(d));
+    return { clock, sink, coord, decisions };
+  }
+
+  test("an agent that is off pushes neither a finish nor a block", () => {
+    const { clock, sink, coord } = muted(new Set(["p1"]));
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    coord.onTransition(agent("p1", "blocked"), "working", "blocked");
+    expect(clock.armed).toBe(0);
+    clock.fireAll();
+    expect(sink.renders).toHaveLength(0);
+  });
+
+  test("an agent that is on still pushes beside one that is off", () => {
+    const { clock, sink, coord } = muted(new Set(["p1"]));
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    coord.onTransition(agentNamed("p2", "web", "done"), "working", "done");
+    clock.fireAll();
+    expect(sink.renders.map((n) => n.paneId)).toEqual(["p2"]);
+  });
+
+  test("turned off during the debounce, the pending alert is not sent and says why", () => {
+    const off = new Set<string>();
+    const { clock, sink, coord, decisions } = muted(off);
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    off.add("p1");
+    clock.fireAll();
+    expect(sink.renders).toHaveLength(0);
+    expect(decisions.map((d) => d.outcome)).toEqual(["agent"]);
+    expect(decisionLine("default", decisions[0]!)).toContain("notifications are off for this agent");
+  });
+
+  test("applyPrefs drops a pending alert of an agent turned off", () => {
+    const off = new Set<string>();
+    const { clock, sink, coord } = muted(off);
+    coord.onTransition(agent("p1", "blocked"), "working", "blocked");
+    off.add("p1");
+    coord.applyPrefs();
+    expect(clock.armed).toBe(0);
+    clock.fireAll();
+    expect(sink.renders).toHaveLength(0);
+  });
+
+  test("the kind switches still apply to an agent that is on", () => {
+    const clock = new FakeClock();
+    const sink = new RecordingSink();
+    const policy = { maybe: () => true, wants: (d: AlertDetail) => d.status === "blocked", agentOn: () => true };
+    const coord = new NotificationCoordinator(clock, sink, 30_000, policy);
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    clock.fireAll();
+    expect(sink.renders).toHaveLength(0);
+    coord.onTransition(agent("p1", "blocked"), "working", "blocked");
+    clock.fireAll();
+    expect(sink.renders).toHaveLength(1);
   });
 });

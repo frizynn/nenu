@@ -111,10 +111,14 @@ export function interactionAlert(msg: PushMessage, interaction: Interaction): Pu
   };
 }
 
-/** Which alerts push: `maybe` before the debounce (by status), `wants` once the alert is described. */
+/**
+ * Which alerts push: `maybe` before the debounce (by status), `wants` once the alert is described.
+ * `agentOn` is the agent's own switch (agent-notify.ts): off, nothing of that agent pushes.
+ */
 export interface NotifyPolicy {
   maybe(status: AgentStatus): boolean;
   wants(alert: AlertDetail): boolean;
+  agentOn(paneId: string): boolean;
 }
 
 /** Who an alert is about; may answer later (it reads the pane's journal). */
@@ -133,19 +137,21 @@ export class AlertDescriber {
 
 /**
  * What the coordinator did with an alert once it knew who it was about: sent it, had it held back
- * (`snoozed`, `open`), left it to a Settings switch that is off or a turn that never pushes (`rule`),
- * or skipped it because that kind already went out and nobody has looked since (`told`).
+ * (`snoozed`, `open`), left it to the agent's own switch that is off (`agent`), to a Settings switch
+ * that is off or a turn that never pushes (`rule`), or skipped it because that kind already went out
+ * and nobody has looked since (`told`).
  */
 export interface NoticeDecision {
   paneId: string;
   alert: Pick<AlertDetail, "status" | "startedBy" | "requested" | "launched">;
-  outcome: NoticeOutcome | "rule" | "told";
+  outcome: NoticeOutcome | "agent" | "rule" | "told";
 }
 
 const OUTCOME_WORDS: Record<NoticeDecision["outcome"], string> = {
   sent: "sent",
   snoozed: "not sent, snoozed",
   open: "not sent, Nenu is open on a screen",
+  agent: "not sent, notifications are off for this agent",
   rule: "not sent, no switch on in Settings pushes this turn",
   told: "not sent, it already notified and nobody has opened it since",
 };
@@ -188,9 +194,9 @@ export class NotificationCoordinator<H = unknown> {
   /** Wire to `StateEngine.onTransition`. */
   onTransition(agent: AgentView, _from: AgentStatus, to: AgentStatus): void {
     const id = agent.paneId;
-    if (!this.policy.maybe(to)) {
-      // Resolved to a non-notifiable (or preference-disabled) state: drop a still-pending alert,
-      // retract a delivered one.
+    if (!this.policy.maybe(to) || !this.policy.agentOn(id)) {
+      // Resolved to a non-notifiable (or preference-disabled) state, or an agent that is off: drop a
+      // still-pending alert, retract a delivered one.
       this.resolve(id);
       return;
     }
@@ -210,7 +216,8 @@ export class NotificationCoordinator<H = unknown> {
     const admit = (alert: AlertDetail) => {
       if (this.pending.get(id) !== entry) return;
       this.pending.delete(id);
-      const outcome = !this.policy.wants(alert) ? "rule" : this.alreadyTold(id, alert.status) ? "told" : this.sink.render(notice(id, alert));
+      // The agent's switch is read again here: it may have been turned off during the debounce.
+      const outcome = !this.policy.agentOn(id) ? "agent" : !this.policy.wants(alert) ? "rule" : this.alreadyTold(id, alert.status) ? "told" : this.sink.render(notice(id, alert));
       this.decided({ paneId: id, alert, outcome });
       // Only a notice that went out counts as told: one held back reached nobody.
       if (outcome !== "sent") return;
@@ -236,11 +243,11 @@ export class NotificationCoordinator<H = unknown> {
     // Drop pending alerts no kind of their status would push — nothing was shown yet. One that may
     // still push is re-checked against `wants` when it is described.
     for (const [id, p] of [...this.pending]) {
-      if (!this.policy.maybe(p.status)) this.cancelPending(id);
+      if (!this.policy.maybe(p.status) || !this.policy.agentOn(id)) this.cancelPending(id);
     }
     // Forget delivered alerts of a now-disabled kind; the app closes their notifications when it opens.
     for (const [id, a] of [...this.outstanding]) {
-      if (!this.policy.wants(a)) this.outstanding.delete(id);
+      if (!this.policy.wants(a) || !this.policy.agentOn(id)) this.outstanding.delete(id);
     }
   }
 
