@@ -811,6 +811,11 @@ bash scripts/collie-ctl.sh notify on  default/w1:p3
 ```
 
 The menu and the terminal change the same setting and take effect at once, with no restart.
+With `COLLIE_HC_CORE=1`, each machine herdr-core is connected to is its own session: `hc` for this one
+and `hc@<machine>` for another, in the session switcher with its own counts. Every other machine's chats
+are also listed under its name in Home, the bar and Search. A chat on another machine shows its history,
+and a picture sent to it travels there first.
+
 Agents of the Herdr desktop app shown through herdr-core (`COLLIE_HC_CORE=1`) have the same switch, in
 their own session: from the terminal, name one by its pane id (`t6`, or `hc/t6` when Herdr has a pane
 with that id too).
