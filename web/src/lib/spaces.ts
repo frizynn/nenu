@@ -1,6 +1,7 @@
 // Helpers for workspaces and their tabs: shape the flat snapshot (agents + shell panes + tabs) into
 // the per-workspace, per-tab tree the sidebar draws, name what it shows, and pick the pane a
 // workspace opens on.
+import { TITLE_SEP } from "./pane-name";
 import type { AgentView, TabView, WorkspaceView } from "./types";
 
 export interface TabGroup {
@@ -36,9 +37,10 @@ export function groupPanesByTab(
   return groups;
 }
 
-/** A workspace's name, or its number when Herdr has none for it. */
-export function workspaceName(workspace: Pick<WorkspaceView, "label" | "number">): string {
-  return workspace.label || `Workspace ${workspace.number}`;
+/** A workspace's name, or its number when Herdr has none for it; then its machine, on a list that names one. */
+export function workspaceName(workspace: Pick<WorkspaceView, "label" | "number" | "machine">): string {
+  const name = workspace.label || `Workspace ${workspace.number}`;
+  return workspace.machine ? `${name}${TITLE_SEP}${workspace.machine}` : name;
 }
 
 /** What {@link workspaceEntry} reads from the snapshot. */

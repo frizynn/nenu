@@ -1,10 +1,11 @@
-import { useContext } from "react";
+import { useContext, useMemo } from "react";
 import { useRouteLoaderData } from "react-router";
 import { ChatsCircle, Wifi } from "@/components/ui/icon";
 
 import { ColumnPage } from "@/components/column-page";
 import { DeskHome } from "@/components/desk-home";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MachinePicker } from "@/components/machine-picker";
 import { MachinesSlot } from "@/components/machines-slot";
 import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, SessionLists, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
@@ -17,6 +18,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { isConnecting } from "@/lib/connection";
 import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats, type ReviewEntry } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
+import { shownHerd, useMachineFilter } from "@/lib/machines";
 import { filterReviews, usePrFilter } from "@/lib/pr-filter";
 import { openNewAgent } from "@/lib/spawn";
 import { isReadOnly } from "@/lib/types";
@@ -37,14 +39,18 @@ import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 // quiet retry), and a sustained one or a refusal greys the lists out so nothing reads live. A first
 // load that never reached Nenu has no herd to show, so the body only says what will be here.
 export function HomeRoute() {
-  const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+  const snapshot = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+  // Every machine's chats, or the one this device picked (ADR 0135); each row opens in its own session.
+  const [machine] = useMachineFilter();
+  const data = useMemo(() => shownHerd(snapshot, machine), [snapshot, machine]);
   const navigation = useContext(WorkbenchNavigationContext);
   const now = Date.now();
   const live = !data.error && data.bridge === "connected";
   // Why answering is paused, if it is.
   const lock = lockReasonOf({ ...data, readOnly: isReadOnly(data.device) });
   const interactions = useInteractions(data.session, live);
-  const activity = useHomeActivity(live ? data.agents : [], data.session);
+  // Background work is read in the page's own session, so only its panes.
+  const activity = useHomeActivity(live ? snapshot.agents : [], data.session);
   const lost = useConnectionLost(isConnecting(data));
   const opening = useOpeningPath();
   const { filter: prFilter } = usePrFilter();
@@ -107,6 +113,7 @@ export function HomeRoute() {
       {live && !data.agents.length && <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />}
       {/* The herd as last seen: greyed so nothing reads live, text kept at full contrast. */}
       <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
+        <MachinePicker data={data} />
         <NeedsYouList agents={data.agents} session={data.session} items={needs} receipts={receipts}
           interactions={interactions} lockReason={lock} opening={opening} />
         <HomeSessions {...lists} />

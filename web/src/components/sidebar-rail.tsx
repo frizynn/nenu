@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
 import { House, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
@@ -7,6 +7,7 @@ import { resting, StatusDot } from "@/components/status-badge";
 import { liveliest } from "@/lib/desk-nav";
 import { needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
+import { rowSession, shownHerd, useMachineFilter } from "@/lib/machines";
 import { MOTION_CONTROL_MS } from "@/lib/motion";
 import { homePath, settingsPath, workspacePath } from "@/lib/nav";
 import { workspaceName } from "@/lib/spaces";
@@ -168,7 +169,7 @@ function RailTile({ tile, mark }: { tile: Tile; mark: ReactNode }) {
 }
 
 /** The collapsed sidebar: the same actions as icons, then two letters per workspace. */
-export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, onNewChat, onSearch }: {
+export function SidebarRail({ data: snapshot, attention, expandRef, sidebarId, onExpand, onNewChat, onSearch }: {
   data: HomeData;
   attention: number;
   expandRef: RefObject<HTMLButtonElement | null>;
@@ -178,10 +179,12 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
   onSearch: () => void;
 }) {
   const { paneId, spaceId } = useParams();
+  const [machine] = useMachineFilter();
+  const data = useMemo(() => shownHerd(snapshot, machine), [snapshot, machine]);
   const tip = useRailTip();
   const currentSpace = spaceId ?? [...data.agents, ...data.shellPanes].find((pane) => pane.paneId === paneId)?.workspaceId;
   const workspaces = data.workspaces.map((workspace): Tile => ({
-    key: workspace.workspaceId, name: workspaceName(workspace), to: workspacePath(workspace.workspaceId, data, data.session),
+    key: workspace.workspaceId, name: workspaceName(workspace), to: workspacePath(workspace.workspaceId, data, rowSession(workspace, data.session)),
     current: currentSpace === workspace.workspaceId, status: liveliest(data.agents.filter((pane) => pane.workspaceId === workspace.workspaceId)),
   }));
   const monograms = railMonograms(workspaces.map((tile) => tile.name));

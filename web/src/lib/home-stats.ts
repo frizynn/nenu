@@ -225,6 +225,8 @@ export interface TabChats {
 /** A Herdr workspace in Home's "Workspaces" list, with its tabs that hold a session, in tab order. */
 export interface WorkspaceChats {
   workspaceId: string;
+  /** As WorkspaceView's. */
+  session?: string;
   name: string;
   tabs: TabChats[];
   /** The pane its row opens when it holds one tab or one session (opensDirectly); otherwise the row unfolds its tabs. */
@@ -240,6 +242,7 @@ export function workspaceChats(herd: Herd, reviews: readonly ReviewEntry[] = [])
     const entry = opensDirectly(branch) ? workspaceEntry(branch.workspace.workspaceId, herd)?.paneId : undefined;
     return {
       workspaceId: branch.workspace.workspaceId,
+      ...(branch.workspace.session !== undefined ? { session: branch.workspace.session } : {}),
       name: branch.name,
       tabs: branch.tabs.map((tab) => ({ tabId: tab.tabId, label: tab.label, chats: sessionChats(tab.panes, reviews) })),
       ...(entry ? { entry } : {}),

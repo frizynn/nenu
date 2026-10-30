@@ -5,6 +5,10 @@ export type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 
 export interface AgentView {
   paneId: string;
+  /** On a list that joins sessions (ADR 0135): the one it opens in, "" for the primary. */
+  session?: string;
+  /** On a list that joins machines: the one it runs on, named once more than one shows. */
+  machine?: string;
   workspaceId: string;
   workspaceLabel: string;
   workspaceNumber: number;
@@ -114,6 +118,9 @@ export function paneDisplayName(pane: AgentView): string {
 /** A Herdr workspace ("space") — a project-scoped container of tabs. */
 export interface WorkspaceView {
   workspaceId: string;
+  /** As AgentView's. */
+  session?: string;
+  machine?: string;
   number: number;
   label: string;
   focused: boolean;
@@ -125,6 +132,8 @@ export interface WorkspaceView {
 /** A tab within a workspace (holds one or more panes). */
 export interface TabView {
   tabId: string;
+  /** As AgentView's. */
+  session?: string;
   workspaceId: string;
   number: number;
   label: string;
@@ -308,6 +317,8 @@ export interface MachineHerd {
 /** Mirrors MachineView in bridge/types.ts: `session` is absent for the bridge's own machine. */
 export interface MachineView {
   session?: string;
+  /** The bridge's sessions this machine joins, "" for the primary (ADR 0135); its herd is then whole. */
+  sessions?: string[];
   label: string;
   state: MachineState;
   detail?: string;

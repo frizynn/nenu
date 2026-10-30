@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { FolderTree, Gauge, History, GitPullRequest, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
@@ -9,15 +9,17 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot } from "@/components/status-badge";
 import { ChatRow, Highlight, OpeningMark, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
 import { WorkspaceTree } from "@/components/workspace-tree";
+import { MachinePicker } from "@/components/machine-picker";
 import { MachinesSlot } from "@/components/machines-slot";
+import { Segmented } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
 import { workspaceTree } from "@/lib/workspace-tree";
 import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
-import { currentMachine, machineSearch, type MachineSearchGroup } from "@/lib/machines";
+import { currentMachine, joinedMachines, machineSearch, rowSession, shownHerd, useMachineFilter, type MachineSearchGroup } from "@/lib/machines";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { COUNTED, deskChats, type CountedState, type DeskChat } from "@/lib/desk-nav";
-import { useProjectView } from "@/lib/desk-projects";
+import { useProjectView, type SidebarView } from "@/lib/desk-projects";
 import { reviewQueue } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, panePath, settingsPath, usagePath, workspacePath } from "@/lib/nav";
@@ -40,13 +42,17 @@ export interface SidebarRequest {
 export type SidebarVariant = "sidebar" | "sheet" | "drawer";
 
 /** The workbench navigation: its variant's lead, then the workspaces, and the host it all runs on. */
-export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar" }: {
+export function WorkbenchSidebar({ data: snapshot, onNewChat, request, variant = "sidebar" }: {
   data: HomeData;
   variant?: SidebarVariant;
   onNewChat?: () => void;
   /** Each new `seq` opens search (⌘K, the rail, the tab bar). */
   request?: SidebarRequest;
 }) {
+  // Every machine's chats, or the one this device picked (ADR 0135); each row opens in its own session.
+  const [machine] = useMachineFilter();
+  const data = useMemo(() => shownHerd(snapshot, machine), [snapshot, machine]);
+  const { view } = useProjectView();
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   // The pick is a row, not a place in the list: a poll that adds or drops a row leaves it where it was.
@@ -163,12 +169,15 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
             <Search aria-hidden size={16} /><span className="nav-row-text">Search</span><kbd className="nav-kbd" aria-hidden>⌘K</kbd>
           </button>
         )}
-        {!phone && !searching && <ViewToggle />}
         {/* New sits at the search row's end as a small action, as T3 Code keeps its own beside Search. */}
         {!phone && <button type="button" className="workbench-icon-button" onClick={onNewChat} disabled={!onNewChat}
           aria-label="New chat" aria-keyshortcuts="Meta+N" title="New chat (⌘N)">
           <SquarePen aria-hidden size={16} />
         </button>}
+      </div>}
+      {!phone && !searching && <div className="nav-pickers">
+        <MachinePicker data={data} />
+        <ViewPicker />
       </div>}
 
       {/* A link followed from the desk's tree ends its search once the page is on screen, as a result does. */}
@@ -181,7 +190,8 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
             ? <PhoneLists data={data} drawer={variant === "drawer"} only={only} onClear={() => setOnly(undefined)} onNewChat={onNewChat} />
             : searching ? <div className="nav-enter"><SidebarTree data={data} /><MachinesSlot data={data} place="nav" /></div>
             : <>
-              {data.agents.length ? <DeskLists data={data} only={only} onClear={() => setOnly(undefined)} /> : <Empty phone={false} />}
+              {view === "workspaces" && !only ? <SidebarTree data={data} />
+                : data.agents.length ? <DeskLists data={data} only={only} onClear={() => setOnly(undefined)} /> : <Empty phone={false} />}
               <MachinesSlot data={data} place="nav" />
             </>}
       </div>
@@ -192,7 +202,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
           closeSearch();
           setOnly(state === only ? undefined : state);
         }} />}
-        <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />
+        {joinedMachines(data).length === 0 && <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />}
         <HostRow data={data} actions={variant !== "sheet"} />
       </div>}
     </nav>
@@ -203,8 +213,8 @@ const optionId = (listId: string, index: number) => `${listId}-${index}`;
 
 /** Where a search result opens: a workspace's pane, or a pane's chat. */
 function hitPath(hit: SearchHit, herd: Herd, session?: string): string {
-  if (hit.kind === "workspace") return workspacePath(hit.workspace.workspaceId, herd, session);
-  return panePath(hit.pane.paneId, session);
+  if (hit.kind === "workspace") return workspacePath(hit.workspace.workspaceId, herd, rowSession(hit.workspace, session));
+  return panePath(hit.pane.paneId, rowSession(hit.pane, session));
 }
 
 /** The search's matches as one list (Workspaces, then Chats), each row named as everywhere else with the match in semibold. */
@@ -286,6 +296,7 @@ function PhoneLists({ data, drawer, only, onClear, onNewChat }: { data: HomeData
   );
   if (drawer && only) return <OnlyList key={only} state={only} chats={chats} row={row} onClear={onClear} className="nav-group" />;
   return <>
+    {drawer && <MachinePicker data={data} className="mx-2.5 mb-2" />}
     {sections && section("Needs you", sections.needsYou, true)}
     {projects && <ProjectList chats={chats} held={held} row={row} currentPaneId={paneId} end={<ViewToggle />} className="nav-group" />}
     <SidebarTree data={data} folded onNewChat={onNewChat} />
@@ -308,6 +319,16 @@ function ViewToggle() {
       <Icon aria-hidden size={16} />
     </button>
   );
+}
+
+const VIEWS: ReadonlyArray<{ value: SidebarView; label: string }> = [
+  { value: "workspaces", label: "Spaces" }, { value: "projects", label: "Folders" }, { value: "time", label: "Recent" }, { value: "state", label: "State" },
+];
+
+/** How the desk's bar lists, kept on this device: the workspace tree, chats by folder, by when they moved, or by state. */
+function ViewPicker() {
+  const { view, setView } = useProjectView();
+  return <Segmented label="List by" options={VIEWS} value={view} onChange={setView} className="h-8 coarse:h-10" />;
 }
 
 /**

@@ -7,6 +7,7 @@ import { AutoDeny, QuestionCard, useLockLine, type LockReason } from "@/componen
 import { StatusDot } from "@/components/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
+import { rowSession } from "@/lib/machines";
 import type { NeedsYouItem } from "@/lib/home-stats";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { panePath } from "@/lib/nav";
@@ -57,7 +58,7 @@ export function NeedsYouList({ agents, session, items, receipts, interactions, l
     <section aria-label="Needs you" className="flex flex-col gap-2">
       {items.map(({ paneId, interaction }) => {
         const who = asker(byPane.get(paneId), paneId);
-        const to = panePath(paneId, session);
+        const to = panePath(paneId, rowSession(byPane.get(paneId) ?? {}, session));
         const busy = isOpening(opening, to);
         if (interaction) {
           return <AskRow key={`${paneId}:${interaction.signature}`} interaction={interaction} who={who} to={to} opening={busy} lockLine={lockLine}

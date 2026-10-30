@@ -4,6 +4,7 @@ import { Pending, Terminal } from "@/components/ui/icon";
 
 import { useRouterState } from "@/hooks/use-router";
 import { StateMark, StatusDot } from "@/components/status-badge";
+import { rowSession } from "@/lib/machines";
 import { displayName, displayPlace, type DisplayPlace } from "@/lib/display-name";
 import { timeAgoShort } from "@/lib/format";
 import { panePath } from "@/lib/nav";
@@ -86,7 +87,7 @@ export function ChatRow({ pane, current, now, session }: {
   session?: string;
 }) {
   const at = chatRecency(pane);
-  const to = panePath(pane.paneId, session);
+  const to = panePath(pane.paneId, rowSession(pane, session));
   return (
     <Link className="nav-pane nav-chat" to={to} aria-current={current ? "page" : undefined}>
       <RowBody mark={<OpeningMark to={to}><PaneMark pane={pane} /></OpeningMark>} title={displayName(pane)} detail={<PlaceText place={displayPlace(pane)} />} end={<>

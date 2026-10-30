@@ -20,6 +20,7 @@ import { QuietMenu, quietMenuItem } from "@/components/ui/quiet-menu";
 import { BottomSheet } from "@/components/ui/sheet";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
 import { listedModel, useStartModels } from "@/hooks/use-start-models";
+import { rowSession } from "@/lib/machines";
 import { fetchHomeDirs, type StartModels } from "@/lib/api";
 import { projectName } from "@/lib/desk-projects";
 import { tildePath } from "@/lib/dir-picker";
@@ -227,7 +228,7 @@ const NEW_MARK = <span className="shrink-0 self-center rounded-sm border border-
 
 /** A chat to pick up, on one line: its mark, name and project, then its size and when it last moved. */
 function PickUpRow({ chat, session, now, opening }: { chat: RecentChat; session?: string; now: number; opening: string | null }) {
-  const to = panePath(chat.agent.paneId, session);
+  const to = panePath(chat.agent.paneId, rowSession(chat.agent, session));
   const busy = isOpening(opening, to);
   return (
     <li className={useEnter()}>
@@ -394,7 +395,7 @@ function BoardColumn({ id, label, status, count, empty, children }: { id: string
 /** A chat on the Board: its name and agent, where it lives, its PR's size and since when, then what its process says it is doing. */
 function BoardCard({ chat, session, now, opening }: { chat: RecentChat; session?: string; now: number; opening: string | null }) {
   const { agent, title, diff, at, unseen } = chat;
-  const to = panePath(agent.paneId, session);
+  const to = panePath(agent.paneId, rowSession(agent, session));
   const busy = isOpening(opening, to);
   const working = agent.status === "working";
   // The title the process sets follows the work; it says nothing new when it is the chat's own name.
