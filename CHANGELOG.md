@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-10-30
+
+### Added
+
+- A notifications switch per agent, in its ⋯ menu and from a terminal (`notify-list`, `notify-on`, `notify-off`, `collie-ctl.sh notify`); every agent starts on, herdr-core agents included (4b8a3eaf, 1a778724, 1da31afc, e8bf803c).
+- Optional supervisor folders (`collie-ctl.sh notify supervisors set|clear`, `notify-supervisors-clear`): when set, a new agent starts with notifications on only in one (15426b70, b27f0600).
+
 ## [2.12.0] - 2026-10-29
 
 ### Added
