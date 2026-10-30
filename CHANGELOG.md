@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-10-30
+
+### Added
+- herdr-core: each machine is its own session (`hc`, `hc@<machine>`) with its own counts; the others' chats listed by machine in Home, the bar and Search (0a361b39)
+- herdr-core: a chat on another machine shows its history, copied in while read (0a361b39)
+
+### Fixed
+- herdr-core: a queued message no longer fails with "didn't show in the agent's input box"; it goes as one send (0a361b39)
+- herdr-core: a picture sent to another machine travels there first (0a361b39)
+
 ## [2.13.0] - 2026-10-30
 
 ### Added
