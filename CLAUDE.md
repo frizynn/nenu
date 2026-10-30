@@ -348,6 +348,10 @@ the unit name; the Herdr action runs from anywhere.
   [ADR 0048](./.adr/0048-the-input-box-is-found-by-its-own-frame.md)). `chrome.test.ts` and
   `input-box-frame.test.ts` pin both halves.
 
+- **On herdr-core, each machine is a session and a queued row goes whole** — `hc` and `hc@<machine>`; another
+  machine's log is copied in while read and its uploads go by `hc put`; hc types nothing until Enter, so
+  never wait to see text in its box ([ADR 0135](./.adr/0135-each-herdr-core-machine-is-its-own-session.md)).
+
 ## The journal (scrollback the mirror can't give you)
 
 `bridge/journal/` reads the agent's own session log off disk, per harness (`claude` / `codex` / `pi`,

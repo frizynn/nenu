@@ -1,5 +1,6 @@
 import type { Config } from "../config.ts";
 import type { ConversationService } from "../conversation-service.ts";
+import { HcClient } from "../hc-client.ts";
 import type { HerdrApi } from "../herdr-client.ts";
 import { historyResponse } from "../history-response.ts";
 import { computeEtag, notModified } from "../http-cache.ts";
@@ -38,6 +39,7 @@ export const historyPaneActions: Record<string, PaneAction> = {
     async handle(ctx, { req, url, rt, paneId }) {
       const params = journalImageParams(url);
       const journal = await paneJournal(ctx, rt.engine, paneId, rt.herdr, rt.name);
+      if (journal) await prepareJournal(rt.herdr, paneId, journal.ref);
       if (!params || !journal || !ctx.transcripts) return imageError("Image unavailable.", 404);
       const image = await ctx.transcripts.image(journal.adapter, journal.ref, params.entry, params.n);
       if (!image) return imageError("Image unavailable.", 404);
@@ -91,6 +93,10 @@ export function journalImageResponse(image: { data: string } | null, etag: strin
  * The journal a live pane names: its adapter and session ref, resolved from the snapshot by pane id
  * (the client never sends a ref). Null for every reason there is nothing to read.
  */
+/** A session whose logs sit on another machine brings them here before they are read (hc-client.ts). */
+const prepareJournal = (herdr: HerdrApi, paneId: string, ref: AgentSessionRef): Promise<void> =>
+  herdr instanceof HcClient ? herdr.prepareJournal(paneId, ref) : Promise.resolve();
+
 async function paneJournal(
   { cfg, journals, transcripts, conversations }: Services,
   engine: StateEngine,
@@ -148,6 +154,7 @@ async function paneHistory(
   const { agents, shellPanes } = engine.current();
   const original = [...agents, ...shellPanes].find((a) => a.paneId === paneId);
   const described = original ? await conversations.describe(original, herdr, session) : undefined;
+  if (described?.pane.agentSession) await prepareJournal(herdr, paneId, described.pane.agentSession);
   const pane = described?.pane;
   // No pane, or an agent that named no session (a shell, or a harness whose integration isn't
   // installed): nothing to read, and that's an ordinary answer rather than an error.

@@ -188,3 +188,95 @@ test("a Claude on another machine gets its conversation id from that machine's s
   expect(reads).toEqual([{ path: ".claude/sessions/42.json", on: "box" }]);
   expect(snap.panes[0]!.agent_session).toEqual({ agent: "claude", kind: "id", value: "remote-1" });
 });
+
+describe("HcClient scoped to one machine", () => {
+  const terminals = [
+    { address: "t1", state: "live", cwd: "/a", status: { state: "idle", app: "claude-code" } },
+    { address: "box/t2", state: "live", cwd: "/b", status: { state: "working", app: "claude-code" } },
+  ];
+  const scoped = (scope: string, state = "connected") => {
+    const asked: Array<[string, Record<string, unknown>]> = [];
+    const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => {
+      asked.push([method, params]);
+      return (method === "terminal.list" ? { terminals, machines: [{ name: "box", state }] } : { value: null }) as T;
+    };
+    return { asked, hc: new HcClient("/nonexistent/hc", 5000, rpc, undefined, undefined, undefined, { scope }) };
+  };
+
+  test("this machine's session holds only its own terminals", async () => {
+    const snapshot = await scoped("").hc.sessionSnapshot();
+    expect(snapshot.panes.map((p) => p.pane_id)).toEqual(["t1"]);
+    expect(snapshot.agents!.map((a) => a.pane_id)).toEqual(["t1"]);
+  });
+
+  test("a machine's session holds only that machine's, and reads only its document", async () => {
+    const { hc, asked } = scoped("box");
+    const snapshot = await hc.sessionSnapshot();
+    expect(snapshot.panes.map((p) => p.pane_id)).toEqual(["box:t2"]);
+    expect(asked.filter(([m]) => m === "doc.get").map(([, p]) => p.on)).toEqual(["box"]);
+  });
+
+  test("a machine that is not connected fails the read, so its session reads unreachable", async () => {
+    await expect(scoped("box", "disconnected").hc.sessionSnapshot()).rejects.toThrow(/not connected/);
+  });
+
+  test("the machines hc knows, connected or not", async () => {
+    expect(await scoped("", "disconnected").hc.machines()).toEqual(["box"]);
+  });
+});
+
+describe("HcClient sending an attachment to another machine", () => {
+  const setup = async (scope: string) => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const uploads = await mkdtemp(join(tmpdir(), "hc-uploads-"));
+    const file = join(uploads, "t6-abc.png");
+    await writeFile(file, "png");
+    const puts: Array<[string, string]> = [];
+    const calls: Array<[string, Record<string, unknown>]> = [];
+    const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => { calls.push([method, params]); return { turn: 1 } as T; };
+    const put = async (terminal: string, path: string) => { puts.push([terminal, path]); return "/far/files/t6-abc.png"; };
+    return { file, puts, calls, hc: new HcClient("/nonexistent/hc", 5000, rpc, undefined, undefined, undefined, { scope, uploads: [uploads], put }) };
+  };
+
+  test("the file goes to that machine first and the message names it there", async () => {
+    const { file, puts, calls, hc } = await setup("box");
+    await hc.sendMessage("box:t2", `mirá ${file} esto`);
+    expect(puts).toEqual([["box/t2", file]]);
+    expect(calls).toEqual([["terminal.send", { terminal: "box/t2", text: "mirá /far/files/t6-abc.png esto" }]]);
+  });
+
+  test("a path outside the uploads is words, and never leaves this machine", async () => {
+    const { puts, calls, hc } = await setup("box");
+    await hc.sendMessage("box:t2", "leé /etc/passwd y /tmp/x.png");
+    expect(puts).toEqual([]);
+    expect(calls[0]![1].text).toBe("leé /etc/passwd y /tmp/x.png");
+  });
+
+  test("on this machine the path already works", async () => {
+    const { file, puts, calls, hc } = await setup("");
+    await hc.sendMessage("t1", file);
+    expect(puts).toEqual([]);
+    expect(calls[0]![1].text).toBe(file);
+  });
+
+  test("a file that could not travel stops the send: nothing is typed", async () => {
+    const { file, calls, hc } = await setup("box");
+    (hc as unknown as { opts: { put: unknown } }).opts.put = async () => { throw new Error("no route"); };
+    await expect(hc.sendMessage("box:t2", file)).rejects.toThrow(/no route/);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("HcClient journal of another machine", () => {
+  test("a read on another machine brings its log; one here asks nothing", async () => {
+    const followed: Array<[string, string]> = [];
+    const mirror = { follow: async (m: string, id: string) => { followed.push([m, id]); } };
+    const rpc: HcRpc = async <T>() => ({}) as T;
+    const hc = new HcClient("/nonexistent/hc", 5000, rpc, undefined, undefined, undefined, { mirror });
+    await hc.prepareJournal("box:t2", { kind: "id", value: "abc" });
+    await hc.prepareJournal("t1", { kind: "id", value: "def" });
+    expect(followed).toEqual([["box", "abc"]]);
+  });
+});

@@ -24,6 +24,7 @@ const switched: boolean[] = [];
 const BUILD_BOX: MachineView = { session: "@build-box", label: "build-box", state: "connected", herd: { bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [] } };
 
 const machines: MachineDirectory = {
+  hostLabel: "here",
   views: (current) => [{ label: "studio", state: "connected" }, current === "@build-box" ? { ...BUILD_BOX, herd: undefined } : BUILD_BOX],
   has: (session) => session === "@build-box",
   async forward(session, req, url) {

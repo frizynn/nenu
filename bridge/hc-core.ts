@@ -65,6 +65,10 @@ export function hcAgentName(status: HcStatus | null | undefined): string | null 
 export const hcPaneId = (address: string): string => address.replace("/", ":");
 export const hcAddress = (paneId: string): string => paneId.replace(":", "/");
 
+/** Each machine's terminals are one session: `hc` for this one, `hc@<machine>` for another (ADR 0135). */
+export const hcSessionName = (machine: string): string => (machine ? `hc@${machine}` : "hc");
+export const isHcSession = (session: string): boolean => session === "hc" || session.startsWith("hc@");
+
 /** The machine a terminal runs on, "" for this one. */
 export const hcMachine = (address: string): string => (address.includes("/") ? address.split("/")[0]! : "");
 

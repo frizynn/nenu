@@ -93,6 +93,25 @@ export async function deliverQueuedMessage(
 }
 
 /**
+ * Deliver one row on herdr-core: its text and Enter as one write, because hc types nothing until Enter
+ * and a box that must show the text first never does (hc-client.ts). hc itself waits for quiet and
+ * refuses a program that is blocked; a failure past that may have typed, so it is never retried blind.
+ */
+export async function deliverWhole(
+  row: QueuedMessage,
+  write: QueueWrite,
+  sameConversation: () => Promise<boolean>,
+): Promise<QueueOutcome> {
+  if (!(await sameConversation())) return { status: "blocked", error: "The connected conversation changed." };
+  const sent = await write(row.text, true, `queue:${row.id}:${row.revision}:send`, false)
+    .catch((err: Error): ActionResponse => ({ ok: false, error: err.message }));
+  if (sent.ok) return { status: "sent" };
+  return /"kind":"blocked"/.test(sent.error ?? "")
+    ? { status: "blocked", error: "The agent is waiting on a question or permission. Your message is saved." }
+    : { status: "uncertain", error: sent.error ?? "The terminal refused the write." };
+}
+
+/**
  * Make Claude read its queued messages now (Ctrl+Enter, measured in P0). Only into an input box that
  * is on screen and empty: with a draft in it the chord would queue the draft too.
  */

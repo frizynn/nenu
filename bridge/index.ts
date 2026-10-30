@@ -9,7 +9,9 @@ import { EventPoker } from "./event-poker.ts";
 import { LiveEvents, snapshotWatcher } from "./live-events.ts";
 import { startMachines } from "./machines-runtime.ts";
 import { DEFAULT_TIMEOUT_MS, HerdrClient, type HerdrApi } from "./herdr-client.ts";
-import { HcClient, hcBinary } from "./hc-client.ts";
+import { HcClient, hcBinary, hcPutCommand } from "./hc-client.ts";
+import { hcSessionName, isHcSession } from "./hc-core.ts";
+import { HcJournalMirror, hcExecCommand, hcJournalDir } from "./hc-journal.ts";
 import { AlertDescriber, NotificationCoordinator, decisionLine, makeNotifySink, type MuteGate, type NotifyClock, type NotifyPolicy } from "./notifications.ts";
 import { NotifyPrefsStore } from "./notify-prefs.ts";
 import { AgentNotifyStore } from "./agent-notify.ts";
@@ -19,6 +21,7 @@ import {
   deriveConfigRoot,
   herdTagFor,
   SessionRegistry,
+  type ExtraSession,
   type SessionFactory,
   type SessionParts,
 } from "./sessions.ts";
@@ -158,7 +161,12 @@ const startSession = (name: string, herdr: HerdrApi, isPrimary: boolean): Sessio
   poker.onPoke(() => engine.pokeNow());
   poker.onHealth((h) => engine.setCadence(h ? cfg.pollIdleMs : cfg.pollMs));
   engine.onUpdate((s) => poker.setAgentPanes(s.agents.map((a) => a.paneId)));
-  engine.onUpdate(snapshotWatcher(name, (event) => live.publish(event)));
+  engine.onUpdate(snapshotWatcher(name, (event) => {
+    live.publish(event);
+    // A page on one of hc's machines lists the others' chats too (ADR 0135).
+    if (event.topic !== "snapshot" || !isHcSession(name)) return;
+    for (const sibling of registry.all()) if (sibling.name !== name && isHcSession(sibling.name)) live.publish({ session: sibling.name, topic: "snapshot" });
+  }));
 
   // Activity bookkeeping. A status change stamps `activeAt` (the only thing that can make a pane
   // read as unseen); every successful poll reconciles the ledger against the panes that exist, which
@@ -215,6 +223,22 @@ const makeSession: SessionFactory = (name, socketPath, isPrimary) =>
 const hcBin = cfg.hcCore ? hcBinary() : null;
 if (cfg.hcCore && !hcBin) console.warn("[bridge] COLLIE_HC_CORE is on but no `hc` was found (COLLIE_HC_BIN, PATH, ~/.local/bin)");
 
+// One session per machine hc knows, this one first; a machine out of reach keeps its session, unreachable.
+const hcMirror = hcBin ? new HcJournalMirror(hcJournalDir(cfg.stateDir), hcExecCommand(hcBin)) : null;
+await hcMirror?.reset();
+const hcSession = (bin: string, machine: string): ExtraSession => {
+  const name = hcSessionName(machine);
+  const options = { scope: machine, uploads: uploadDirs(cfg.stateDir), put: hcPutCommand(bin), ...(hcMirror ? { mirror: hcMirror } : {}) };
+  return { name, socketPath: bin, start: () => startSession(name, new HcClient(bin, undefined, undefined, undefined, undefined, undefined, options), false) };
+};
+const hcMachines = hcBin ? new HcClient(hcBin) : null;
+const refreshHcMachines = async () => {
+  if (!hcBin || !hcMachines) return;
+  // hc down says nothing about its machines: the sessions stay, unreachable, until it answers.
+  const names = await hcMachines.machines().catch(() => null);
+  if (names) registry.setExtras([hcSession(hcBin, ""), ...names.map((machine) => hcSession(hcBin, machine))]);
+};
+
 // List the session directory names under `<configRoot>/sessions` (empty if the dir doesn't exist).
 const listSessionDirs = (dir: string): string[] => {
   try {
@@ -233,7 +257,7 @@ const registry = new SessionRegistry({
   multiSession: cfg.multiSession,
   listSessionDirs,
   exists: (p) => existsSync(p),
-  ...(hcBin ? { extraSessions: [{ name: "hc", socketPath: hcBin, start: () => startSession("hc", new HcClient(hcBin), false) }] } : {}),
+  ...(hcBin ? { extraSessions: [hcSession(hcBin, "")] } : {}),
 });
 
 // Fail soft with a clear message if the PRIMARY Herdr isn't reachable at startup. Other sessions come
@@ -250,7 +274,8 @@ if (primary && !(await primary.herdr.ping())) {
 // started/stopped after boot is picked up (or disposed) within SESSION_REFRESH_MS. A no-op when
 // multi-session is off. unref() so the timer never keeps the process alive; cleared on shutdown.
 await registry.refresh();
-const refreshTimer = setInterval(() => void registry.refresh(), SESSION_REFRESH_MS);
+await refreshHcMachines();
+const refreshTimer = setInterval(() => { void registry.refresh(); void refreshHcMachines(); }, SESSION_REFRESH_MS);
 refreshTimer.unref();
 
 // Prune uploaded images past their TTL: once at startup, then on an interval. Uploads are single-use
@@ -280,6 +305,7 @@ const shutdown = async () => {
   // before we tear down the poll loops and exit.
   await server.stop();
   machines.stop();
+  hcMirror?.stop();
   usage.stop();
   clearInterval(refreshTimer);
   registry.disposeAll();

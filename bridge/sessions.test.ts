@@ -131,6 +131,7 @@ interface Harness {
   registry: SessionRegistry;
   fakes: Map<string, FakeSession>;
   spawns: string[];
+  fake: (name: string) => SessionParts;
   setDirs: (d: string[]) => void;
   setPresent: (paths: string[]) => void;
 }
@@ -173,6 +174,7 @@ function makeRegistry(opts: {
     registry,
     fakes,
     spawns,
+    fake: (name) => factory(name, "hc-core:", false),
     setDirs: (d) => (dirs = d),
     setPresent: (paths) => (present = new Set(paths)),
   };
@@ -343,5 +345,26 @@ describe("SessionRegistry — extra sessions (herdr-core)", () => {
 
   test("without extras nothing else is spawned", () => {
     expect(makeRegistry().spawns).toEqual(["default"]);
+  });
+});
+
+describe("SessionRegistry — sessions that come and go (one per herdr-core machine)", () => {
+  test("a new one starts, a gone one stops, and a kept one is left running", () => {
+    const h = makeRegistry({ extraSessions: [{ name: "hc", socketPath: "hc-core:" }], present: ["/cfg/herdr/herdr.sock"] });
+    const start = (name: string) => ({ name, socketPath: "hc-core:", start: () => h.fake(name) });
+    h.registry.setExtras([start("hc"), start("hc@box")]);
+    expect(h.registry.get("hc@box")).toBeDefined();
+    expect(h.spawns.filter((n) => n === "hc")).toHaveLength(1);
+    h.registry.setExtras([start("hc")]);
+    expect(h.registry.get("hc@box")).toBeUndefined();
+    expect(h.fakes.get("hc@box")!.disposed).toEqual({ engine: 1, poker: 1, notifications: 1 });
+    expect(h.fakes.get("hc")!.disposed).toEqual({ engine: 0, poker: 0, notifications: 0 });
+  });
+
+  test("a refresh leaves them alone", async () => {
+    const h = makeRegistry({ present: ["/cfg/herdr/herdr.sock"] });
+    h.registry.setExtras([{ name: "hc@box", socketPath: "hc-core:", start: () => h.fake("hc@box") }]);
+    await h.registry.refresh();
+    expect(h.registry.get("hc@box")).toBeDefined();
   });
 });

@@ -360,6 +360,8 @@ export class MachineLink {
 export interface MachineDirectory {
   /** Every machine for a snapshot about `current` (undefined = this one), or undefined when off or none is saved. */
   views(current: string | undefined, localHerd: MachineHerd | null): MachineView[] | undefined;
+  /** What this machine is called in the lists. */
+  readonly hostLabel: string;
   has(session: string): boolean;
   forward(session: string, req: Request, url: URL): Promise<Response>;
   /** The other machine's snapshot body, or null when it is not connected. */
@@ -471,6 +473,10 @@ export class Machines implements MachineDirectory {
     return this.listing;
   }
 
+  get hostLabel(): string {
+    return this.deps.hostLabel;
+  }
+
   views(current: string | undefined, localHerd: MachineHerd | null): MachineView[] | undefined {
     if (!this.on || this.order.length === 0) return undefined;
     const here: MachineView = { label: this.deps.hostLabel, state: "connected", ...(current !== undefined && localHerd ? { herd: localHerd } : {}) };
@@ -546,6 +552,7 @@ export class Machines implements MachineDirectory {
 
 /** The directory a bridge with no saved machines uses (and every in-process test). */
 export const NO_MACHINES: MachineDirectory = {
+  hostLabel: "",
   views: () => undefined,
   has: () => false,
   forward: async () => Response.json({ error: "no machines" }, { status: 404 }),
