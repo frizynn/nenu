@@ -491,10 +491,11 @@ describe("the desk sidebar, drawn as Cursor's", () => {
   const section = (name: string) => within(screen.getByRole("region", { name }));
   const rowNames = (name: string) => section(name).queryAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent);
 
-  it("leads with Search, then the view toggle and New chat beside it as small actions", () => {
+  it("leads with Search and New chat beside it as a small action, then how it lists", () => {
     open("/", herd, vi.fn());
     const top = [...document.querySelectorAll(".nav-top > *")].map((row) => row.querySelector(".nav-row-text")?.textContent ?? row.getAttribute("aria-label"));
-    expect(top).toEqual(["Search", "Group by project", "New chat"]);
+    expect(top).toEqual(["Search", "New chat"]);
+    expect(within(screen.getByRole("radiogroup", { name: "List by" })).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["Spaces", "Folders", "Recent", "State"]);
   });
 
   it("says under each chat where it lives, by ear too, and beside its name when it last moved, for the eye", () => {
@@ -642,8 +643,7 @@ describe("the sidebar by project", () => {
 
   it("lists the projects by default, folded: what needs you first, then what works, then by the last move", () => {
     open();
-    expect(screen.getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Group by project" }).querySelector(".icon-folder-tree")).not.toBeNull();
+    expect(screen.getByRole("radio", { name: "Folders" })).toHaveAttribute("aria-checked", "true");
     expect(projectRows().map((row) => row.querySelector(".nav-row-text")?.textContent)).toEqual(["scratch", "shop", "notes", "site"]);
     expect(projectRows().every((row) => row.getAttribute("aria-expanded") === "false")).toBe(true);
     const shop = projects().getByRole("button", { name: /^shop, / });
@@ -677,17 +677,16 @@ describe("the sidebar by project", () => {
     expect(projects().getByRole("button", { name: /^notes, / })).not.toHaveAttribute("aria-current");
   });
 
-  it("switches to the list by time and back with the toggle, and remembers the choice", async () => {
+  it("switches to the list by time and back, and remembers the choice", async () => {
     const { user, unmount } = open();
-    await user.click(screen.getByRole("button", { name: "Group by project" }));
-    expect(screen.getByRole("button", { name: "Group by project" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "Group by project" }).querySelector(".icon-history")).not.toBeNull();
+    await user.click(screen.getByRole("radio", { name: "Recent" }));
+    expect(screen.getByRole("radio", { name: "Recent" })).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByRole("region", { name: "Projects" })).toBeNull();
     expect(within(screen.getByRole("region", { name: "Today" })).getAllByRole("link")).toHaveLength(5);
     unmount();
     const again = open();
     expect(screen.getByRole("region", { name: "Today" })).toBeInTheDocument();
-    await again.user.click(screen.getByRole("button", { name: "Group by project" }));
+    await again.user.click(screen.getByRole("radio", { name: "Folders" }));
     expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
   });
 

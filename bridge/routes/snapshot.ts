@@ -1,5 +1,5 @@
 import { shownStatus } from "../activity.ts";
-import { hcSessionName, isHcSession } from "../hc-core.ts";
+import { hcSessionMachine, isHcSession } from "../hc-core.ts";
 import { computeEtag, JsonBody, notModified, notModifiedResponse } from "../http-cache.ts";
 import type { SessionRuntime } from "../sessions.ts";
 import { toPaneWire, type AgentView, type MachineHerd, type MachineView, type SnapshotResponse } from "../types.ts";
@@ -19,7 +19,7 @@ export const snapshotRoutes: Route[] = [
       const herd = herdOf(ctx, rt);
       const device = deviceAuth(req, cfg);
       machines.refresh();
-      const others = hcMachineViews(ctx, rt, machines.views(undefined, null));
+      const others = joinedMachines(ctx, machines.views(undefined, null));
       const view: Omit<SnapshotResponse, "ts"> = {
         bridge: herd.bridge,
         // Only report device state when the feature is on, so an off deployment sends nothing new.
@@ -55,28 +55,51 @@ export const snapshotRoutes: Route[] = [
   },
 ];
 
-/** How a list names an hc session's machine: this one by its host, another by hc's name for it. */
-export const hcMachineLabel = (session: string, host: string): string => (session === hcSessionName("") ? host : session.slice(hcSessionName("").length + 1));
+/**
+ * The machines a session runs on: hc's `hc@<machine>` on that machine, every other session (Herdr's own and
+ * hc's `hc`) on this one, named by its host. Each session by the key a row carries, "" for the primary.
+ */
+export function machineGroups(sessions: ReadonlyArray<{ name: string; isPrimary: boolean }>, host: string): Array<{ label: string; sessions: string[] }> {
+  const groups = new Map<string, string[]>([[host, []]]);
+  for (const session of sessions) {
+    const label = hcSessionMachine(session.name) || host;
+    groups.set(label, [...(groups.get(label) ?? []), session.isPrimary ? "" : session.name]);
+  }
+  return [...groups].map(([label, keys]) => ({ label, sessions: keys }));
+}
 
 /**
- * The lists a page on one of hc's sessions shows its sibling machines in (ADR 0135): every hc session,
- * each with its herd but the one on screen, then Herdr's own other machines. Any other session, or an
- * hc with no other machine, keeps what it had.
+ * With herdr-core on, the lists show machines, not sessions (ADR 0136): this one joins Herdr's sessions
+ * and hc's, each other machine is its hc session, and every machine carries its whole herd with each row's
+ * session. Herdr's own other machines follow. Without hc, Herdr's machines as they were.
  */
-function hcMachineViews(ctx: Services, rt: SessionRuntime, herdrMachines: MachineView[] | undefined): MachineView[] | undefined {
-  if (!isHcSession(rt.name)) return herdrMachines;
-  const family = ctx.registry.all().filter((r) => isHcSession(r.name));
-  if (family.length < 2) return herdrMachines;
-  const views = family.map((r): MachineView => {
-    const connected = r.engine.current().bridge === "connected";
+function joinedMachines(ctx: Services, herdrMachines: MachineView[] | undefined): MachineView[] | undefined {
+  if (!ctx.registry.list().some((s) => isHcSession(s.name))) return herdrMachines;
+  const runtimes = ctx.registry.all();
+  const byKey = new Map(runtimes.map((r) => [r.isPrimary ? "" : r.name, r]));
+  const views = machineGroups(runtimes, ctx.machines.hostLabel).map(({ label, sessions }): MachineView => {
+    const live = sessions.map((key) => byKey.get(key)!).filter((r) => r.engine.current().bridge === "connected");
+    const herds = live.map((r) => stamped(r.isPrimary ? "" : r.name, herdOf(ctx, r)));
     return {
-      session: r.name,
-      label: hcMachineLabel(r.name, ctx.machines.hostLabel),
-      state: connected ? "connected" : "offline",
-      ...(connected && r !== rt ? { herd: herdOf(ctx, r) } : {}),
+      label,
+      sessions,
+      state: live.length ? "connected" : "offline",
+      ...(herds.length ? { herd: {
+        bridge: "connected",
+        agents: herds.flatMap((h) => h.agents),
+        shellPanes: herds.flatMap((h) => h.shellPanes),
+        workspaces: herds.flatMap((h) => h.workspaces),
+        tabs: herds.flatMap((h) => h.tabs),
+      } } : {}),
     };
   });
   return [...views, ...(herdrMachines ?? []).filter((m) => m.session)];
+}
+
+/** A herd whose every row names the session it opens in. */
+function stamped(session: string, herd: MachineHerd): MachineHerd {
+  const mark = <T extends object>(row: T) => ({ ...row, session });
+  return { bridge: herd.bridge, agents: herd.agents.map(mark), shellPanes: herd.shellPanes.map(mark), workspaces: herd.workspaces.map(mark), tabs: herd.tabs.map(mark) };
 }
 
 /**

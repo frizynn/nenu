@@ -67,7 +67,7 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
             )}
           >
             {option.icon && <option.icon aria-hidden="true" className="size-4 shrink-0" />}
-            {option.label}
+            <span className="min-w-0 truncate">{option.label}</span>
           </button>
         );
       })}

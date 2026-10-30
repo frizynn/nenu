@@ -74,3 +74,48 @@ describe("more than one machine", () => {
     expect(screen.queryByRole("button", { name: /Session/ })).toBeNull();
   });
 });
+
+describe("herdr-core's machines (ADR 0135)", () => {
+  const at = (paneId: string, title: string, session: string, workspaceId: string, label: string): AgentView => ({ ...chat(paneId, title), session, workspaceId, workspaceLabel: label, tabId: `${workspaceId}:t` });
+  const space = (workspaceId: string, label: string, session: string) => ({ workspaceId, number: 1, label, focused: false, activeTabId: `${workspaceId}:t`, tabCount: 1, paneCount: 1, session });
+  const tab = (workspaceId: string, session: string) => ({ tabId: `${workspaceId}:t`, workspaceId, number: 1, label: "1", focused: false, paneCount: 1, session });
+  const JOINED: MachineView[] = [
+    { label: "mac", sessions: ["", "hc"], state: "connected", herd: { bridge: "connected",
+      agents: [at("w1:p1", "Checkout flow", "", "w1", "api"), at("t6", "Herdr app", "hc", "s1", "nenu")], shellPanes: [],
+      workspaces: [space("w1", "api", ""), space("s1", "nenu", "hc")], tabs: [tab("w1", ""), tab("s1", "hc")] } },
+    { label: "rise-l", sessions: ["hc@rise-l"], state: "connected", herd: { bridge: "connected",
+      agents: [at("rise-l:t7", "Brief hats", "hc@rise-l", "rise-l:s2", "hats")], shellPanes: [],
+      workspaces: [space("rise-l:s2", "hats", "hc@rise-l")], tabs: [tab("rise-l:s2", "hc@rise-l")] } },
+  ];
+  const href = (name: RegExp) => screen.getAllByRole("link", { name })[0]!.getAttribute("href");
+
+  it("the bar lists every machine's chats at once, each opening in its own session, and names no session", async () => {
+    localStorage.setItem("nenu:sidebar-view:v1", JSON.stringify({ view: "time" }));
+    sidebar(data(JOINED, "hc"));
+    expect(screen.getByRole("radio", { name: "All", checked: true })).toBeTruthy();
+    expect(href(/Checkout flow/)).toBe("/pane/w1%3Ap1");
+    expect(href(/Herdr app/)).toBe("/pane/t6?s=hc");
+    expect(href(/Brief hats/)).toBe("/pane/rise-l%3At7?s=hc%40rise-l");
+    expect(screen.getAllByText(/hats · rise-l/).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Session/ })).toBeNull();
+  });
+
+  it("picking a machine lists only its chats, kept on this device", async () => {
+    localStorage.setItem("nenu:sidebar-view:v1", JSON.stringify({ view: "time" }));
+    sidebar(data(JOINED));
+    screen.getByRole("radio", { name: "rise-l" }).click();
+    expect(await screen.findByRole("radio", { name: "rise-l", checked: true })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Checkout flow/ })).toBeNull();
+    expect(href(/Brief hats/)).toBe("/pane/rise-l%3At7?s=hc%40rise-l");
+    expect(localStorage.getItem("nenu:machine:v1")).toBe(JSON.stringify("rise-l"));
+  });
+
+  it("the bar lists by spaces, folders, time or state, as this device picked", async () => {
+    sidebar(data(JOINED));
+    screen.getByRole("radio", { name: "Spaces" }).click();
+    expect(await screen.findByRole("region", { name: "Workspaces" })).toBeTruthy();
+    screen.getByRole("radio", { name: "State" }).click();
+    expect(await screen.findByRole("region", { name: "By state" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Resting" })).toBeTruthy();
+  });
+});

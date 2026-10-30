@@ -9,6 +9,7 @@ import { useHeldTime, useOnReturn } from "@/hooks/use-held-time";
 import { COUNTED, deskChats, type CountedState, type DeskChat } from "@/lib/desk-nav";
 import { groupByProject, projectWeight, useProjectView, type ProjectGroup } from "@/lib/desk-projects";
 import { displayPlace } from "@/lib/display-name";
+import { rowSession } from "@/lib/machines";
 import { TITLE_SEP } from "@/lib/pane-name";
 import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
@@ -75,6 +76,7 @@ export function DeskLists({ data, only, onClear }: { data: HomeData; only?: Coun
   const row = (chat: DeskChat) => <ChatRow key={chat.paneId} chat={chat} session={data.session} current={chat.paneId === paneId} now={now} />;
   if (only) return <OnlyList key={only} state={only} chats={chats} row={row} onClear={onClear} className="nav-desk" />;
   if (view === "projects") return <ProjectList chats={chats} held={held} row={row} currentPaneId={paneId} className="nav-desk" />;
+  if (view === "state") return <StateList chats={chats} row={row} />;
   return <DeskChats chats={chats} held={held} row={row} currentPaneId={paneId} now={now} />;
 }
 
@@ -113,6 +115,25 @@ function DeskChats({ chats, held, row, currentPaneId, now }: {
         </Reveal>
       ))}
       {extra.size > 0 && <MoreRow open={more} hidden={extra.size} onToggle={() => setMore(!more)} />}
+    </section>
+  );
+}
+
+/** Every chat under its state, the most pressing first, as Home's Board lays them out; an empty state shows nothing. */
+function StateList({ chats, row }: { chats: DeskChat[]; row: (chat: DeskChat) => ReactNode }) {
+  const counted = (chat: DeskChat) => COUNTED.some(({ state }) => state === chat.pane.status);
+  const groups = [
+    ...COUNTED.map(({ state, label }) => ({ key: state, label, items: chats.filter((chat) => chat.pane.status === state) })),
+    { key: "rest", label: "Resting", items: chats.filter((chat) => !counted(chat)) },
+  ];
+  return (
+    <section aria-label="By state" className="nav-desk nav-chats">
+      {groups.filter((group) => group.items.length > 0).map((group) => (
+        <section key={group.key} aria-label={group.label} className="nav-group">
+          <div className="nav-label"><h3 className="nav-label-text">{group.label} <span className="nav-count">{group.items.length}</span></h3></div>
+          {group.items.map(row)}
+        </section>
+      ))}
     </section>
   );
 }
@@ -233,7 +254,7 @@ export function OnlyList({ state, chats, row, onClear, className }: {
  */
 const ChatRow = memo(function ChatRow({ chat, session, current, now }: { chat: DeskChat; session?: string; current: boolean; now: number }) {
   const { pane } = chat;
-  const to = panePath(chat.paneId, session);
+  const to = panePath(chat.paneId, rowSession(pane, session));
   const word = STATUS_LABEL[pane.status];
   // The usage limit outranks the agent's state: it is held until a time, whatever it was doing.
   const limit = usageLimitOf(pane);

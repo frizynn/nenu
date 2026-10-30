@@ -153,6 +153,9 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 /* The desk's search row: Search fills it, New sits at its end as a small action. */
 .workbench-navigation[data-variant="sidebar"] > .nav-top { flex-direction: row; align-items: center; gap: 4px; }
 .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row { flex: 1; }
+/* Which machine and how the bar lists, under Search: two quiet segmented rows (ADR 0136). */
+.nav-pickers { display: flex; flex-direction: column; gap: 6px; padding: 0 8px 8px; }
+.nav-pickers [role="radio"], .machine-picker [role="radio"] { font-size: var(--text-footnote); padding-inline: 4px; }
 /* A chat in the desk's bar: its name and when it moved, then where it lives one step quieter. The mark sits
    on the name's line. */
 .nav-chat-row { align-items: flex-start; }
