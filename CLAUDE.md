@@ -350,7 +350,7 @@ the unit name; the Herdr action runs from anywhere.
 
 - **On herdr-core, the lists show machines and a queued row goes whole** — sessions `hc` and `hc@<machine>`, joined by machine in the snapshot and shown all at once or one picked (`shownHerd`); another
   machine's log is copied in while read and its uploads go by `hc put`; hc types nothing until Enter, so
-  never wait to see text in its box ([ADR 0135](./.adr/0135-each-herdr-core-machine-is-its-own-session.md)).
+  never wait to see text in its box ([ADR 0135](./.adr/0135-each-herdr-core-machine-is-its-own-session.md), [ADR 0136](./.adr/0136-the-lists-show-machines-not-sessions.md)).
 
 ## The journal (scrollback the mirror can't give you)
 

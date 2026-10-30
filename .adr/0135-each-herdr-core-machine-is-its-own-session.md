@@ -1,11 +1,11 @@
-# 0135. The lists show herdr-core machines, not sessions, and their files come through hc
+# 0135. Each herdr-core machine is its own session, and its files come through hc
 
-- **Status:** Accepted (2026-10-30). Does not replace [ADR 0084](./0084-machines-are-herdrs-reached-through-their-own-nenu.md),
-  which still holds for Herdr's saved machines. Amends [ADR 0130](./0130-the-bar-lists-chats-by-project-and-a-count-lists-its-state.md):
-  the desk's bar lists by spaces, folders, time or state.
+- **Status:** Accepted (2026-10-30). How the lists show machines is superseded by
+  [ADR 0136](./0136-the-lists-show-machines-not-sessions.md): a page no longer lists the others by name,
+  and the picker names machines, not sessions. The rest holds. Does not replace [ADR 0084](./0084-machines-are-herdrs-reached-through-their-own-nenu.md),
+  which still holds for Herdr's saved machines.
 - **Trail:** `bridge/hc-client.ts` · `bridge/hc-journal.ts` · `bridge/hc-core.ts` · `bridge/sessions.ts` (`setExtras`) ·
-  `bridge/routes/snapshot.ts` (`machineGroups`, `joinedMachines`) · `web/src/lib/machines.ts` (`shownHerd`) ·
-  `web/src/components/machine-picker.tsx` · `bridge/queue-delivery.ts` (`deliverWhole`) · `bridge/index.ts`
+  `bridge/routes/snapshot.ts` (`hcMachineViews`) · `bridge/queue-delivery.ts` (`deliverWhole`) · `bridge/index.ts`
 
 ## Context
 
@@ -24,18 +24,12 @@ things were wrong behind that, measured against a real Mac and `rise-l`:
 
 ## Decision
 
-- **One session per machine inside the bridge:** `hc` for this one, `hc@<machine>` for each machine hc
-  lists, re-read with the other sessions. A machine out of reach keeps its session, unreachable. `hc@`
-  keeps every name free of shell quoting and never starts with `@`, which is ADR 0084's forwarded machine.
-- **The operator sees machines, not sessions.** With hc on, the snapshot's `machines` joins sessions by
-  machine: this one holds Herdr's own sessions and `hc`, each other machine its `hc@` session. Every
-  machine carries its whole herd, each row naming the session it opens in ("" for the primary). The
-  lists (Home, the bar, its rail, Search) show every machine at once by default, or the one this device
-  picked in the machine picker; rows of a machine other than this one name it after their place. The
-  session switcher gives way to the picker. A chat page stays in its own session, as before.
-- **A first version listed each machine as a session to switch to**, with the others under their names.
-  The operator found two entries for one Mac (Herdr's and hc's) and wanted everything at once; don't go
-  back to sessions in the picker.
+- **One session per machine:** `hc` for this one, `hc@<machine>` for each machine hc lists, re-read with
+  the other sessions. A machine out of reach keeps its session, unreachable. `hc@` keeps every name
+  free of shell quoting and never starts with `@`, which is ADR 0084's forwarded machine.
+- **A page on one lists the others** through the snapshot's `machines`, the lists ADR 0084 already draws
+  in Home, the bar and Search, so nobody must switch session to see a server chat. Only a session's own
+  Workspaces list its workspaces.
 - **Another machine's Claude log is copied here** under `<stateDir>/hc-journals/projects`, one more
   journal root, while someone reads it: at most the newest 32 MB, new bytes every 2 s for a minute after
   the last read, gone after five quiet minutes and at every start. Adapters, containment and the file
@@ -48,9 +42,6 @@ things were wrong behind that, measured against a real Mac and `rise-l`:
 
 ## Consequences
 
-- New chat starts in the page's session; picking where it starts is the New flow's, not the picker's.
-- Interactions (a dialog's options) and background work are read in the page's session, so another
-  session's agent that asks shows in Needs you without its options until its chat is opened.
 - Moved panes change session once: a link, a queued row, a read mark or a notification switch saved
   under `hc` for a server pane does not follow it. An old link shows the pane as gone.
 - Conversations live on this disk while read (0600 under a 0700 folder, in the state directory `/file`
