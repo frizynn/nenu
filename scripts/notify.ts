@@ -19,7 +19,7 @@ const WHY: Record<AgentNotifyRow["why"], string> = {
   existing: "was there before per-agent switches",
   supervisor: "supervisor folder",
   new: "new agent",
-  // Off and new can only mean the supervisor rule was on when it was first seen.
+  outside: "new agent outside the supervisor folders",
   set: "set by you",
 };
 
@@ -62,7 +62,7 @@ export function resolveTarget(arg: string | undefined, rows: readonly AgentNotif
 export function formatList(rows: readonly AgentNotifyRow[], patterns: readonly string[], home = homedir()): string {
   const short = (p?: string) => (p && (p === home || p.startsWith(`${home}/`)) ? `~${p.slice(home.length)}` : p ?? "");
   const line = (r: AgentNotifyRow) =>
-    [r.on ? "on " : "off", `${r.session}/${r.paneId}`, r.name ?? r.workspace ?? "", short(r.cwd), r.why === "new" && !r.on ? "new agent outside the supervisor folders" : WHY[r.why]];
+    [r.on ? "on " : "off", `${r.session}/${r.paneId}`, r.name ?? r.workspace ?? "", short(r.cwd), WHY[r.why]];
   const table = (list: readonly AgentNotifyRow[]) => {
     const cells = list.map(line);
     const widths = cells[0]?.map((_, i) => Math.max(...cells.map((c) => c[i]!.length))) ?? [];
@@ -88,16 +88,19 @@ export function supervisorsLine(patterns: readonly string[]): string {
 export function parsePatterns(arg: string | undefined): string[] {
   const patterns = (arg ?? "").split(",").map((p) => p.trim()).filter(Boolean);
   if (patterns.length === 0) throw new Error("usage: notify supervisors set '~/folder/*,~/other'  (use `clear` to turn the rule off)");
-  for (const p of patterns) if (!p.startsWith("/") && !p.startsWith("~/") && p !== "~" && !p.startsWith("**")) throw new Error(`"${p}" is not a whole path: start it with /, ~/ or **`);
+  for (const p of patterns) if (!p.startsWith("/") && !p.startsWith("~/") && p !== "~" && p !== "**" && !p.startsWith("**/")) throw new Error(`"${p}" is not a whole path: start it with /, ~/ or **/`);
   return patterns;
 }
 
 if (import.meta.main) {
-  const [verb = "list", arg, more] = process.argv.slice(2);
+  const [verb = "list", arg, more, ...extra] = process.argv.slice(2);
   const cfg = loadConfig();
   const store = AgentNotifyStore.at(cfg.stateDir);
   const session = sessionNameFor(cfg.socketPath, deriveConfigRoot(cfg.socketPath));
   try {
+    // An unquoted list (`set ~/a, ~/b`) arrives as several arguments: refuse it rather than keep the first.
+    const allowed = verb === "supervisors" && arg === "set" ? 2 : verb === "list" ? 0 : 1;
+    if ([arg, more, ...extra].filter((a) => a !== undefined).length > allowed) throw new Error("too many arguments; quote the folder list: notify supervisors set '~/a/*,~/b'");
     if (verb === "list") {
       console.log(formatList(store.list(), store.supervisors()));
     } else if (verb === "supervisors") {

@@ -47,7 +47,7 @@ describe("formatList", () => {
   test("shows the rule, each agent's switch and why, and closed agents apart", () => {
     const out = formatList([
       row("w1:p1", { on: true, why: "supervisor", name: "boss", cwd: "/home/you/.firstmate/awam" }),
-      row("w1:p2", { cwd: "/work/shop" }),
+      row("w1:p2", { cwd: "/work/shop", why: "outside" }),
       row("w1:p3", { gone: 9, on: true, why: "set" }),
     ], ["~/.firstmate/*"], "/home/you");
     expect(out).toContain("New agents start with notifications on only in: ~/.firstmate/*");
@@ -70,5 +70,6 @@ describe("parsePatterns", () => {
     expect(() => parsePatterns("")).toThrow(/use `clear`/);
     expect(() => parsePatterns(undefined)).toThrow(/use `clear`/);
     expect(() => parsePatterns("projects/*")).toThrow(/not a whole path/);
+    expect(() => parsePatterns("**foo")).toThrow(/not a whole path/);
   });
 });

@@ -85,7 +85,7 @@ describe("AgentNotifyStore", () => {
       pane("w1:p2", "/home/you/.firstmate/awam/projects/shop"),
       pane("w1:p3", "/home/you/Developer/firstmate"),
     ]);
-    expect(s.list().map((r) => [r.paneId, r.on, r.why])).toEqual([["w1:p1", true, "supervisor"], ["w1:p2", false, "new"], ["w1:p3", true, "supervisor"]]);
+    expect(s.list().map((r) => [r.paneId, r.on, r.why])).toEqual([["w1:p1", true, "supervisor"], ["w1:p2", false, "outside"], ["w1:p3", true, "supervisor"]]);
   });
 
   test("setting or clearing the folders changes no switch already decided, only agents seen afterwards", () => {
@@ -224,7 +224,7 @@ describe("herdr-core agents", () => {
     expect(s.on("default", "t6")).toBe(false);
     s.set("hc", "t6", false);
     expect(s.on("hc", "t6")).toBe(false);
-    expect(s.list().find((r) => r.session === "default" && r.paneId === "t6")?.why).toBe("new");
+    expect(s.list().find((r) => r.session === "default" && r.paneId === "t6")?.why).toBe("outside");
   });
 
   test("turning herdr-core on later seeds its first herd on, like an upgrade", () => {

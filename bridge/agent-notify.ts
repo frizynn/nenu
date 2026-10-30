@@ -17,10 +17,10 @@ import type { AgentView } from "./types.ts";
 // rename) under a short lock, so neither side writes over the other's change.
 
 /**
- * How an agent got its switch: there before the feature, a supervisor's folder, new (on with no
- * supervisor folders set, off outside them when there are), or the operator.
+ * How an agent got its switch: there before the feature, a supervisor's folder, new with no
+ * supervisor folders set (on), new outside the folders set (off), or the operator.
  */
-export type AgentNotifyWhy = "existing" | "supervisor" | "new" | "set";
+export type AgentNotifyWhy = "existing" | "supervisor" | "new" | "outside" | "set";
 
 export interface AgentNotifyEntry {
   on: boolean;
@@ -176,7 +176,8 @@ export class AgentNotifyStore {
         const facts = factsOf(agent);
         if (!was) {
           const supervisor = isSupervisor(agent, rule, this.home);
-          next[k] = { on: seed || supervisor || rule.length === 0, why: seed ? "existing" : supervisor ? "supervisor" : "new", ...facts, firstSeen: now };
+          const why = seed ? "existing" : supervisor ? "supervisor" : rule.length === 0 ? "new" : "outside";
+          next[k] = { on: why !== "outside", why, ...facts, firstSeen: now };
         } else if (was.gone !== undefined || moved(was, facts)) {
           const { gone: _gone, ...kept } = was;
           next[k] = { ...kept, ...facts };
@@ -304,7 +305,7 @@ function defined<T extends object>(o: T): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
-const WHYS: readonly AgentNotifyWhy[] = ["existing", "supervisor", "new", "set"];
+const WHYS: readonly AgentNotifyWhy[] = ["existing", "supervisor", "new", "outside", "set"];
 
 /** Whatever the file holds, as entries that have at least a switch and a reason; anything else is dropped. */
 export function coerce(raw: unknown): AgentNotifyFile {
