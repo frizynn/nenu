@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
 import type { GuardedSendResult, SendTrace } from "./guarded-send.ts";
+import type { HcExec } from "./hc-journal.ts";
 import type { CreatedShell, HerdrApi, PaneRead, ReadSource, ServerInfo, WireSnapshot } from "./herdr-client.ts";
 import type { AgentSessionRef } from "./journal/types.ts";
 import type { SendRequest } from "./types.ts";
@@ -79,7 +80,12 @@ export interface HcClientOptions {
   put?: (terminal: string, path: string) => Promise<string>;
   /** Keeps a copy of another machine's agent log here (hc-journal.ts). */
   mirror?: { follow(machine: string, sessionId: string): Promise<void> };
+  /** Runs a program on another machine: its Claudes' session files come back in one read. */
+  exec?: HcExec;
 }
+
+/** Each pid's Claude session file on its own line, `<pid> <json>`; the pids travel as arguments. */
+const SESSION_FILES = `for p; do printf '%s ' "$p"; tr -d '\\n' <"$HOME/.claude/sessions/$p.json" 2>/dev/null; echo; done`;
 
 export class HcClient implements HerdrApi {
   /** Claude's pending-tool bullet comes and goes in hc's text about twice a second. */
@@ -151,15 +157,46 @@ export class HcClient implements HerdrApi {
    */
   private async claudeSessions(terminals: HcTerminal[]): Promise<Map<string, string>> {
     const ids = new Map<string, string>();
+    const remote = await this.remoteSessionFiles(terminals);
     await Promise.all(terminals.map(async (t) => {
       const machine = hcMachine(t.address);
-      const read: SessionFileReader = machine
-        ? (pid) => this.call<{ text: string }>("file.read", { path: `.claude/sessions/${pid}.json`, on: machine }).then((r) => r.text)
-        : async (pid) => readFileSync(join(this.claudeSessionDir, `${pid}.json`), "utf8");
+      const files = remote?.get(machine);
+      const read: SessionFileReader = !machine
+        ? async (pid) => readFileSync(join(this.claudeSessionDir, `${pid}.json`), "utf8")
+        : files
+          ? async (pid) => files.get(pid) ?? null
+          : (pid) => this.call<{ text: string }>("file.read", { path: `.claude/sessions/${pid}.json`, on: machine }).then((r) => r.text);
       const id = await hcClaudeSession(t, read, machine || !t.foreground ? [] : await this.group(t.foreground.pid));
       if (id) ids.set(t.address, id);
     }));
     return ids;
+  }
+
+  /**
+   * Every other machine's Claude session files, one `exec` per machine rather than a file.read per
+   * Claude (a machine with 30 of them was 30 hc processes a poll). Null without exec, or for a machine
+   * whose read failed: those go file by file.
+   */
+  private async remoteSessionFiles(terminals: HcTerminal[]): Promise<Map<string, Map<number, string>> | null> {
+    const { exec } = this.opts;
+    if (!exec) return null;
+    const pids = new Map<string, number[]>();
+    for (const t of terminals) {
+      const machine = hcMachine(t.address);
+      if (machine && t.status?.app === "claude-code" && t.foreground) pids.set(machine, [...(pids.get(machine) ?? []), t.foreground.pid]);
+    }
+    const files = new Map<string, Map<number, string>>();
+    await Promise.all([...pids].map(async ([machine, list]) => {
+      const out = await exec(machine, ["sh", "-c", SESSION_FILES, "sh", ...list.map(String)], this.hcTimeoutMs).catch(() => null);
+      if (!out) return;
+      const byPid = new Map<number, string>();
+      for (const row of new TextDecoder().decode(out).split("\n")) {
+        const space = row.indexOf(" ");
+        if (space > 0 && space < row.length - 1) byPid.set(Number(row.slice(0, space)), row.slice(space + 1));
+      }
+      files.set(machine, byPid);
+    }));
+    return files;
   }
 
   /** The other machines hc knows, connected or not. */

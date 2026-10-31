@@ -228,7 +228,7 @@ const hcMirror = hcBin ? new HcJournalMirror(hcJournalDir(cfg.stateDir), hcExecC
 await hcMirror?.reset();
 const hcSession = (bin: string, machine: string): ExtraSession => {
   const name = hcSessionName(machine);
-  const options = { scope: machine, uploads: uploadDirs(cfg.stateDir), put: hcPutCommand(bin), ...(hcMirror ? { mirror: hcMirror } : {}) };
+  const options = { scope: machine, uploads: uploadDirs(cfg.stateDir), put: hcPutCommand(bin), exec: hcExecCommand(bin), ...(hcMirror ? { mirror: hcMirror } : {}) };
   return { name, socketPath: bin, start: () => startSession(name, new HcClient(bin, undefined, undefined, undefined, undefined, undefined, options), false) };
 };
 const hcMachines = hcBin ? new HcClient(hcBin) : null;

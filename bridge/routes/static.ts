@@ -118,7 +118,7 @@ export async function serveStatic(req: Request, pathname: string, assets: WebAss
   };
   if (ext === ".html") headers["content-security-policy"] = CSP;
   if (rel === "sw.js") headers["service-worker-allowed"] = "/";
-  if (rel.startsWith("assets/")) return secure(new Response(file, { headers }));
+  if (rel.startsWith("assets/")) return secure(await hashedFile(req, full, ext, file, headers));
   return secure(revalidatedFile(req, ext, await file.bytes(), headers));
 }
 
@@ -133,6 +133,27 @@ export function revalidatedFile(req: Request, ext: string, bytes: Uint8Array<Arr
   if (notModified(req.headers.get("if-none-match"), headers.etag)) return new Response(null, { status: 304, headers });
   if (!gzips || !req.headers.get("accept-encoding")?.includes("gzip")) return new Response(bytes, { headers });
   return new Response(Bun.gzipSync(bytes), { headers: { ...headers, "content-encoding": "gzip" } });
+}
+
+/** Each hashed text asset gzipped once: its name changes with its bytes, so a copy never goes stale. */
+const gzipped = new Map<string, ReturnType<typeof Bun.gzipSync>>();
+const GZIPPED_MAX = 128;
+
+/**
+ * A hashed asset (`assets/`), gzipped when it is text and the client takes gzip: the app's main script
+ * is ~0.9 MB as built and ~0.3 MB gzipped, what a phone downloads after every update. Exported for tests.
+ */
+export async function hashedFile(req: Request, full: string, ext: string, file: Blob, base: Record<string, string>): Promise<Response> {
+  if (!COMPRESSIBLE.has(ext)) return new Response(file, { headers: base });
+  const headers = { ...base, vary: "accept-encoding" };
+  if (!req.headers.get("accept-encoding")?.includes("gzip") || file.size < GZIP_MIN_BYTES) return new Response(file, { headers });
+  let body = gzipped.get(full);
+  if (!body) {
+    body = Bun.gzipSync(await file.bytes());
+    gzipped.set(full, body);
+    if (gzipped.size > GZIPPED_MAX) gzipped.delete(gzipped.keys().next().value!);
+  }
+  return new Response(body, { headers: { ...headers, "content-encoding": "gzip" } });
 }
 
 /** Module workers need a JavaScript MIME under nosniff, including Vite's emitted .mjs assets. */
