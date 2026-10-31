@@ -9,7 +9,7 @@ import { BUILD_HEADER, withBuildHeader } from "./routes/http.ts";
 import { marksPaneSeen, SEEN_HEADER } from "./routes/index.ts";
 import { atShellPrompt, paneReadResponse } from "./routes/pane.ts";
 import { keysPane, replyPane, sendReplySteps, type ReplySender } from "./routes/reply.ts";
-import { cacheControlFor, isReservedAuthPath, resolveStaticPath, revalidatedFile, staticContentType } from "./routes/static.ts";
+import { cacheControlFor, hashedFile, isReservedAuthPath, resolveStaticPath, revalidatedFile, staticContentType } from "./routes/static.ts";
 import { normalizeTabLabel, tabInsertIndex } from "./routes/structure.ts";
 import { hasCodexInterruptCue } from "../web/src/lib/harness/codex/interrupt.ts";
 import { AuditLog } from "./audit.ts";
@@ -1169,6 +1169,32 @@ describe("revalidatedFile", () => {
     expect(png.headers.get("vary")).toBeNull();
     const tiny = revalidatedFile(ask({ "accept-encoding": "gzip" }), ".json", new TextEncoder().encode('{"id":"x"}'), {});
     expect(tiny.headers.get("content-encoding")).toBeNull();
+  });
+});
+
+// The app's scripts are most of what a phone downloads after an update; they go gzipped.
+describe("hashedFile", () => {
+  const script = `export const app = () => "${"x".repeat(600)}";\n`.repeat(20);
+  const ask = (headers: Record<string, string> = {}) => new Request("http://x/assets/index-abc.js", { headers });
+  const base = { "cache-control": "public, max-age=31536000, immutable" };
+
+  test("text goes gzipped to a client that takes it, as it is to one that does not", async () => {
+    const zipped = await hashedFile(ask({ "accept-encoding": "gzip, br" }), "/dist/assets/index-abc.js", ".js", new Blob([script]), base);
+    expect(zipped.headers.get("content-encoding")).toBe("gzip");
+    expect(zipped.headers.get("vary")).toBe("accept-encoding");
+    expect(zipped.headers.get("cache-control")).toBe(base["cache-control"]);
+    const body = new Uint8Array(await zipped.arrayBuffer());
+    expect(body.length).toBeLessThan(script.length / 4);
+    expect(new TextDecoder().decode(Bun.gunzipSync(body))).toBe(script);
+    const plain = await hashedFile(ask(), "/dist/assets/index-abc.js", ".js", new Blob([script]), base);
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect(await plain.text()).toBe(script);
+  });
+
+  test("images and fonts go as they are", async () => {
+    const font = await hashedFile(ask({ "accept-encoding": "gzip" }), "/dist/assets/a.woff2", ".woff2", new Blob([script]), base);
+    expect(font.headers.get("content-encoding")).toBeNull();
+    expect(font.headers.get("vary")).toBeNull();
   });
 });
 

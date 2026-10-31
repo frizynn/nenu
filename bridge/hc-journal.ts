@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { MAX_TRANSCRIPT_BYTES } from "./journal/files.ts";
@@ -18,30 +18,43 @@ export const hcJournalDir = (stateDir: string): string => join(stateDir, "hc-jou
 export const hcJournalRoot = (stateDir: string): string => join(hcJournalDir(stateDir), "projects");
 
 const SESSION_ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
-const FOLLOW_MS = 2_000;
+const FOLLOW_MS = 1_000;
 /** A chat left alone stops being followed after this long, and its copy goes after the longer one. */
 const QUIET_MS = 60_000;
 const FORGET_MS = 5 * 60_000;
 /** The first read of a chat waits this long; past it the copy keeps coming and the next read has it. */
 const FIRST_READ_MS = 8_000;
 const EXEC_MS = 60_000;
+/**
+ * Bytes one read brings, well under the 8 MB hc exec keeps of what a program prints: the first is small
+ * so a chat opens on its last turns at once (~3 MB/s to another machine), the rest fill in its past.
+ */
+export const HC_READS = { first: 1024 * 1024, chunk: 2 * 1024 * 1024, cap: MAX_TRANSCRIPT_BYTES };
 
-// `<size> <start>` and then the bytes from `start`. The id is a checked uuid and travels as an argument.
-const READ_NEW = `id=$1; off=$2; cap=$3
+// One read: `<size> <start> <length> <older start> <older length>`, the bytes the copy lacks at its
+// end, then older bytes before its start while the chunk has room, back to `cap` from the end. The
+// newest come first, so a long chat opens on its last turns and its past fills in behind them. The id
+// is a checked uuid and travels as an argument.
+export const READ_NEW = `id=$1; end=$2; from=$3; cap=$4; chunk=$5
 for f in "$HOME"/.claude*/projects/*/"$id".jsonl; do
   [ -f "$f" ] || continue
-  s=$(wc -c <"$f"); s=$((s+0)); start=$off
-  [ "$start" -gt "$s" ] && start=0
-  [ $((s-start)) -gt "$cap" ] && start=$((s-cap))
-  echo "$s $start"
-  [ "$start" -lt "$s" ] && tail -c +$((start+1)) "$f"
+  s=$(wc -c <"$f"); s=$((s+0)); floor=$((s > cap ? s - cap : 0))
+  if [ "$end" -lt 0 ] || [ "$end" -gt "$s" ] || [ $((s - end)) -gt "$chunk" ]; then
+    end=$((s - chunk)); [ "$end" -lt "$floor" ] && end=$floor; from=$end
+  fi
+  len=$((s - end)); old=$((from - (chunk - len))); [ "$old" -lt "$floor" ] && old=$floor
+  olen=$((from - old)); [ "$olen" -lt 0 ] && olen=0
+  echo "$s $end $len $old $olen"
+  [ "$len" -gt 0 ] && tail -c +$((end + 1)) "$f" | head -c "$len"
+  [ "$olen" -gt 0 ] && tail -c +$((old + 1)) "$f" | head -c "$olen"
   exit 0
 done
 exit 3`;
 
 interface Copy {
   path: string;
-  /** How far into the machine's log the copy reaches; -1 until its first read. */
+  /** The machine's log bytes [from, offset) are in the copy; both -1 until its first read. */
+  from: number;
   offset: number;
   readAt: number;
   running: Promise<void> | null;
@@ -50,7 +63,12 @@ interface Copy {
 
 export class HcJournalMirror {
   private readonly copies = new Map<string, Copy>();
-  constructor(private readonly dir: string, private readonly exec: HcExec, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly dir: string,
+    private readonly exec: HcExec,
+    private readonly now: () => number = Date.now,
+    private readonly limits = HC_READS,
+  ) {}
 
   /** Drop what an earlier run left: a copy is only as good as the follow that keeps it current. */
   async reset(): Promise<void> {
@@ -64,7 +82,7 @@ export class HcJournalMirror {
     let copy = this.copies.get(key);
     if (!copy) {
       const folder = createHash("sha256").update(machine).digest("hex").slice(0, 16);
-      copy = { path: join(this.dir, "projects", folder, `${sessionId}.jsonl`), offset: -1, readAt: 0, running: null };
+      copy = { path: join(this.dir, "projects", folder, `${sessionId}.jsonl`), from: -1, offset: -1, readAt: 0, running: null };
       this.copies.set(key, copy);
     }
     copy.readAt = this.now();
@@ -100,22 +118,32 @@ export class HcJournalMirror {
 
   private async pull(machine: string, copy: Copy): Promise<void> {
     const id = copy.path.slice(copy.path.lastIndexOf("/") + 1, -".jsonl".length);
-    const offset = Math.max(copy.offset, 0);
-    const out = await this.exec(machine, ["sh", "-c", READ_NEW, "sh", id, String(offset), String(MAX_TRANSCRIPT_BYTES)], EXEC_MS);
+    const had = copy.offset >= 0 && await stat(copy.path).then(() => true, () => false);
+    const [end, from] = had ? [copy.offset, copy.from] : [-1, -1];
+    const out = await this.exec(machine, ["sh", "-c", READ_NEW, "sh", id, String(end), String(from), String(this.limits.cap), String(had ? this.limits.chunk : this.limits.first)], EXEC_MS);
     const nl = out.indexOf(10);
-    const [size, start] = new TextDecoder().decode(out.subarray(0, nl)).split(" ").map(Number);
-    if (!Number.isSafeInteger(size) || !Number.isSafeInteger(start)) return;
-    const bytes = out.subarray(nl + 1);
+    const [, start, len, old, olen] = new TextDecoder().decode(out.subarray(0, nl)).split(" ").map(Number);
+    if (![start, len, old, olen].every((n) => Number.isSafeInteger(n) && n! >= 0)) return;
+    // A read cut short (hc's output limit, a log rotated mid-read) is dropped whole; the next one asks again.
+    if (out.length - nl - 1 !== len! + olen!) return;
+    const fresh = out.subarray(nl + 1, nl + 1 + len!);
+    const older = out.subarray(nl + 1 + len!);
     await mkdir(dirname(copy.path), { recursive: true, mode: 0o700 });
-    if (copy.offset >= 0 && start === copy.offset && await stat(copy.path).then(() => true, () => false)) {
-      if (bytes.length) await appendFile(copy.path, bytes);
+    const kept = had && start === end;
+    if (kept && !older.length) {
+      if (fresh.length) await appendFile(copy.path, fresh);
     } else {
-      // The first read, or a log that shrank or ran past the cap: the copy starts over, whole.
+      // The first read, a log that shrank or ran past a chunk, or older bytes going in front: a new file,
+      // so a reader that holds the old one sees another inode and reads again.
       const tmp = `${copy.path}.tmp`;
-      await writeFile(tmp, bytes, { mode: 0o600 });
+      await writeFile(tmp, older, { mode: 0o600 });
+      if (kept) await appendFile(tmp, await readFile(copy.path));
+      await appendFile(tmp, fresh);
       await rename(tmp, copy.path);
+      if (!kept) copy.from = start!;
     }
-    copy.offset = start! + bytes.length;
+    if (older.length) copy.from = old!;
+    copy.offset = start! + fresh.length;
   }
 }
 

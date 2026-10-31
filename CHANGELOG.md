@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.15.1] - 2026-10-31
+
+### Fixed
+- A long chat on another machine opens on its newest turns in under a second; it opened on days-old ones after ~5 s, because hc exec keeps only 8 MB (3d112fd).
+- Another machine's new rows show within a second; its copy is read every second, its past filled in behind (3d112fd).
+- The app's scripts and styles go gzipped: the first load after an update downloads ~0.3 MB instead of ~1.1 MB (3d112fd).
+- Another machine's Claudes are read with one hc call per poll instead of one per Claude (3d112fd).
+
 ## [2.15.0] - 2026-10-30
 
 ### Added

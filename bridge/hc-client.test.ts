@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { HcClient, hcSend, type HcRpc } from "./hc-client.ts";
+import type { HcExec } from "./hc-journal.ts";
 
 /** An HcClient over a recorded fake `hc connect`, never a real one. */
 function client(start = 0) {
@@ -187,6 +191,31 @@ test("a Claude on another machine gets its conversation id from that machine's s
   const snap = await new HcClient("/nonexistent/hc", 5000, rpc, Date.now, async () => { throw new Error("no local group for a remote pid"); }).sessionSnapshot();
   expect(reads).toEqual([{ path: ".claude/sessions/42.json", on: "box" }]);
   expect(snap.panes[0]!.agent_session).toEqual({ agent: "claude", kind: "id", value: "remote-1" });
+});
+
+test("with exec, a machine's Claudes get their ids from one read there, not one per Claude", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hc-home-"));
+  await mkdir(join(home, ".claude", "sessions"), { recursive: true });
+  await writeFile(join(home, ".claude", "sessions", "42.json"), '{\n  "sessionId": "remote-1",\n  "cwd": "/w w"\n}\n');
+  const claude = (address: string, pid: number) => ({ address, state: "live", cwd: "/w", status: { app: "claude-code", state: "idle" }, foreground: { pid, name: "claude", argv: ["claude"], cwd: "/w" } });
+  const rpc: HcRpc = async <T>(method: string) => {
+    if (method === "terminal.list") return { terminals: [claude("box/t2", 42), claude("box/t3", 43)], machines: [{ name: "box", state: "connected" }] } as T;
+    if (method === "doc.get") return { value: null } as T;
+    throw new Error(`unexpected ${method}`);
+  };
+  const runs: string[][] = [];
+  const exec: HcExec = async (machine, argv) => {
+    runs.push([machine, ...argv.slice(4)]);
+    const child = Bun.spawn(argv, { env: { PATH: process.env.PATH, HOME: home }, stdout: "pipe" });
+    return new Response(child.stdout).bytes();
+  };
+  try {
+    const snap = await new HcClient("/nonexistent/hc", 5000, rpc, Date.now, undefined, undefined, { exec }).sessionSnapshot();
+    expect(runs).toEqual([["box", "42", "43"]]);
+    expect(snap.panes.map((p) => p.agent_session?.value ?? null)).toEqual(["remote-1", null]);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 describe("HcClient scoped to one machine", () => {
