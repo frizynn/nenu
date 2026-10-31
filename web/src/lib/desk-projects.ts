@@ -43,7 +43,9 @@ export function projectWeight<T>(group: ProjectGroup<T>, at: (item: T) => number
   return (group.state ? RANK[group.state] ?? 0 : 0) * RANK_STEP + Math.max(0, ...group.items.map(at));
 }
 
-export type SidebarView = "projects" | "time";
+/** How the desk's bar lists: the workspace tree, chats by project, by when they moved, or by state. */
+export type SidebarView = "workspaces" | "projects" | "time" | "state";
+const VIEWS: readonly SidebarView[] = ["workspaces", "projects", "time", "state"];
 
 export interface ProjectView {
   view: SidebarView;
@@ -60,7 +62,7 @@ function parse(raw: string | null): ProjectView {
     const open = typeof stored.open === "object" && stored.open !== null
       ? Object.fromEntries(Object.entries(stored.open).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"))
       : {};
-    return { view: stored.view === "time" ? "time" : "projects", open };
+    return { view: VIEWS.find((view) => view === stored.view) ?? "projects", open };
   } catch {
     return DEFAULT_VIEW;
   }

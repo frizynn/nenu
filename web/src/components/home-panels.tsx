@@ -10,6 +10,7 @@ import { PaneMark } from "@/components/nav-rows";
 import { useListReorder, type ListReorder } from "@/components/ui/list-reorder";
 import { WorkspaceOrderMenu } from "@/components/workspace-order-menu";
 import { useHeldTime } from "@/hooks/use-held-time";
+import { rowSession } from "@/lib/machines";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { EnterScope, useEnter } from "@/lib/enter";
 import { timeAgo, timeAgoShort } from "@/lib/format";
@@ -122,7 +123,7 @@ export function SessionRow({ chat, session, now, opening, group, inTab = false }
   const place = chat.place === group ? null : chat.place;
   const detail = inTab && chat.detail === chat.tab ? null : chat.detail;
   const state = stateOf(chat);
-  const to = panePath(agent.paneId, session);
+  const to = panePath(agent.paneId, rowSession(agent, session));
   const busy = isOpening(opening, to);
   const enter = useEnter();
   return (
@@ -285,7 +286,7 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, tabTouched, onTab, 
   reorder?: ListReorder;
   settling?: boolean;
 }) {
-  const to = group.entry && panePath(group.entry, session);
+  const to = group.entry && panePath(group.entry, rowSession(group, session));
   return (
     <FoldRow kind="workspace" id={group.workspaceId} name={group.name} chats={workspaceSessions(group)} now={now} open={open} onToggle={onToggle}
       to={to} busy={!!to && isOpening(opening, to)} reorder={reorder} settling={settling}>

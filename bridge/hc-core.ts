@@ -68,6 +68,8 @@ export const hcAddress = (paneId: string): string => paneId.replace(":", "/");
 /** Each machine's terminals are one session: `hc` for this one, `hc@<machine>` for another (ADR 0135). */
 export const hcSessionName = (machine: string): string => (machine ? `hc@${machine}` : "hc");
 export const isHcSession = (session: string): boolean => session === "hc" || session.startsWith("hc@");
+/** The other machine an hc session's terminals run on, "" for this one or any other session. */
+export const hcSessionMachine = (session: string): string => (session.startsWith("hc@") ? session.slice(3) : "");
 
 /** The machine a terminal runs on, "" for this one. */
 export const hcMachine = (address: string): string => (address.includes("/") ? address.split("/")[0]! : "");

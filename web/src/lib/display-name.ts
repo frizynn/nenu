@@ -23,5 +23,5 @@ export function displayName(pane: AgentView): string {
 
 /** The line under the name: its workspace and tab (the tab only when its label says something). */
 export function displayPlace(pane: AgentView): DisplayPlace {
-  return { place: workspaceName({ label: pane.workspaceLabel, number: pane.workspaceNumber }), tab: pane.tabLabel || null };
+  return { place: workspaceName({ label: pane.workspaceLabel, number: pane.workspaceNumber, machine: pane.machine }), tab: pane.tabLabel || null };
 }

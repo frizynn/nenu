@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-10-30
+
+### Added
+- herdr-core: the lists show machines, not sessions: every machine's chats at once, or one picked in the machine picker; Herdr's and hc's sessions on one Mac are one (1d6329d2)
+- Desk bar: list by Spaces, Folders, Recent or State (1d6329d2)
+
 ## [2.14.0] - 2026-10-30
 
 ### Added

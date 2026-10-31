@@ -1,6 +1,8 @@
 # 0135. Each herdr-core machine is its own session, and its files come through hc
 
-- **Status:** Accepted (2026-10-30). Does not replace [ADR 0084](./0084-machines-are-herdrs-reached-through-their-own-nenu.md),
+- **Status:** Accepted (2026-10-30). How the lists show machines is superseded by
+  [ADR 0136](./0136-the-lists-show-machines-not-sessions.md): a page no longer lists the others by name,
+  and the picker names machines, not sessions. The rest holds. Does not replace [ADR 0084](./0084-machines-are-herdrs-reached-through-their-own-nenu.md),
   which still holds for Herdr's saved machines.
 - **Trail:** `bridge/hc-client.ts` · `bridge/hc-journal.ts` · `bridge/hc-core.ts` · `bridge/sessions.ts` (`setExtras`) ·
   `bridge/routes/snapshot.ts` (`hcMachineViews`) · `bridge/queue-delivery.ts` (`deliverWhole`) · `bridge/index.ts`

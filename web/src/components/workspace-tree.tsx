@@ -5,6 +5,7 @@ import { ChevronRight, LayoutGrid, LayoutTemplate } from "@/components/ui/icon";
 import { Fold } from "@/components/fold";
 import { OpeningMark, PaneMark, RowBody } from "@/components/nav-rows";
 import { resting, StatusDot } from "@/components/status-badge";
+import { rowSession } from "@/lib/machines";
 import { displayName } from "@/lib/display-name";
 import { panePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
@@ -39,7 +40,7 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
   const { order } = useWorkspaceOrder();
   const branches = orderWorkspaces(workspaceTree(source, currentPaneId), (branch) => branch.workspace.workspaceId, (branch) => branch.name, order);
   return branches.map((branch) => (
-    <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
+    <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, rowSession(branch.workspace, session))}
       session={session} currentPaneId={currentPaneId}
       open={expanded[branch.workspace.workspaceId] ?? (!startFolded && defaultOpen(branch, branches.length))}
       animate={branch.workspace.workspaceId in expanded}
@@ -154,7 +155,7 @@ function PaneRow({ pane, title, note, session, current, nested }: {
   nested?: boolean;
 }) {
   const word = pane.kind === "shell" ? undefined : STATUS_WORD[pane.status];
-  const to = panePath(pane.paneId, session);
+  const to = panePath(pane.paneId, rowSession(pane, session));
   return (
     <Link className={cn("nav-pane", nested && "nav-pane-nested")} to={to} aria-current={current ? "page" : undefined}>
       <RowBody mark={<OpeningMark to={to}><PaneMark pane={pane} /></OpeningMark>} title={title} end={<>

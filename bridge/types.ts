@@ -284,13 +284,21 @@ export interface SnapshotResponse {
  */
 export type MachineState = "connected" | "connecting" | "offline" | "old-nenu" | "no-nenu" | "disabled" | "off";
 
-/** What a machine's lists need: its panes and where they sit, as its own snapshot gives them. */
+/**
+ * What a machine's lists need: its panes and where they sit, as its own snapshot gives them. A machine
+ * that joins several of this bridge's sessions (ADR 0136) names each row's session, "" for the primary.
+ */
 export interface MachineHerd {
   bridge: BridgeStatus;
-  agents: PaneWire[];
-  shellPanes: PaneWire[];
-  workspaces: WorkspaceView[];
-  tabs: TabView[];
+  agents: Array<PaneWire & InSession>;
+  shellPanes: Array<PaneWire & InSession>;
+  workspaces: Array<WorkspaceView & InSession>;
+  tabs: Array<TabView & InSession>;
+}
+
+/** The session a row opens in, "" for the primary. */
+export interface InSession {
+  session?: string;
 }
 
 export interface MachineView {
@@ -300,7 +308,9 @@ export interface MachineView {
   state: MachineState;
   /** Why it is not connected, in words. */
   detail?: string;
-  /** Present for every machine except the one the snapshot is about, once it was read. */
+  /** The bridge's sessions this machine joins (ADR 0136), "" for the primary; absent for one reached by `session`. */
+  sessions?: string[];
+  /** Present for every machine except the one the snapshot is about, once it was read; a machine that joins sessions always has it. */
   herd?: MachineHerd;
 }
 
