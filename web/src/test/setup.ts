@@ -4,6 +4,8 @@ import { cleanup } from "@testing-library/react";
 import { setupServer } from "msw/node";
 
 import { handlers, resetTypedDraft } from "./handlers";
+import { __resetEntryStates } from "@/hooks/use-entry-state";
+import { __resetLastRead } from "@/hooks/use-interactions";
 import { __resetConnectionHealth } from "@/lib/connection-health";
 import { __resetDraftPrune } from "@/lib/drafts";
 import { resetLocalSends } from "@/lib/local-sends";
@@ -35,6 +37,8 @@ afterEach(() => {
   server.resetHandlers();
   resetTypedDraft(); // the fake pane's input line, so a draft can't leak into the next test
   resetLocalSends(); // pending conversation bubbles live in module scope, like the draft memory tier
+  __resetEntryStates(); // what a page left on its history entry, and every test's router starts on the same key
+  __resetLastRead(); // the last dialogs read per session, which a mounting view starts from
 });
 afterAll(() => server.close());
 

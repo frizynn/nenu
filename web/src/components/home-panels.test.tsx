@@ -56,6 +56,29 @@ it("keeps sessions with the same time in the order they first came, however they
   expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
 });
 
+// The back control from a chat lands on Home as it was left: unfolded, in the order it showed, though the
+// chat just read now sorts first, so the page slides back in without a row moving.
+it("draws Recents as it was left on a step back from a chat", async () => {
+  const user = userEvent.setup();
+  let recent = Array.from({ length: 9 }, (_, i) => chat(`p${i}`, 900 - i));
+  // Each mount reads the list as it is then, the way Home reads it from its loader.
+  const Home = () => <HomeSessions recent={recent} workspaces={[]} reviews={[]} pullRequests={() => null} now={1_000} opening={null} />;
+  const router = createMemoryRouter([{ path: "/", element: <Home /> }, { path: "/pane/:id", element: <p>chat</p> }]);
+  render(<RouterProvider router={router} />);
+  const rows = () => within(screen.getByRole("tabpanel", { name: "Recents" })).getAllByRole("link").map((link) => link.getAttribute("href"));
+  await user.click(screen.getByRole("button", { name: "Show 3 more" }));
+  expect(rows()).toHaveLength(9);
+  await act(() => router.navigate("/pane/p7"));
+  recent = [chat("p7", 2_000), ...recent.filter((c) => c.agent.paneId !== "p7")];
+  await act(() => router.navigate(-1));
+  expect(rows()).toEqual(Array.from({ length: 9 }, (_, i) => `/pane/p${i}`));
+  expect(screen.getByRole("button", { name: "Show less" })).toBeInTheDocument();
+  // A Home the app opens anew starts folded, in the order the chats moved.
+  await act(() => router.navigate("/pane/p1"));
+  await act(() => router.navigate("/"));
+  expect(rows()).toEqual(["/pane/p7", "/pane/p0", "/pane/p1", "/pane/p2", "/pane/p3", "/pane/p4"]);
+});
+
 it("eases in only the rows Show N more adds", async () => {
   setup(Array.from({ length: 8 }, (_, i) => chat(`p${i}`, 900 - i)));
   await userEvent.setup().click(screen.getByRole("button", { name: "Show 2 more" }));

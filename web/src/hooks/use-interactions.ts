@@ -100,29 +100,44 @@ export interface InteractionsState {
   refusalFor: (i: Interaction) => string | undefined;
 }
 
+// The last dialogs read for each session, by any view, so a page that mounts again (Home after a chat's
+// back control) draws what it last knew while its first read is on its way, instead of a placeholder
+// that turns into the question as the page slides in.
+const lastRead = new Map<string, Interaction[]>();
+const sessionKey = (session?: string) => session ?? "";
+
+/** Tests only: what one test read is no other test's. */
+export function __resetLastRead(): void {
+  lastRead.clear();
+}
+
 /**
  * Every dialog the bridge detected in `session`. Wakes on the `interaction` live topic, keeps a
  * fallback poll, and pauses behind the idle cover and while the page is hidden. An answer is one
  * POST: the bridge re-reads the screen and refuses a stale signature.
  */
 export function useInteractions(session?: string, enabled = true): InteractionsState {
-  const [list, setList] = useState<Interaction[]>([]);
+  const [list, setList] = useState<Interaction[]>(() => lastRead.get(sessionKey(session)) ?? []);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [refusals, setRefusals] = useState<Refusal[]>([]);
   const [stale, setStale] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    setList([]);
+  const [loaded, setLoaded] = useState(() => lastRead.has(sessionKey(session)));
+  // Another session's dialogs are not this one's: start from what it last read, if anything.
+  const [shown, setShown] = useState(session);
+  if (shown !== session) {
+    setShown(session);
+    setList(lastRead.get(sessionKey(session)) ?? []);
     setReceipts([]);
     setRefusals([]);
-    setLoaded(false);
-  }, [session]);
+    setLoaded(lastRead.has(sessionKey(session)));
+  }
 
   const poke = useLivePoll({
     enabled,
     deps: [session],
     read: (signal) => fetchInteractions(session, signal),
     onRead: (next) => {
+      lastRead.set(sessionKey(session), next.interactions);
       setList((prev) => sameDialogs(prev, next.interactions));
       setRefusals((rs) => settle(rs, next.interactions));
       setStale(false);

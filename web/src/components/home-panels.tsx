@@ -9,6 +9,7 @@ import { Fold } from "@/components/fold";
 import { PaneMark } from "@/components/nav-rows";
 import { useListReorder, type ListReorder } from "@/components/ui/list-reorder";
 import { WorkspaceOrderMenu } from "@/components/workspace-order-menu";
+import { useEntryState } from "@/hooks/use-entry-state";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { rowSession } from "@/lib/machines";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
@@ -77,10 +78,11 @@ export function HomeHeading({ id, label, count, note }: { id: string; label: str
  * A Home list: its first `rows` items, and the rest behind "Show N more", which folds them back as
  * "Show less". A fold that would hide one row shows it instead: one row is not worth a tap. A row that
  * joins once the list is drawn eases in where it lands when it asks to (`useEnter`). `name` says whose
- * rows the control shows, for a list among several.
+ * rows the control shows, for a list among several. The fold comes back as it was left with its history
+ * entry, so a step back lands on the row it left from.
  */
 export function FoldedList<T>({ items, rows, name, children }: { items: readonly T[]; rows: number; name?: string; children: (item: T) => ReactNode }) {
-  const [all, setAll] = useState(false);
+  const [all, setAll] = useEntryState(`fold:${name ?? ""}`, false);
   const folds = items.length > rows + 1;
   const shown = all || !folds ? items : items.slice(0, rows);
   const more = `Show ${items.length - rows} more`;
@@ -355,13 +357,14 @@ export function SessionLists({ recent: everyRecent, workspaces, reviews, pullReq
   list: SessionList;
   tabs?: ReactNode;
 }) {
-  // The workspaces opened in place; none until a tap opens one.
-  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  // The workspaces opened in place; none until a tap opens one. Like Recents' order and fold, they come
+  // back as they were with a step back to this entry.
+  const [opened, setOpened] = useEntryState<ReadonlySet<string>>("home:opened", () => new Set());
   // Each tab's fold as a tap left it; an untouched tab follows tabStartsOpen.
-  const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
+  const [tabsOpen, setTabsOpen] = useEntryState<Readonly<Record<string, boolean>>>("home:tabs", {});
   // Recents keeps the order it came on screen with, so a row never moves under the finger: one that
   // finishes says New where it is. "N updates" puts them in order, as coming back to the page does.
-  const held = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at);
+  const held = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at, "home:recents");
   const { order, set: setOrder } = useWorkspaceOrder();
   // Reordering: each workspace row is its handle, and opens nothing until Done, or another list.
   const [arranging, setArranging] = useState(false);

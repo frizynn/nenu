@@ -40,6 +40,22 @@ describe("useInteractions", () => {
     expect(result.current.receipts).toMatchObject([{ paneId: "w1:p1", label: "Apple" }]);
   });
 
+  // Home mounts again on the back control from a chat: it draws the dialog it last read while it reads
+  // again, never a placeholder that turns into the question as the page slides in.
+  it("starts from the dialogs last read for the session when it mounts again", async () => {
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [card] })));
+    const first = renderHook(() => useInteractions("work"));
+    await waitFor(() => expect(first.result.current.interactions).toHaveLength(1));
+    first.unmount();
+    server.use(http.get("/api/interactions", () => new Promise(() => {})));
+    const again = renderHook(() => useInteractions("work"));
+    expect(again.result.current.interactions).toEqual([card]);
+    expect(again.result.current.loaded).toBe(true);
+    const other = renderHook(() => useInteractions("other"));
+    expect(other.result.current.interactions).toEqual([]);
+    expect(other.result.current.loaded).toBe(false);
+  });
+
   it("names what an answer did in its receipt: the command approved, the answer chosen", async () => {
     const bash: Interaction = {
       ...card, kind: "permission", family: "permission", question: "Do you want to proceed?",

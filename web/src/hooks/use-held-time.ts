@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer } from "react";
+
+import { useEntryState } from "@/hooks/use-entry-state";
 
 /**
  * The time a list sorts each row by, held at what it was when the row first came on screen, so rows
@@ -7,11 +9,12 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
  * place (New, +1). The hold lets go when the operator comes back to the page (it was hidden, or the
  * window lost focus), on `reorder` (the list's "N updates"), and with every fresh mount. Not on a
  * navigation: on a desk the bar stays up, and the row just clicked moved 120 px when its own visit
- * re-sorted it. A live order measured 250 row moves a minute on a phone's Home with a busy herd
- * (`bun scripts/e2e/calm.ts`). Rows with the same time keep the order they first came in: the list
+ * re-sorted it. Given a `name`, nor on a step back to the page: the hold is kept with its history entry,
+ * so the list comes back in the order it was left, under the row the operator opened. A live order
+ * measured 250 row moves a minute on a phone's Home with a busy herd (`bun scripts/e2e/calm.ts`). Rows with the same time keep the order they first came in: the list
  * hands them over in an order that changes with their state.
  */
-export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number): {
+export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number, name?: string): {
   at: (item: T) => number;
   /** `items` newest held time first, ties in the order they first came. */
   order: (items: readonly T[]) => T[];
@@ -19,12 +22,12 @@ export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number
   moved: (items: readonly T[]) => number;
   reorder: () => void;
 } {
-  const held = useRef(new Map<string, { time: number; seq: number }>());
+  const [held] = useEntryState(name === undefined ? null : `held:${name}`, () => ({ current: new Map<string, { time: number; seq: number }>() }));
   const [, redraw] = useReducer((n: number) => n + 1, 0);
   const reorder = useCallback(() => {
     held.current = new Map();
     redraw();
-  }, []);
+  }, [held]);
   useOnReturn(reorder);
   const entry = (item: T) => {
     const id = key(item);
