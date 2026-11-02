@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.15.2] - 2026-11-02
+
+### Fixed
+- herdr-core: a Claude run by a wrapper opens on its conversation; its chat was empty, because the service could not see the wrapper's Claude child (26df0c9).
+- herdr-core: a chat names the space Herdr.app draws its tab in, not the one its labels still name after a move (180c1da).
+
 ## [2.15.1] - 2026-10-31
 
 ### Fixed
