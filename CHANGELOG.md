@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.15.3] - 2026-11-03
+
+### Fixed
+- Phone: the back control from a chat lands on Home as it was left, scroll, fold and order kept; it came back folded at the top, re-sorted, its Needs you card changing size mid-slide (8ecd891).
+
 ## [2.15.2] - 2026-11-02
 
 ### Fixed
