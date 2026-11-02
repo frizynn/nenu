@@ -127,7 +127,15 @@ describe("hcClaudeSession", () => {
 
   test("else the session file of the leader, or of another process of its group", async () => {
     expect(await hcClaudeSession(claude, files({ 80390: '{"sessionId":"u-3"}' }))).toBe("u-3");
-    expect(await hcClaudeSession(claude, files({ 81000: '{"sessionId":"u-4"}' }), [80390, 81000])).toBe("u-4");
+    expect(await hcClaudeSession(claude, files({ 81000: '{"sessionId":"u-4"}' }), async () => [80390, 81000])).toBe("u-4");
+  });
+
+  test("the group is listed only when the leader's own file names no conversation", async () => {
+    let listed = 0;
+    const group = async () => { listed++; return [80390, 81000]; };
+    expect(await hcClaudeSession(claude, files({ 80390: '{"sessionId":"u-3"}' }), group)).toBe("u-3");
+    expect(listed).toBe(0);
+    expect(await hcClaudeSession(claude, files({}), async () => { throw new Error("no group"); })).toBeNull();
   });
 
   test("nothing for a terminal that is not Claude, or whose files say nothing", async () => {

@@ -268,9 +268,9 @@ export type SessionFileReader = (pid: number) => Promise<string | null>;
  * Claude Code's conversation id for a terminal, which hc does not report: the `--session-id` its
  * command line names (Nenu starts every Claude with one), else the `sessions/<pid>.json` Claude keeps
  * for a process of the foreground group. The group's leader can be a wrapper that runs Claude as its
- * child, so `pids` may name the rest of the group too.
+ * child, so `group` lists the rest of the group; it is asked only when the leader's file names none.
  */
-export async function hcClaudeSession(t: HcTerminal, read: SessionFileReader, pids: number[] = []): Promise<string | null> {
+export async function hcClaudeSession(t: HcTerminal, read: SessionFileReader, group: () => Promise<number[]> = async () => []): Promise<string | null> {
   if (t.status?.app !== "claude-code" || !t.foreground) return null;
   const argv = t.foreground.argv;
   for (let i = 0; i < argv.length; i++) {
@@ -278,15 +278,21 @@ export async function hcClaudeSession(t: HcTerminal, read: SessionFileReader, pi
     if (flag === "--session-id" && argv[i + 1]) return argv[i + 1]!;
     if (flag.startsWith("--session-id=")) return flag.slice("--session-id=".length) || null;
   }
-  for (const pid of [t.foreground.pid, ...pids.filter((p) => p !== t.foreground!.pid)]) {
+  const leader = t.foreground.pid;
+  const id = async (pid: number) => {
     const text = await read(pid).catch(() => null);
-    if (text === null) continue;
     try {
-      const { sessionId } = JSON.parse(text) as { sessionId?: unknown };
-      if (typeof sessionId === "string" && sessionId) return sessionId;
+      const { sessionId } = (text === null ? {} : JSON.parse(text)) as { sessionId?: unknown };
+      return typeof sessionId === "string" && sessionId ? sessionId : null;
     } catch {
-      /* not a session file */
+      return null; // not a session file
     }
+  };
+  const own = await id(leader);
+  if (own) return own;
+  for (const pid of (await group().catch(() => [])).filter((p) => p !== leader)) {
+    const found = await id(pid);
+    if (found) return found;
   }
   return null;
 }
