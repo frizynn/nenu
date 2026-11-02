@@ -92,6 +92,25 @@ test("Herdr.app's own space and tab names win over folder and position", () => {
   expect(snap.tabs.map((t) => t.label)).toEqual(["chat"]);
 });
 
+// The live t72: its tab was moved to another space in Herdr.app, but its labels still name the space
+// it started in, which t100 shares. Its chat named t100's space.
+test("a terminal sits where Herdr.app draws it, over the space its labels still name", () => {
+  const term = (address: string, tab: string, where: string): HcTerminal => ({
+    address, state: "live", cwd: "/w", status: { app: "claude-code", state: "done" },
+    labels: { "herdr.space": "fm-home", "herdr.tab": tab, where },
+  });
+  const block = (terminal: string) => ({ type: "row", children: [{ type: "block", content: { terminal } }] });
+  const app = { spaces: [
+    { id: "sistema", name: "🧠 sistema de agentes", tabs: [{ id: "home-sistema", name: "🧠 sistema-agentes", root: block("t72") }] },
+    { id: "fm-home", name: "🛠️ AWAM · workers", tabs: [{ id: "home-fisgon", name: "🛠️ fisgon-2599", root: block("t100") }] },
+  ] } as HcAppDoc;
+  const terminals = [term("t100", "home-fisgon", "🛠️ AWAM · workers / 🛠️ fisgon-2599"), term("t72", "home-sistema", "🧠 sistema de agentes / 🧠 sistema-agentes"), term("box/t3", "home-fisgon", "x / y")];
+  const snap = hcSnapshot(terminals, new Map([["", app], ["box", { spaces: [{ id: "far", name: "far", tabs: [{ id: "tb", root: block("t3") }] }] } as HcAppDoc]]));
+  const label = (paneId: string) => snap.workspaces.find((w) => w.workspace_id === snap.panes.find((p) => p.pane_id === paneId)!.workspace_id)!.label;
+  expect([label("t72"), label("t100"), label("box:t3")]).toEqual(["🧠 sistema de agentes", "🛠️ AWAM · workers", "far"]);
+  expect(snap.panes.map((p) => [p.pane_id, p.workspace_id, p.tab_id])).toEqual([["t100", "fm-home", "home-fisgon"], ["t72", "sistema", "home-sistema"], ["box:t3", "box:far", "box:tb"]]);
+});
+
 test("a document tab with no terminal, or a block that is not one, is left out without breaking the rest", () => {
   const odd = { spaces: [{ id: "sp1", tabs: [{ id: "tb2", name: "PRs", root: { content: { mod: "prs" } } }, { id: "tb1" }] }, { id: "empty" }] } as HcAppDoc;
   const snap = hcSnapshot([claude], new Map([["", odd]]));

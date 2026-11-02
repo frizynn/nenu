@@ -36,8 +36,17 @@ export interface HcTerminal {
 
 /** The part of the `herdr-app` document Herdr.app keeps its spaces and tabs in. */
 export interface HcAppDoc {
-  spaces?: Array<{ id: string; name?: string; folder?: string; tabs?: Array<{ id: string; name?: string }> }>;
+  spaces?: Array<{ id: string; name?: string; folder?: string; tabs?: Array<{ id: string; name?: string; root?: HcLayout }> }>;
 }
+
+/** A tab's layout: rows and columns of blocks, a block showing a terminal by its address there. */
+export interface HcLayout {
+  content?: { terminal?: string };
+  children?: HcLayout[];
+}
+
+const layoutTerminals = (node: HcLayout | undefined): string[] =>
+  node ? [...(node.content?.terminal ? [node.content.terminal] : []), ...(node.children ?? []).flatMap(layoutTerminals)] : [];
 
 const HC_STATUS: Record<string, AgentStatus> = {
   idle: "idle",
@@ -90,6 +99,10 @@ export function hcSnapshot(
   const spaceLabel = new Map<string, string>();
   const tabOrder = new Map<string, string[]>();
   const tabLabel = new Map<string, string>();
+  // Where Herdr.app draws a terminal. It wins over the terminal's own labels, which keep the space
+  // it started in after Herdr.app moves its tab (measured: a tab moved to another space still
+  // labelled with the first one, so its chat named the wrong space).
+  const drawn = new Map<string, { workspace_id: string; tab_id: string }>();
 
   // Herdr.app's own order first, so a space reads as it does in the window.
   for (const [machine, doc] of docs) {
@@ -100,6 +113,10 @@ export function hcSnapshot(
       const tabs = (space.tabs ?? []).map((tab, i) => {
         const id = scoped(machine, tab.id);
         tabLabel.set(id, tab.name || String(i + 1));
+        for (const address of layoutTerminals(tab.root)) {
+          const key = machine ? `${machine}/${address}` : address;
+          if (!drawn.has(key)) drawn.set(key, { workspace_id: ws, tab_id: id });
+        }
         return id;
       });
       tabOrder.set(ws, tabs);
@@ -110,9 +127,10 @@ export function hcSnapshot(
     const machine = hcMachine(t.address);
     const where = (t.labels?.where ?? "").split(" / ");
     const space = t.labels?.["herdr.space"];
-    const workspace_id = space ? scoped(machine, space) : scoped(machine, "hc");
     const tab = t.labels?.["herdr.tab"];
-    const tab_id = tab ? scoped(machine, tab) : `${workspace_id}:tab`;
+    const at = drawn.get(t.address);
+    const workspace_id = at?.workspace_id ?? (space ? scoped(machine, space) : scoped(machine, "hc"));
+    const tab_id = at?.tab_id ?? (tab ? scoped(machine, tab) : `${workspace_id}:tab`);
     if (!spaceLabel.has(workspace_id)) {
       spaceOrder.push(workspace_id);
       spaceLabel.set(workspace_id, (space && where[0]) || (machine ? `hc ${machine}` : "hc"));
