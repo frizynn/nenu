@@ -95,7 +95,8 @@ export class HcClient implements HerdrApi {
     private readonly hcTimeoutMs = 5000,
     rpc?: HcRpc,
     private readonly now: () => number = Date.now,
-    private readonly group: (pgid: number) => Promise<number[]> = localGroup,
+    /** Lists a local process group; by default hc's core does (see {@link coreGroup}). */
+    private readonly group?: (pgid: number) => Promise<number[]>,
     private readonly claudeSessionDir = join(homedir(), ".claude", "sessions"),
     private readonly opts: HcClientOptions = {},
   ) {
@@ -152,7 +153,7 @@ export class HcClient implements HerdrApi {
 
   /**
    * Each Claude terminal's conversation id. Here: its session file under ~/.claude/sessions for any
-   * process of the foreground group. On another machine: the leader's file there, read through hc's
+   * process of the foreground group, the group listed only when the leader's file names none. On another machine: the leader's file there, read through hc's
    * file.read (hc lists no process group remotely, so a wrapper hides the id there).
    */
   private async claudeSessions(terminals: HcTerminal[]): Promise<Map<string, string>> {
@@ -166,7 +167,8 @@ export class HcClient implements HerdrApi {
         : files
           ? async (pid) => files.get(pid) ?? null
           : (pid) => this.call<{ text: string }>("file.read", { path: `.claude/sessions/${pid}.json`, on: machine }).then((r) => r.text);
-      const id = await hcClaudeSession(t, read, machine || !t.foreground ? [] : await this.group(t.foreground.pid));
+      const fg = t.foreground;
+      const id = await hcClaudeSession(t, read, machine || !fg ? undefined : () => this.listGroup(fg.pid));
       if (id) ids.set(t.address, id);
     }));
     return ids;
@@ -257,7 +259,23 @@ export class HcClient implements HerdrApi {
 
   async processInfo(paneId: string): Promise<unknown> {
     const t = await this.call<HcTerminal>("terminal.get", { terminal: hcAddress(paneId) });
-    return hcProcessInfo(t, hcMachine(t.address) || !t.foreground ? [] : await this.group(t.foreground.pid));
+    return hcProcessInfo(t, hcMachine(t.address) || !t.foreground ? [] : await this.listGroup(t.foreground.pid));
+  }
+
+  private listGroup(pgid: number): Promise<number[]> {
+    return this.group ? this.group(pgid) : this.coreGroup(pgid);
+  }
+
+  /**
+   * The pids of a local process group, listed by hc's core rather than here: the service's user unit
+   * (PrivateTmp) runs Nenu in its own user namespace, and on a /proc mounted hidepid=invisible no
+   * process outside Nenu's own tree is visible from there, so a `pgrep` here finds none (measured:
+   * a wrapper's Claude child went unseen and its chat had no conversation). None when it cannot tell.
+   */
+  private async coreGroup(pgid: number): Promise<number[]> {
+    const r = await this.call<{ code?: number | null; stdout: string }>("machine.exec", { argv: ["pgrep", "-g", String(pgid)], timeout: 5 }).catch(() => null);
+    if (!r || r.code !== 0) return [];
+    return Buffer.from(r.stdout, "base64").toString("utf8").split("\n").map(Number).filter((n) => Number.isSafeInteger(n) && n > 0);
   }
 
   /** Any hc event is a poke; Nenu re-reads the snapshot, as it does for Herdr's. */
@@ -422,13 +440,6 @@ export function hcPutCommand(binary: string): NonNullable<HcClientOptions["put"]
     if (code !== 0) throw new Error(`hc put: ${err.trim() || `exit ${code}`}`);
     return (JSON.parse(out) as { path: string }).path;
   };
-}
-
-/** The pids of a local process group, from `pgrep -g` (none when it cannot tell). */
-async function localGroup(pgid: number): Promise<number[]> {
-  const child = Bun.spawn(["pgrep", "-g", String(pgid)], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
-  const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
-  return code === 0 ? out.split("\n").map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : [];
 }
 
 /**

@@ -193,6 +193,38 @@ test("a Claude on another machine gets its conversation id from that machine's s
   expect(snap.panes[0]!.agent_session).toEqual({ agent: "claude", kind: "id", value: "remote-1" });
 });
 
+// The live t72: `hats run -- … --resume <id>` leads the group and Claude is its child. Nenu's user unit
+// cannot see that child in /proc, so only hc's core can list the group (machine.exec).
+test("a Claude run by a wrapper here gets its conversation id from the group hc's core lists", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "hc-sessions-"));
+  await writeFile(join(dir, "1052868.json"), '{"sessionId":"f40f8d64","pid":1052868}');
+  await writeFile(join(dir, "42.json"), '{"sessionId":"direct-1","pid":42}');
+  const wrapped = { address: "t72", state: "live", cwd: "/w", status: { app: "claude-code", state: "done" }, foreground: { pid: 1052863, name: "hats", argv: ["hats", "run", "--", "--resume", "f40f8d64"], cwd: "/w" } };
+  const direct = { address: "t100", state: "live", cwd: "/w", status: { app: "claude-code", state: "done" }, foreground: { pid: 42, name: "claude", argv: ["claude"], cwd: "/w" } };
+  const execs: Array<Record<string, unknown>> = [];
+  const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => {
+    if (method === "terminal.list") return { terminals: [wrapped, direct] } as T;
+    if (method === "doc.get") return { value: null } as T;
+    if (method === "terminal.get") return wrapped as T;
+    if (method === "machine.exec") {
+      execs.push(params);
+      return { code: 0, stdout: Buffer.from("1052863\n1052867\n1052868\n").toString("base64"), stderr: "", truncated: false, timed_out: false, ms: 3 } as T;
+    }
+    throw new Error(`unexpected ${method}`);
+  };
+  try {
+    const hc = new HcClient("/nonexistent/hc", 5000, rpc, Date.now, undefined, dir);
+    const snap = await hc.sessionSnapshot();
+    expect(snap.panes.map((p) => [p.pane_id, p.agent_session?.value ?? null])).toEqual([["t72", "f40f8d64"], ["t100", "direct-1"]]);
+    // Only the wrapper's group was listed: a Claude that leads its own group costs nothing more.
+    expect(execs).toEqual([{ argv: ["pgrep", "-g", "1052863"], timeout: 5 }]);
+    const info = (await hc.processInfo("t72")) as { foreground_processes: Array<{ pid: number }> };
+    expect(info.foreground_processes.map((p) => p.pid)).toEqual([1052863, 1052867, 1052868]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("with exec, a machine's Claudes get their ids from one read there, not one per Claude", async () => {
   const home = await mkdtemp(join(tmpdir(), "hc-home-"));
   await mkdir(join(home, ".claude", "sessions"), { recursive: true });

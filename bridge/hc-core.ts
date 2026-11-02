@@ -36,8 +36,17 @@ export interface HcTerminal {
 
 /** The part of the `herdr-app` document Herdr.app keeps its spaces and tabs in. */
 export interface HcAppDoc {
-  spaces?: Array<{ id: string; name?: string; folder?: string; tabs?: Array<{ id: string; name?: string }> }>;
+  spaces?: Array<{ id: string; name?: string; folder?: string; tabs?: Array<{ id: string; name?: string; root?: HcLayout }> }>;
 }
+
+/** A tab's layout: rows and columns of blocks, a block showing a terminal by its address there. */
+export interface HcLayout {
+  content?: { terminal?: string };
+  children?: HcLayout[];
+}
+
+const layoutTerminals = (node: HcLayout | undefined): string[] =>
+  node ? [...(node.content?.terminal ? [node.content.terminal] : []), ...(node.children ?? []).flatMap(layoutTerminals)] : [];
 
 const HC_STATUS: Record<string, AgentStatus> = {
   idle: "idle",
@@ -90,6 +99,10 @@ export function hcSnapshot(
   const spaceLabel = new Map<string, string>();
   const tabOrder = new Map<string, string[]>();
   const tabLabel = new Map<string, string>();
+  // Where Herdr.app draws a terminal. It wins over the terminal's own labels, which keep the space
+  // it started in after Herdr.app moves its tab (measured: a tab moved to another space still
+  // labelled with the first one, so its chat named the wrong space).
+  const drawn = new Map<string, { workspace_id: string; tab_id: string }>();
 
   // Herdr.app's own order first, so a space reads as it does in the window.
   for (const [machine, doc] of docs) {
@@ -100,6 +113,10 @@ export function hcSnapshot(
       const tabs = (space.tabs ?? []).map((tab, i) => {
         const id = scoped(machine, tab.id);
         tabLabel.set(id, tab.name || String(i + 1));
+        for (const address of layoutTerminals(tab.root)) {
+          const key = machine ? `${machine}/${address}` : address;
+          if (!drawn.has(key)) drawn.set(key, { workspace_id: ws, tab_id: id });
+        }
         return id;
       });
       tabOrder.set(ws, tabs);
@@ -110,9 +127,10 @@ export function hcSnapshot(
     const machine = hcMachine(t.address);
     const where = (t.labels?.where ?? "").split(" / ");
     const space = t.labels?.["herdr.space"];
-    const workspace_id = space ? scoped(machine, space) : scoped(machine, "hc");
     const tab = t.labels?.["herdr.tab"];
-    const tab_id = tab ? scoped(machine, tab) : `${workspace_id}:tab`;
+    const at = drawn.get(t.address);
+    const workspace_id = at?.workspace_id ?? (space ? scoped(machine, space) : scoped(machine, "hc"));
+    const tab_id = at?.tab_id ?? (tab ? scoped(machine, tab) : `${workspace_id}:tab`);
     if (!spaceLabel.has(workspace_id)) {
       spaceOrder.push(workspace_id);
       spaceLabel.set(workspace_id, (space && where[0]) || (machine ? `hc ${machine}` : "hc"));
@@ -268,9 +286,9 @@ export type SessionFileReader = (pid: number) => Promise<string | null>;
  * Claude Code's conversation id for a terminal, which hc does not report: the `--session-id` its
  * command line names (Nenu starts every Claude with one), else the `sessions/<pid>.json` Claude keeps
  * for a process of the foreground group. The group's leader can be a wrapper that runs Claude as its
- * child, so `pids` may name the rest of the group too.
+ * child, so `group` lists the rest of the group; it is asked only when the leader's file names none.
  */
-export async function hcClaudeSession(t: HcTerminal, read: SessionFileReader, pids: number[] = []): Promise<string | null> {
+export async function hcClaudeSession(t: HcTerminal, read: SessionFileReader, group: () => Promise<number[]> = async () => []): Promise<string | null> {
   if (t.status?.app !== "claude-code" || !t.foreground) return null;
   const argv = t.foreground.argv;
   for (let i = 0; i < argv.length; i++) {
@@ -278,15 +296,21 @@ export async function hcClaudeSession(t: HcTerminal, read: SessionFileReader, pi
     if (flag === "--session-id" && argv[i + 1]) return argv[i + 1]!;
     if (flag.startsWith("--session-id=")) return flag.slice("--session-id=".length) || null;
   }
-  for (const pid of [t.foreground.pid, ...pids.filter((p) => p !== t.foreground!.pid)]) {
+  const leader = t.foreground.pid;
+  const id = async (pid: number) => {
     const text = await read(pid).catch(() => null);
-    if (text === null) continue;
     try {
-      const { sessionId } = JSON.parse(text) as { sessionId?: unknown };
-      if (typeof sessionId === "string" && sessionId) return sessionId;
+      const { sessionId } = (text === null ? {} : JSON.parse(text)) as { sessionId?: unknown };
+      return typeof sessionId === "string" && sessionId ? sessionId : null;
     } catch {
-      /* not a session file */
+      return null; // not a session file
     }
+  };
+  const own = await id(leader);
+  if (own) return own;
+  for (const pid of (await group().catch(() => [])).filter((p) => p !== leader)) {
+    const found = await id(pid);
+    if (found) return found;
   }
   return null;
 }
