@@ -120,6 +120,8 @@ async function closePane(
     await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
+    // A close can end some terminals before one fails (herdr-core kills each terminal on its own): show that.
+    await refreshStructuralState(engine);
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
   }
 }
@@ -224,6 +226,8 @@ async function closeTab(
     await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
+    // A close can end some terminals before one fails (herdr-core kills each terminal on its own): show that.
+    await refreshStructuralState(engine);
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
   }
 }

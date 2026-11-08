@@ -29,7 +29,7 @@ export interface HcTerminal {
   name?: string | null;
   title?: string | null;
   labels?: Record<string, string>;
-  /** The terminal that started this one, as its own core names it (no machine prefix). */
+  /** The terminal that started this one, addressed as `address` is (the hub prefixes another machine's). */
   parent?: string | null;
   status?: HcStatus | null;
   foreground?: { pid: number; name: string; argv: string[]; cwd: string } | null;
@@ -279,16 +279,11 @@ export function hcPlacement(space: string, tab: string, where: string): Record<s
  */
 export function hcCloseTargets(terminals: HcTerminal[], addresses: string[]): string[] {
   const out = [...addresses];
-  const parentOf = (t: HcTerminal) => {
-    const machine = hcMachine(t.address);
-    return t.parent && machine && !t.parent.includes("/") ? `${machine}/${t.parent}` : t.parent;
-  };
   for (let grew = true; grew;) {
     grew = false;
     for (const t of terminals) {
       if (t.state !== "live" || out.includes(t.address) || t.labels?.["herdr.space"]) continue;
-      const parent = parentOf(t);
-      if (parent && out.includes(parent)) {
+      if (t.parent && out.includes(t.parent)) {
         out.push(t.address);
         grew = true;
       }

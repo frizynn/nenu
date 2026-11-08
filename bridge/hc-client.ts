@@ -428,7 +428,7 @@ export class HcClient implements HerdrApi {
   /** Ends every terminal the tab shows, and their sub-agents, as Herdr.app's own tab close does. */
   async closeTab(tabId: string): Promise<void> {
     // The tab of terminals Herdr.app did not place is Nenu's own grouping: no window closes it.
-    if (tabId.endsWith(":tab")) throw new Error("Nenu cannot close this group: close its terminals one by one.");
+    if (/(^|:)hc:tab$/.test(tabId)) throw new Error("Nenu cannot close this group: close its terminals one by one.");
     const panes = (await this.sessionSnapshot()).panes.filter((p) => p.tab_id === tabId);
     if (!panes.length) throw new Error("That tab is gone.");
     await this.end(panes.map((p) => hcAddress(p.pane_id)));
