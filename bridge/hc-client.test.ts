@@ -60,10 +60,68 @@ describe("HcClient chat writes", () => {
   });
 });
 
-// Closing, renaming and moving still refuse before anything runs.
-test("structural writes refuse without calling hc", async () => {
+// Closing ends the program, as Herdr.app's own close does; Herdr.app then drops its pane.
+describe("HcClient closing", () => {
+  const terminal = (address: string, tab: string | null, parent: string | null = null): Record<string, unknown> => ({
+    address, state: "live", cwd: "/w", parent, labels: tab ? { "herdr.space": "sp1", "herdr.tab": tab, where: "w / 1" } : {},
+  });
+  // t5 is a sub-agent t1 started, t6 one t5 started; box/t7 one box/t3 started, box/t9 one this
+  // machine's t1 started (the hub prefixes another machine's parent, never this one's). t8 was
+  // started by t1 but Herdr.app placed it: it lives on.
+  const herd = [
+    terminal("t1", "tb1"), terminal("t2", "tb1"), terminal("box/t3", "tb1"), terminal("t4", "tb2"),
+    terminal("t5", null, "t1"), terminal("t6", null, "t5"), terminal("box/t7", null, "box/t3"), terminal("t8", "tb2", "t1"),
+    terminal("box/t1", "tb3"), terminal("box/t9", null, "t1"),
+  ];
+  function closing(fail: string[] = []) {
+    const calls: Array<[string, Record<string, unknown>]> = [];
+    const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => {
+      calls.push([method, params]);
+      if (method === "terminal.list") return { terminals: herd, machines: [] } as T;
+      if (method === "terminal.kill" && fail.includes(String(params.terminal))) throw new Error(`hc terminal.kill: gone quiet`);
+      return { value: null } as T;
+    };
+    const kills = () => calls.filter(([m]) => m === "terminal.kill").map(([, p]) => p.terminal);
+    return { hc: new HcClient("/nonexistent/hc", 5000, rpc), kills };
+  }
+
+  test("a pane closes by killing its terminal and the sub-agents it started, on its machine", async () => {
+    const one = closing();
+    await one.hc.closePane("box:t3");
+    expect(one.kills()).toEqual(["box/t3", "box/t7"]);
+    const two = closing();
+    await two.hc.closePane("t1");
+    expect(two.kills()).toEqual(["t1", "t5", "t6", "box/t9"]);
+    const three = closing();
+    await three.hc.closePane("box:t1");
+    expect(three.kills()).toEqual(["box/t1"]);
+  });
+
+  test("a tab closes by killing each of its terminals and no other", async () => {
+    const { hc, kills } = closing();
+    await hc.closeTab("tb1");
+    expect(kills()).toEqual(["t1", "t2", "t5", "t6", "box/t9"]);
+  });
+
+  test("every kill is tried, and one that fails says how many ended", async () => {
+    const { hc, kills } = closing(["t1"]);
+    await expect(hc.closeTab("tb1")).rejects.toThrow("Closed 4 of 5: hc terminal.kill: gone quiet");
+    expect(kills()).toEqual(["t1", "t2", "t5", "t6", "box/t9"]);
+  });
+
+  test("a tab that is gone, or Nenu's own group of unplaced terminals, kills nothing", async () => {
+    const { hc, kills } = closing();
+    await expect(hc.closeTab("nope")).rejects.toThrow("That tab is gone.");
+    await expect(hc.closeTab("hc:tab")).rejects.toThrow("cannot close this group");
+    await expect(hc.closeTab("box:hc:tab")).rejects.toThrow("cannot close this group");
+    await expect(hc.closeTab("box:tab")).rejects.toThrow("That tab is gone.");
+    expect(kills()).toEqual([]);
+  });
+});
+
+// Renaming and moving still refuse before anything runs: those live in Herdr.app's own document.
+test("renaming and moving refuse without calling hc", async () => {
   const { hc, calls } = client();
-  await expect(hc.closePane("t1")).rejects.toThrow("cannot do this on herdr-core");
   await expect(hc.renameTab("tb1", "x")).rejects.toThrow("cannot do this on herdr-core");
   await expect(hc.moveTab("tb1", 0)).rejects.toThrow("cannot do this on herdr-core");
   expect(calls).toEqual([]);

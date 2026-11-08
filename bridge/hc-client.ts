@@ -9,12 +9,13 @@ import type { CreatedShell, HerdrApi, PaneRead, ReadSource, ServerInfo, WireSnap
 import type { AgentSessionRef } from "./journal/types.ts";
 import type { SendRequest } from "./types.ts";
 import {
-  hcAddress, hcAtShell, hcClaudeSession, hcKey, hcNewId, hcPaneId, hcPlacement, hcShellLine, hcSpace, hcMachine, hcProcessInfo, hcSnapshot, isSubmitKey, unbracket, type HcAppDoc, type HcTerminal, type SessionFileReader,
+  hcAddress, hcAtShell, hcCloseTargets, hcClaudeSession, hcKey, hcNewId, hcPaneId, hcPlacement, hcShellLine, hcSpace, hcMachine, hcProcessInfo, hcSnapshot, isSubmitKey, unbracket, type HcAppDoc, type HcTerminal, type SessionFileReader,
 } from "./hc-core.ts";
 
 // herdr-core behind COLLIE_HC_CORE (off by default). It implements HerdrApi, so the session runtime,
 // the state engine and the routes take it unchanged. Reads, keys, a chat's send (hcSend below), new
-// spaces, tabs and agents map; closing, renaming and moving refuse.
+// spaces, tabs and agents map; closing ends the terminals, as Herdr.app's own close does; renaming
+// and moving refuse, since they live in Herdr.app's own document.
 //
 // hc has no "type without Enter": `terminal.send` pastes and submits in one call. So text typed
 // through sendPaneText waits here, per pane, and goes with the submit key that follows it. A path that
@@ -23,7 +24,7 @@ import {
 // Each call is one `hc connect`: hello, the request, its reply, exit, the same one-shot shape as
 // Herdr's socket. Only events.subscribe keeps its connection.
 
-const READ_ONLY = "Nenu cannot do this on herdr-core yet: it closes, renames and moves only Herdr panes and tabs";
+const READ_ONLY = "Nenu cannot do this on herdr-core yet: it renames and moves only Herdr panes and tabs";
 /** Typed text not followed by its Enter within this long is dropped, never sent later. */
 const PENDING_MS = 20_000;
 /** How long a read with history may take before the screen alone answers instead. */
@@ -414,8 +415,9 @@ export class HcClient implements HerdrApi {
     const pane = hcSnapshot([{ ...r, address, state: "live" }], new Map()).panes[0]!;
     return { paneId: hcPaneId(address), workspaceId: pane.workspace_id, tabId: pane.tab_id, cwd: r.cwd };
   }
-  async closePane(..._args: unknown[]): Promise<never> {
-    throw new Error(READ_ONLY);
+  /** Ends the pane's program and the sub-agents it started, as Herdr.app's close does. */
+  async closePane(paneId: string): Promise<void> {
+    await this.end([hcAddress(paneId)]);
   }
   async renamePane(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
@@ -423,8 +425,25 @@ export class HcClient implements HerdrApi {
   async renameTab(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
   }
-  async closeTab(..._args: unknown[]): Promise<never> {
-    throw new Error(READ_ONLY);
+  /** Ends every terminal the tab shows, and their sub-agents, as Herdr.app's own tab close does. */
+  async closeTab(tabId: string): Promise<void> {
+    // The tab of terminals Herdr.app did not place is Nenu's own grouping: no window closes it.
+    if (/(^|:)hc:tab$/.test(tabId)) throw new Error("Nenu cannot close this group: close its terminals one by one.");
+    const panes = (await this.sessionSnapshot()).panes.filter((p) => p.tab_id === tabId);
+    if (!panes.length) throw new Error("That tab is gone.");
+    await this.end(panes.map((p) => hcAddress(p.pane_id)));
+  }
+
+  /** Kills each terminal, all of them tried; one that fails says how many ended. */
+  private async end(addresses: string[]): Promise<void> {
+    const targets = hcCloseTargets((await this.terminals()).terminals, addresses);
+    // hc hangs up, terminates, then kills, waiting on each: longer than a read may take.
+    const results = await Promise.allSettled(targets.map((terminal) => this.call("terminal.kill", { terminal }, SEND_TIMEOUT_MS)));
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length) {
+      const reason = (failed[0] as PromiseRejectedResult).reason;
+      throw new Error(`Closed ${targets.length - failed.length} of ${targets.length}: ${reason instanceof Error ? reason.message : String(reason)}`);
+    }
   }
   async moveTab(..._args: unknown[]): Promise<never> {
     throw new Error(READ_ONLY);
