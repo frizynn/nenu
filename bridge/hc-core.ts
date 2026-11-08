@@ -103,6 +103,9 @@ export function hcSnapshot(
   // it started in after Herdr.app moves its tab (measured: a tab moved to another space still
   // labelled with the first one, so its chat named the wrong space).
   const drawn = new Map<string, { workspace_id: string; tab_id: string }>();
+  // Spaces the document leaves unnamed. Herdr.app names one by its first terminal's folder now, not
+  // the folder it was opened in, and writes that name in each terminal's `where` label.
+  const unnamed = new Set<string>();
 
   // Herdr.app's own order first, so a space reads as it does in the window.
   for (const [machine, doc] of docs) {
@@ -110,6 +113,7 @@ export function hcSnapshot(
       const ws = scoped(machine, space.id);
       spaceOrder.push(ws);
       spaceLabel.set(ws, space.name || (space.folder ? basename(space.folder) || space.folder : space.id));
+      if (!space.name) unnamed.add(ws);
       const tabs = (space.tabs ?? []).map((tab, i) => {
         const id = scoped(machine, tab.id);
         tabLabel.set(id, tab.name || String(i + 1));
@@ -131,6 +135,10 @@ export function hcSnapshot(
     const at = drawn.get(t.address);
     const workspace_id = at?.workspace_id ?? (space ? scoped(machine, space) : scoped(machine, "hc"));
     const tab_id = at?.tab_id ?? (tab ? scoped(machine, tab) : `${workspace_id}:tab`);
+    if (unnamed.has(workspace_id) && where.length > 1 && where[0]) {
+      spaceLabel.set(workspace_id, where[0]);
+      unnamed.delete(workspace_id);
+    }
     if (!spaceLabel.has(workspace_id)) {
       spaceOrder.push(workspace_id);
       spaceLabel.set(workspace_id, (space && where[0]) || (machine ? `hc ${machine}` : "hc"));

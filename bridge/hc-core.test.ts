@@ -36,8 +36,8 @@ describe("hcSnapshot", () => {
       revision: 0,
       agent_session: { agent: "claude", kind: "id", value: "uuid-1" },
     }]);
-    // A space with no name reads as its folder; a tab with no terminal is left out.
-    expect(snap.workspaces.map((w) => [w.workspace_id, w.label, w.tab_count, w.pane_count])).toEqual([["sp1", "u", 1, 1]]);
+    // A space with no name reads as Herdr.app's `where` says; a tab with no terminal is left out.
+    expect(snap.workspaces.map((w) => [w.workspace_id, w.label, w.tab_count, w.pane_count])).toEqual([["sp1", "~", 1, 1]]);
     expect(snap.tabs.map((t) => [t.tab_id, t.label])).toEqual([["tb1", "1"]]);
   });
 
@@ -90,6 +90,16 @@ test("Herdr.app's own space and tab names win over folder and position", () => {
   const snap = hcSnapshot([claude], new Map([["", named]]));
   expect(snap.workspaces.map((w) => w.label)).toEqual(["nenu"]);
   expect(snap.tabs.map((t) => t.label)).toEqual(["chat"]);
+});
+
+// The live t2ff: its space has no name and was opened in ~/Developer/awam, but Herdr.app names it by
+// its first terminal's folder now (nenu) and writes that in `where`. Nenu read the saved folder.
+test("a space with no name reads as Herdr.app's `where` names it, else its folder", () => {
+  const app: HcAppDoc = { spaces: [{ id: "sp1", name: "", folder: "/u/Developer/awam", tabs: [{ id: "tb1", name: "" }] }] };
+  const here = { ...claude, labels: { "herdr.space": "sp1", "herdr.tab": "tb1", where: "nenu / 1" } };
+  expect(hcSnapshot([here], new Map([["", app]])).workspaces.map((w) => w.label)).toEqual(["nenu"]);
+  const unwritten = { ...claude, labels: { "herdr.space": "sp1", "herdr.tab": "tb1" } };
+  expect(hcSnapshot([unwritten], new Map([["", app]])).workspaces.map((w) => w.label)).toEqual(["awam"]);
 });
 
 // The live t72: its tab was moved to another space in Herdr.app, but its labels still name the space

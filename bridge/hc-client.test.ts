@@ -60,10 +60,43 @@ describe("HcClient chat writes", () => {
   });
 });
 
-// Closing, renaming and moving still refuse before anything runs.
-test("structural writes refuse without calling hc", async () => {
+// Closing ends the program, as Herdr.app's own close does; Herdr.app then drops its pane.
+describe("HcClient closing", () => {
+  const terminal = (address: string, tab: string): Record<string, unknown> => ({
+    address, state: "live", cwd: "/w", labels: { "herdr.space": "sp1", "herdr.tab": tab, where: "w / 1" },
+  });
+  function closing() {
+    const calls: Array<[string, Record<string, unknown>]> = [];
+    const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => {
+      calls.push([method, params]);
+      if (method === "terminal.list") return { terminals: [terminal("t1", "tb1"), terminal("t2", "tb1"), terminal("box/t3", "tb1"), terminal("t4", "tb2")], machines: [] } as T;
+      return { value: null } as T;
+    };
+    return { hc: new HcClient("/nonexistent/hc", 5000, rpc), calls };
+  }
+
+  test("a pane closes by killing its terminal, on its machine", async () => {
+    const { hc, calls } = closing();
+    await hc.closePane("box:t3");
+    expect(calls).toEqual([["terminal.kill", { terminal: "box/t3" }]]);
+  });
+
+  test("a tab closes by killing each of its terminals and no other", async () => {
+    const { hc, calls } = closing();
+    await hc.closeTab("tb1");
+    expect(calls.filter(([m]) => m === "terminal.kill")).toEqual([["terminal.kill", { terminal: "t1" }], ["terminal.kill", { terminal: "t2" }]]);
+  });
+
+  test("a tab that is gone says so and kills nothing", async () => {
+    const { hc, calls } = closing();
+    await expect(hc.closeTab("nope")).rejects.toThrow("That tab is gone.");
+    expect(calls.filter(([m]) => m === "terminal.kill")).toEqual([]);
+  });
+});
+
+// Renaming and moving still refuse before anything runs: those live in Herdr.app's own document.
+test("renaming and moving refuse without calling hc", async () => {
   const { hc, calls } = client();
-  await expect(hc.closePane("t1")).rejects.toThrow("cannot do this on herdr-core");
   await expect(hc.renameTab("tb1", "x")).rejects.toThrow("cannot do this on herdr-core");
   await expect(hc.moveTab("tb1", 0)).rejects.toThrow("cannot do this on herdr-core");
   expect(calls).toEqual([]);
