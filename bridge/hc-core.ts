@@ -29,6 +29,8 @@ export interface HcTerminal {
   name?: string | null;
   title?: string | null;
   labels?: Record<string, string>;
+  /** The terminal that started this one, as its own core names it (no machine prefix). */
+  parent?: string | null;
   status?: HcStatus | null;
   foreground?: { pid: number; name: string; argv: string[]; cwd: string } | null;
   turn?: number | null;
@@ -268,6 +270,31 @@ export const hcNewId = (prefix: "sp" | "tb"): string => prefix + crypto.randomUU
  */
 export function hcPlacement(space: string, tab: string, where: string): Record<string, string> {
   return space === "hc" ? {} : { "herdr.space": space, "herdr.tab": tab, where };
+}
+
+/**
+ * What closing `addresses` ends: them, plus every live sub-agent they started that Herdr.app did not
+ * place (no `herdr.space`), down the line. Herdr.app's own close does the same, because the core
+ * keeps a sub-agent running when its parent dies.
+ */
+export function hcCloseTargets(terminals: HcTerminal[], addresses: string[]): string[] {
+  const out = [...addresses];
+  const parentOf = (t: HcTerminal) => {
+    const machine = hcMachine(t.address);
+    return t.parent && machine && !t.parent.includes("/") ? `${machine}/${t.parent}` : t.parent;
+  };
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const t of terminals) {
+      if (t.state !== "live" || out.includes(t.address) || t.labels?.["herdr.space"]) continue;
+      const parent = parentOf(t);
+      if (parent && out.includes(parent)) {
+        out.push(t.address);
+        grew = true;
+      }
+    }
+  }
+  return out;
 }
 
 const SHELLS = new Set(["sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "nu"]);

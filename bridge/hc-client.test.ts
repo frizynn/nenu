@@ -62,35 +62,54 @@ describe("HcClient chat writes", () => {
 
 // Closing ends the program, as Herdr.app's own close does; Herdr.app then drops its pane.
 describe("HcClient closing", () => {
-  const terminal = (address: string, tab: string): Record<string, unknown> => ({
-    address, state: "live", cwd: "/w", labels: { "herdr.space": "sp1", "herdr.tab": tab, where: "w / 1" },
+  const terminal = (address: string, tab: string | null, parent: string | null = null): Record<string, unknown> => ({
+    address, state: "live", cwd: "/w", parent, labels: tab ? { "herdr.space": "sp1", "herdr.tab": tab, where: "w / 1" } : {},
   });
-  function closing() {
+  // t5 is a sub-agent t1 started, t6 one t5 started; box/t7 one box/t3 started, its parent named as
+  // its own core names it. t8 was started by t1 but Herdr.app placed it: it lives on.
+  const herd = [
+    terminal("t1", "tb1"), terminal("t2", "tb1"), terminal("box/t3", "tb1"), terminal("t4", "tb2"),
+    terminal("t5", null, "t1"), terminal("t6", null, "t5"), terminal("box/t7", null, "t3"), terminal("t8", "tb2", "t1"),
+  ];
+  function closing(fail: string[] = []) {
     const calls: Array<[string, Record<string, unknown>]> = [];
     const rpc: HcRpc = async <T>(method: string, params: Record<string, unknown>) => {
       calls.push([method, params]);
-      if (method === "terminal.list") return { terminals: [terminal("t1", "tb1"), terminal("t2", "tb1"), terminal("box/t3", "tb1"), terminal("t4", "tb2")], machines: [] } as T;
+      if (method === "terminal.list") return { terminals: herd, machines: [] } as T;
+      if (method === "terminal.kill" && fail.includes(String(params.terminal))) throw new Error(`hc terminal.kill: gone quiet`);
       return { value: null } as T;
     };
-    return { hc: new HcClient("/nonexistent/hc", 5000, rpc), calls };
+    const kills = () => calls.filter(([m]) => m === "terminal.kill").map(([, p]) => p.terminal);
+    return { hc: new HcClient("/nonexistent/hc", 5000, rpc), kills };
   }
 
-  test("a pane closes by killing its terminal, on its machine", async () => {
-    const { hc, calls } = closing();
-    await hc.closePane("box:t3");
-    expect(calls).toEqual([["terminal.kill", { terminal: "box/t3" }]]);
+  test("a pane closes by killing its terminal and the sub-agents it started, on its machine", async () => {
+    const one = closing();
+    await one.hc.closePane("box:t3");
+    expect(one.kills()).toEqual(["box/t3", "box/t7"]);
+    const two = closing();
+    await two.hc.closePane("t1");
+    expect(two.kills()).toEqual(["t1", "t5", "t6"]);
   });
 
   test("a tab closes by killing each of its terminals and no other", async () => {
-    const { hc, calls } = closing();
+    const { hc, kills } = closing();
     await hc.closeTab("tb1");
-    expect(calls.filter(([m]) => m === "terminal.kill")).toEqual([["terminal.kill", { terminal: "t1" }], ["terminal.kill", { terminal: "t2" }]]);
+    expect(kills()).toEqual(["t1", "t2", "t5", "t6"]);
   });
 
-  test("a tab that is gone says so and kills nothing", async () => {
-    const { hc, calls } = closing();
+  test("every kill is tried, and one that fails says how many ended", async () => {
+    const { hc, kills } = closing(["t1"]);
+    await expect(hc.closeTab("tb1")).rejects.toThrow("Closed 3 of 4: hc terminal.kill: gone quiet");
+    expect(kills()).toEqual(["t1", "t2", "t5", "t6"]);
+  });
+
+  test("a tab that is gone, or Nenu's own group of unplaced terminals, kills nothing", async () => {
+    const { hc, kills } = closing();
     await expect(hc.closeTab("nope")).rejects.toThrow("That tab is gone.");
-    expect(calls.filter(([m]) => m === "terminal.kill")).toEqual([]);
+    await expect(hc.closeTab("hc:tab")).rejects.toThrow("cannot close this group");
+    await expect(hc.closeTab("box:hc:tab")).rejects.toThrow("cannot close this group");
+    expect(kills()).toEqual([]);
   });
 });
 
