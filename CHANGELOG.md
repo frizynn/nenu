@@ -11,7 +11,7 @@ All notable changes to Nenu are recorded here. The format follows
 ## [2.16.0] - 2026-11-08
 
 ### Added
-- herdr-core: closing a pane or a tab works; it ends the terminals with the sub-agents they started, as Herdr.app's own close does, and the window drops them too (e17f265, a26fa85).
+- herdr-core: closing a pane or a tab works; it ends the terminals with the sub-agents they started, as Herdr.app's own close does, and the window drops them too (e17f265, a26fa85, a6c7e96).
 
 ### Fixed
 - herdr-core: a space with no name reads as the window names it, by its first terminal's current folder, not the folder it was opened in (e17f265).
